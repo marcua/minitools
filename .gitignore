@@ -1,2 +1,8 @@
 # emacs files
 *~
+
+# Personal export script
+export.sh
+
+# Don't check in raw videos of tools
+*.mp4
