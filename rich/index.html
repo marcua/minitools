@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rich: Add columns to your CSVs</title>
+<style>
+    :root {
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --text: #1f2937;
+      --muted: #4b5563;
+      --border: #e5e7eb;
+    }
+
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+
+    body {
+      margin: 0;
+      padding: 2rem;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+    }
+
+    .card {
+      background: var(--card-bg);
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      max-width: 750px;
+      width: 100%;
+    }
+
+    h1 { margin: 0; font-size: 1.8rem; }
+
+    .subtext {
+      margin: 0.25rem 0 1.5rem 0;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    label { font-weight: 600; margin-bottom: 0.25rem; display: block; }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="file"],
+    textarea {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    textarea { min-height: 100px; resize: vertical; }
+
+    /* Primary CTA */
+    .primary-btn {
+      background: var(--primary);
+      border: none;
+      color: #fff;
+      padding: 0.75rem 1.25rem;
+      font-size: 1rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .primary-btn:hover:not(:disabled) { background: var(--primary-dark); }
+    .primary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Link‑style button */
+    .link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 1rem;
+      color: var(--primary);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .link-btn:hover { text-decoration: none; }
+
+    #log {
+      margin-top: 1.5rem;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+
+    .column-set {
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #fafafa;
+    }
+
+    .column-set h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text); }
+
+    .actions {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: space-between; /* left Add column, right CTA */
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Rich: Add columns to your CSVs</h1>
+    <p class="subtext">
+      Enter an API key (stored locally), upload a CSV, and describe the new columns you'd like to add.
+      Aside from data sent to OpenAI, none of your uploaded data is stored on the server: this entire
+      webpage executes client-side.
+    </p>
+
+    <form id="enrich-form">
+      <label for="apiKey">OpenAI API key</label>
+      <input type="password" id="apiKey" required placeholder="sk-…" />
+
+      <label for="model">OpenAI model</label>
+      <input type="text" id="model" value="gpt-4.1-mini" required />
+
+      <label for="csvFile">CSV file</label>
+      <input type="file" id="csvFile" accept=".csv" required />
+
+      <div id="columns-container"><!-- Dynamic column blocks here --></div>
+
+      <div class="actions">
+        <button type="button" id="add-column" class="link-btn">➕ Add column</button>
+        <button type="submit" class="primary-btn">🚀 Enrich & Download</button>
+      </div>
+    </form>
+
+    <div id="log" hidden></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('enrich-form');
+    const logBox = document.getElementById('log');
+    const columnsContainer = document.getElementById('columns-container');
+    const addColumnBtn = document.getElementById('add-column');
+    const apiKeyInput = document.getElementById('apiKey');
+
+    /* === NEW: load saved key, if any === */
+    const savedKey = localStorage.getItem('openai_api_key');
+    if (savedKey) apiKeyInput.value = savedKey;
+
+    function log(msg) {
+      logBox.hidden = false;
+      logBox.textContent += `\n${new Date().toLocaleTimeString()} - ${msg}`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function addColumnBlock() {
+      const idx = columnsContainer.children.length + 1;
+      const block = document.createElement('div');
+      block.className = 'column-set';
+      block.innerHTML = `
+        <h3>New column ${idx}</h3>
+        <label>Column name</label>
+        <input type="text" class="colName" placeholder="analysis_${idx}" required />
+        <label>Prompt</label>
+        <textarea class="colPrompt" placeholder="e.g., Summarize the data above"></textarea>
+      `;
+      columnsContainer.appendChild(block);
+    }
+
+    addColumnBtn.addEventListener('click', addColumnBlock);
+    addColumnBlock(); // initial block
+
+    /* CSV helpers (unchanged) */
+    const parseCSV = (text) => text.trim().split(/\r?\n/).map(r => r.split(','));
+    const toCSV = (rows) => rows.map(r => r.map(v => {
+      if (v == null) v = '';
+      return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+    }).join(',')).join('\n');
+
+    async function enrichRows(apiKey, model, rows, columnConfigs) {
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const context = rows[0].slice(0, columnConfigs[0].startIndex)
+          .map((label,i)=>`${label}=${row[i]}`).join('\n');
+        for (const cfg of columnConfigs) {
+          const prompt = `You are a data researcher filling in cells of a spreadsheet. I will provide you with data in a row, and you will provide me with data for a new column in that row. Answer with the data in as short and direct a response as possible. For a row with the following fields\n${context}\n\nI am filling in a column called ${cfg.colIndex}.\n\n${cfg.prompt}.`;
+          try {
+            log(`Row ${r} · ${cfg.name} → requesting`);
+            const res = await fetch('https://api.openai.com/v1/chat/completions', {
+              method:'POST',
+              headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+              body:JSON.stringify({model, messages:[{role:'user',content:prompt}], temperature:0.7})
+            });
+            if(!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            row[cfg.colIndex] = data.choices?.[0]?.message?.content?.trim() ?? '';
+            log(`Row ${r} · ${cfg.name} ✔️`);
+          } catch(e){
+            log(`Row ${r} · ${cfg.name} ❌ ${e.message}`);
+            row[cfg.colIndex] = 'ERROR';
+          }
+        }
+      }
+    }
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const apiKey = apiKeyInput.value.trim();
+      if(!apiKey) return alert('API key required');
+      const model = document.getElementById('model').value.trim();
+      const fileInput = document.getElementById('csvFile');
+      if(!fileInput.files.length) return alert('Choose a CSV');
+
+      const columnSets = [...document.querySelectorAll('.column-set')];
+      if(!columnSets.length) return alert('Add at least one column');
+      const columnConfigs = columnSets.map(set=>({
+        name:set.querySelector('.colName').value.trim(),
+        prompt:set.querySelector('.colPrompt').value.trim()
+      }));
+
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async evt => {
+        logBox.textContent='';
+        const rows = parseCSV(evt.target.result);
+        log(`Parsed ${rows.length-1} data rows.`);
+        const originalLen = rows[0].length;
+        columnConfigs.forEach((cfg,i)=>{
+          cfg.startIndex = originalLen;
+          cfg.colIndex = originalLen+i;
+          rows[0].push(cfg.name);
+        });
+        rows.slice(1).forEach(r=>columnConfigs.forEach(()=>r.push('')));
+        await enrichRows(apiKey, model, rows, columnConfigs);
+        const blob = new Blob([toCSV(rows)], {type:'text/csv'});
+        const ts = new Date().toISOString().replace(/[:.]/g,'-');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${file.name.replace(/\.csv$/i,'')}_${ts}.csv`;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        log('✅ Download ready');
+
+        /* === NEW: persist key after success === */
+        localStorage.setItem('openai_api_key', apiKey);
+      };
+      reader.readAsText(file);
+    });
+  </script>
+</body>
+</html>
