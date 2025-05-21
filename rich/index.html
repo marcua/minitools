@@ -183,12 +183,67 @@
     addColumnBtn.addEventListener('click', addColumnBlock);
     addColumnBlock(); // initial block
 
-    /* CSV helpers (unchanged) */
-    const parseCSV = (text) => text.trim().split(/\r?\n/).map(r => r.split(','));
-    const toCSV = (rows) => rows.map(r => r.map(v => {
-      if (v == null) v = '';
-      return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
-    }).join(',')).join('\n');
+    function parseCSV(text) {
+      const rows = [];
+      let row   = [];
+      let field = '';
+      let inQuotes = false;
+
+      // Only add the row if it has some non-blank cell
+      const pushRow = () => {
+        if (row.some(cell => cell !== '')) rows.push(row);
+      };
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') {       // Escaped quote
+              field += '"';
+              i++;
+            } else {
+              inQuotes = false;              // Closing quote
+            }
+          } else {
+            field += ch;
+          }
+        } else {
+          if (ch === '"') {
+            inQuotes = true;                 // Opening quote
+          } else if (ch === ',') {
+            row.push(field);
+            field = '';
+          } else if (ch === '\r' && text[i + 1] === '\n') { // CRLF
+            row.push(field); pushRow();
+            row = []; field = '';
+            i++; // skip \n
+          } else if (ch === '\n') {          // LF
+            row.push(field); pushRow();
+            row = []; field = '';
+          } else {
+            field += ch;
+          }
+        }
+      }
+
+      // final cell / row
+      row.push(field);
+      pushRow();
+
+      return rows;
+    }
+
+    function toCSV(rows) {
+      return rows.map(r =>
+        r.map(v => {
+          if (v == null) v = '';
+          v = String(v).replace(/"/g, '""');            // escape quotes
+          return /[",\n]/.test(v) ? `"${v}"` : v;       // wrap if needed
+        }).join(',')
+      ).join('\n');
+    }
+
 
     async function enrichRows(apiKey, model, rows, columnConfigs) {
       for (let r = 1; r < rows.length; r++) {
