@@ -4,4 +4,4 @@
 
 Below is a screenshot of the tool in action:
 
-![Screenshot of Rich CSV Enricher](rich.png)
+![Screenshot of Rich CSV Enricher](rich.gif)
