@@ -121,11 +121,12 @@
 </head>
 <body>
   <div class="card">
-    <h1>Rich: Add columns to your CSVs</h1>
+    <h1>Rich: Enrich your CSVs with new columns</h1>
     <p class="subtext">
       Enter an OpenAI API key (stored locally), upload a CSV, and describe the new columns you'd like to add.
       Aside from data sent to OpenAI, none of your uploaded data is stored on the server: this entire
       webpage executes client-side.
+      Read more in <a href="https://blog.marcua.net/2025/05/22/rich-enrich-your-csvs-with-new-columns">this blog post</a>.
     </p>
 
     <form id="enrich-form">
@@ -140,13 +141,14 @@
 
       <div id="columns-container"><!-- Dynamic column blocks here --></div>
 
+      <div id="log" hidden></div>
+
       <div class="actions">
         <button type="button" id="add-column" class="link-btn">➕ Add column</button>
         <button type="submit" class="primary-btn">🚀 Enrich & Download</button>
       </div>
     </form>
 
-    <div id="log" hidden></div>
   </div>
 
   <script>
