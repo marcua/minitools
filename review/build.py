@@ -66,152 +66,198 @@ def generate_html(bookmarklet_url, minified_js):
     """
     Generate an HTML page with the bookmarklet
     """
-    # Calculate sizes
-    original_size = len(open('bookmarklet.src.js').read())
-    minified_size = len(minified_js)
-    reduction = ((original_size - minified_size) / original_size) * 100
-
     html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub PR Review Comments Extractor - Bookmarklet</title>
+    <title>Review — PR Comments Extractor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 0 20px;
+            font-family: 'Newsreader', serif;
+            background: #fafaf9;
+            color: #1c1917;
             line-height: 1.6;
-            color: #24292e;
+            min-height: 100vh;
+            padding: 80px 20px;
+        }}
+
+        .container {{
+            max-width: 720px;
+            margin: 0 auto;
+        }}
+
+        header {{
+            margin-bottom: 60px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid #e7e5e4;
         }}
 
         h1 {{
-            border-bottom: 2px solid #e1e4e8;
-            padding-bottom: 10px;
+            font-size: 3rem;
+            font-weight: 300;
+            line-height: 1.2;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }}
+
+        .subtitle {{
+            font-size: 1.1rem;
+            color: #57534e;
+            font-weight: 400;
+            font-style: italic;
+        }}
+
+        .bookmarklet-section {{
+            background: white;
+            border: 1px solid #e7e5e4;
+            padding: 48px;
+            margin: 48px 0;
+            text-align: center;
         }}
 
         .bookmarklet {{
             display: inline-block;
-            padding: 12px 24px;
-            background: #2ea44f;
+            background: #1c1917;
             color: white;
             text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 16px;
-            margin: 20px 0;
-            transition: background 0.2s;
+            padding: 16px 32px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            transition: all 0.2s ease;
+            border: 2px solid #1c1917;
         }}
 
         .bookmarklet:hover {{
-            background: #2c974b;
+            background: white;
+            color: #1c1917;
         }}
 
-        .instructions {{
-            background: #f6f8fa;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 16px;
-            margin: 20px 0;
+        .hint {{
+            margin-top: 16px;
+            color: #78716c;
+            font-size: 0.9rem;
         }}
 
-        .instructions ol {{
-            margin: 10px 0;
-            padding-left: 20px;
+        .section {{
+            margin: 48px 0;
         }}
 
-        .instructions li {{
-            margin: 8px 0;
+        h2 {{
+            font-size: 1.5rem;
+            font-weight: 400;
+            margin-bottom: 24px;
+            letter-spacing: -0.01em;
+        }}
+
+        ol {{
+            list-style: decimal;
+            padding-left: 24px;
+        }}
+
+        ol li {{
+            margin: 12px 0;
+            color: #44403c;
+            font-size: 1rem;
+            padding-left: 8px;
         }}
 
         code {{
-            background: #f6f8fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-            font-size: 14px;
+            background: #f5f5f4;
+            border: 1px solid #e7e5e4;
+            padding: 2px 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.9em;
+            color: #1c1917;
         }}
 
-        .stats {{
-            color: #586069;
-            font-size: 14px;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e1e4e8;
+        pre {{
+            background: white;
+            border: 1px solid #e7e5e4;
+            padding: 24px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            margin-top: 16px;
         }}
 
-        .warning {{
-            background: #fff3cd;
-            border: 1px solid #ffecb5;
-            border-radius: 6px;
-            padding: 12px;
-            margin: 20px 0;
-            color: #856404;
+        pre code {{
+            background: none;
+            border: none;
+            padding: 0;
+        }}
+
+        .note {{
+            background: #fffbeb;
+            border-left: 3px solid #fbbf24;
+            padding: 20px;
+            margin: 40px 0;
+            font-size: 0.95rem;
+        }}
+
+        .note strong {{
+            font-weight: 500;
         }}
     </style>
 </head>
 <body>
-    <h1>GitHub PR Review Comments Extractor</h1>
+    <div class="container">
+        <header>
+            <h1>Review</h1>
+            <p class="subtitle">
+                Extract GitHub PR review comments and transform them into markdown,<br>
+                ready to paste into Claude Code.
+            </p>
+        </header>
 
-    <p>
-        This bookmarklet extracts review comments from GitHub PRs and copies them to your clipboard
-        in Markdown format, perfect for pasting into Claude Code.
-    </p>
+        <div class="bookmarklet-section">
+            <a href="{bookmarklet_url}" class="bookmarklet">Review</a>
+            <p class="hint">Drag to your bookmarks bar, or right-click to bookmark</p>
+        </div>
 
-    <div class="instructions">
-        <h2>Installation</h2>
-        <ol>
-            <li>Drag this link to your bookmarks bar:
-                <a href="{bookmarklet_url}" class="bookmarklet">📋 Extract PR Comments</a>
-            </li>
-            <li>If you can't drag it, right-click and select "Add to Bookmarks" or "Bookmark This Link"</li>
-        </ol>
-    </div>
+        <div class="section">
+            <h2>How to use</h2>
+            <ol>
+                <li>Navigate to a GitHub Pull Request</li>
+                <li>Click the <code>Files changed</code> tab</li>
+                <li>Click the Review bookmarklet</li>
+                <li>Copy the comments from the modal</li>
+                <li>Paste into Claude Code</li>
+            </ol>
+        </div>
 
-    <div class="instructions">
-        <h2>Usage</h2>
-        <ol>
-            <li>Navigate to a GitHub Pull Request</li>
-            <li>Click on the <code>Files changed</code> tab</li>
-            <li>Click the bookmarklet in your bookmarks bar</li>
-            <li>The comments will be copied to your clipboard in Markdown format</li>
-            <li>Paste them into Claude Code</li>
-        </ol>
-    </div>
+        <div class="section">
+            <h2>Output format</h2>
+            <pre><code># PR Review Comments
 
-    <div class="warning">
-        <strong>Note:</strong> The bookmarklet only extracts <strong>unresolved</strong> review comments by default.
-        If you want to include resolved comments, you'll need to edit the source code.
-    </div>
+## filename.py: line 42
 
-    <h2>Output Format</h2>
-    <p>The bookmarklet generates markdown in the following format:</p>
-    <pre><code># PR Review Comments
+Review comment text here
 
-## filename.py
+---
 
-### Line 42
+## another-file.js: lines 50-55
 
-Comment text here
+Multi-line comment spanning several lines of code
 
-### Lines 50-55
+---</code></pre>
+        </div>
 
-Multi-line comment text here
-</code></pre>
-
-    <div class="stats">
-        <p>Build stats:</p>
-        <ul>
-            <li>Original size: {original_size:,} bytes</li>
-            <li>Minified size: {minified_size:,} bytes</li>
-            <li>Reduction: {reduction:.1f}%</li>
-        </ul>
-        <p>
-            Source code: <a href="bookmarklet.src.js">bookmarklet.src.js</a> |
-            Build script: <a href="build.py">build.py</a>
-        </p>
+        <div class="note">
+            <strong>Note:</strong> By default, this extracts only unresolved review comments.
+            To include resolved comments, modify <code>bookmarklet.src.js</code> and rebuild.
+        </div>
     </div>
 </body>
 </html>

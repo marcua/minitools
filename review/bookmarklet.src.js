@@ -34,6 +34,65 @@
     return match ? parseInt(match[1], 10) : null;
   }
 
+  /**
+   * Extract line range from suggestion HTML (for multi-line suggestions)
+   * Returns {start, end} or null if not a suggestion or can't parse
+   */
+  function extractSuggestionLineRange(bodyHTML) {
+    if (!bodyHTML || !bodyHTML.includes('js-suggested-changes-blob')) {
+      return null;
+    }
+
+    // Extract all line numbers from data-line-number attributes
+    const lineNumbers = [];
+    const regex = /data-line-number="(\d+)"/g;
+    let match;
+    while ((match = regex.exec(bodyHTML)) !== null) {
+      lineNumbers.push(parseInt(match[1], 10));
+    }
+
+    if (lineNumbers.length === 0) {
+      return null;
+    }
+
+    // Get unique line numbers and find min/max
+    const uniqueLines = [...new Set(lineNumbers)].sort((a, b) => a - b);
+    return {
+      start: uniqueLines[0],
+      end: uniqueLines[uniqueLines.length - 1]
+    };
+  }
+
+  /**
+   * Extract diff from suggestion HTML
+   * Returns {oldLines, newLines} or null
+   */
+  function extractSuggestionDiff(bodyHTML) {
+    if (!bodyHTML || !bodyHTML.includes('js-suggested-changes-blob')) {
+      return null;
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(bodyHTML, 'text/html');
+
+    const oldLines = [];
+    const newLines = [];
+
+    // Extract deletion lines (old code)
+    const deletionCells = doc.querySelectorAll('.blob-code-deletion');
+    deletionCells.forEach(cell => {
+      oldLines.push(cell.textContent.trim());
+    });
+
+    // Extract addition lines (new code)
+    const additionCells = doc.querySelectorAll('.blob-code-addition');
+    additionCells.forEach(cell => {
+      newLines.push(cell.textContent.trim());
+    });
+
+    return { oldLines, newLines };
+  }
+
 
   /**
    * Build a map of thread IDs to file paths, line numbers, and markers
@@ -54,12 +113,31 @@
         const lineFromMarker = parseLineFromMarker(marker);
 
         (data.threads || []).forEach(thread => {
+          // Check for multi-line range in different formats:
+          // 1. thread.startLine/endLine (for some thread types)
+          // 2. thread.start + marker (for multi-line non-suggestion comments)
+          let hasMultiLine = false;
+          let startLine = lineFromMarker;
+          let endLine = lineFromMarker;
+
+          if (thread.startLine !== undefined && thread.endLine !== undefined) {
+            // Format 1: explicit startLine/endLine properties
+            hasMultiLine = true;
+            startLine = thread.startLine;
+            endLine = thread.endLine;
+          } else if (thread.start) {
+            // Format 2: thread.start marker + current marker
+            hasMultiLine = true;
+            startLine = parseLineFromMarker(thread.start);
+            endLine = lineFromMarker;
+          }
+
           map.set(thread.id.toString(), {
             filePath: filePath,
             marker: marker,
-            line: lineFromMarker,
-            contextStart: contextStart,
-            contextEnd: contextEnd
+            line: hasMultiLine ? null : lineFromMarker,  // Only set single line if not multi-line
+            contextStart: hasMultiLine ? startLine : contextStart,
+            contextEnd: hasMultiLine ? endLine : contextEnd
           });
         });
       });
@@ -76,15 +154,6 @@
               const startLine = thread.startLine || thread.line || lineNumber;
               const endLine = thread.endLine || startLine;
 
-              console.log('Found thread in diffLines:', {
-                id: thread.id,
-                filePath: filePath,
-                lineNumber: lineNumber,
-                startLine: startLine,
-                endLine: endLine,
-                threadKeys: Object.keys(thread)
-              });
-
               map.set(thread.id.toString(), {
                 filePath: filePath,
                 marker: `L${lineNumber}`,
@@ -98,7 +167,6 @@
       });
     });
 
-    console.log('Built location map for', map.size, 'thread IDs');
     return map;
   }
 
@@ -130,17 +198,6 @@
 
       const location = locationMap.get(thread.id.toString());
       if (!location) {
-        console.warn('Missing location for thread ID:', thread.id, {
-          isResolved: thread.isResolved,
-          isOutdated: thread.isOutdated,
-          hasComments: (thread.commentsData?.comments || []).length,
-          threadKeys: Object.keys(thread),
-          startLine: thread.startLine,
-          endLine: thread.endLine,
-          line: thread.line,
-          originalStartLine: thread.originalStartLine,
-          originalEndLine: thread.originalEndLine
-        });
         missingLocationThreads++;
         return;
       }
@@ -158,43 +215,57 @@
 
       // Process each comment in the thread
       comments.forEach(comment => {
-        commentsByFile.get(filePath).push({
-          line: location.line,
+        // Check if this is a multi-line suggestion and extract the actual line range
+        const suggestionRange = extractSuggestionLineRange(comment.bodyHTML);
+        const suggestionDiff = extractSuggestionDiff(comment.bodyHTML);
+
+        const commentData = {
+          line: suggestionRange ? null : location.line,  // No single line for multi-line suggestions
           marker: location.marker,
-          contextStart: location.contextStart,
-          contextEnd: location.contextEnd,
+          contextStart: suggestionRange ? suggestionRange.start : location.contextStart,
+          contextEnd: suggestionRange ? suggestionRange.end : location.contextEnd,
           author: comment.author?.login || 'Unknown',
           body: comment.body || '',
+          bodyHTML: comment.bodyHTML || '',
+          suggestionDiff: suggestionDiff,
           createdAt: comment.createdAt
-        });
+        };
+
+        commentsByFile.get(filePath).push(commentData);
         extractedThreads++;
       });
-    });
-
-    console.log('Thread extraction summary:', {
-      total: totalThreads,
-      resolved: resolvedThreads,
-      missingLocation: missingLocationThreads,
-      empty: emptyThreads,
-      extracted: extractedThreads
     });
 
     return commentsByFile;
   }
 
   /**
-   * Transform GitHub suggestion blocks into readable format
+   * Format suggestion as a diff
    */
-  function transformSuggestions(body) {
-    // Match ```suggestion blocks (with optional whitespace/newlines)
-    return body.replace(/```suggestion\s*\n?([\s\S]*?)```/g, (match, content) => {
-      const trimmedContent = content.trim();
-      if (trimmedContent === '') {
-        return 'Delete this';
-      } else {
-        return `Rewrite to \`${trimmedContent}\``;
-      }
-    });
+  function formatSuggestionDiff(suggestionDiff) {
+    if (!suggestionDiff) {
+      return '';
+    }
+
+    const { oldLines, newLines } = suggestionDiff;
+    let diff = '';
+
+    // Add removed lines
+    if (oldLines.length > 0) {
+      diff += oldLines.map(line => `- ${line}`).join('\n');
+    }
+
+    // Add separator if we have both old and new lines
+    if (oldLines.length > 0 && newLines.length > 0) {
+      diff += '\n';
+    }
+
+    // Add added lines
+    if (newLines.length > 0) {
+      diff += newLines.map(line => `+ ${line}`).join('\n');
+    }
+
+    return diff;
   }
 
   /**
@@ -226,9 +297,19 @@
         // Format: ## file/path.py: line 25
         markdown += `## ${filePath}: ${lineRef}\n\n`;
 
-        // Transform suggestion blocks and add the comment
-        const transformedBody = transformSuggestions(comment.body);
-        markdown += `${transformedBody}\n\n`;
+        // If this is a suggestion with diff, format as diff
+        if (comment.suggestionDiff) {
+          const diff = formatSuggestionDiff(comment.suggestionDiff);
+          if (diff) {
+            markdown += '```diff\n';
+            markdown += diff + '\n';
+            markdown += '```\n\n';
+          }
+        } else {
+          // For non-suggestion comments, just add the body
+          markdown += `${comment.body}\n\n`;
+        }
+
         markdown += '---\n\n';
       });
     });
@@ -502,9 +583,6 @@
 
       const markdown = formatAsMarkdown(commentsByFile);
       showModal(markdown);
-
-      // Also log to console for debugging
-      console.log('Extracted comments:', markdown);
 
     } catch (error) {
       console.error('Error extracting PR comments:', error);
