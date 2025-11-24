@@ -11,7 +11,26 @@
   'use strict';
 
   /**
-   * Extract the JSON payload from GitHub's React app
+   * Detect which GitHub interface is being used
+   */
+  function detectInterface() {
+    // New interface has react-app.embeddedData script tag
+    const newInterfaceTag = document.querySelector('script[data-target="react-app.embeddedData"]');
+    if (newInterfaceTag) {
+      return 'new';
+    }
+
+    // Classic interface has review-thread-component elements
+    const classicInterfaceElements = document.querySelectorAll('.review-thread-component');
+    if (classicInterfaceElements.length > 0) {
+      return 'classic';
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract the JSON payload from GitHub's React app (new interface)
    */
   function extractPayload() {
     const scriptTag = document.querySelector('script[data-target="react-app.embeddedData"]');
@@ -171,7 +190,117 @@
   }
 
   /**
-   * Extract all review comments and organize by file
+   * Extract comments from classic interface by parsing HTML DOM
+   */
+  function extractCommentsFromClassicInterface() {
+    const commentsByFile = new Map();
+
+    // Find all review thread containers
+    const threads = document.querySelectorAll('.review-thread-component');
+
+    threads.forEach(thread => {
+      // Skip resolved threads
+      if (thread.dataset.resolved === 'true') {
+        return;
+      }
+
+      // Find the file container - it has data-tagsearch-path
+      const fileContainer = thread.closest('.file');
+      if (!fileContainer) {
+        return;
+      }
+
+      const filePath = fileContainer.dataset.tagsearchPath;
+      if (!filePath) {
+        return;
+      }
+
+      // Extract line numbers - first check for multi-line comment range
+      let lineNumber = null;
+      let startLine = null;
+      let endLine = null;
+
+      // Check for "Comment on lines X to Y" text pattern
+      const threadText = thread.textContent;
+      const linesMatch = threadText.match(/Comment on lines?\s+[+-]?(\d+)\s+to\s+[+-]?(\d+)/i);
+
+      if (linesMatch) {
+        // Multi-line comment
+        startLine = parseInt(linesMatch[1], 10);
+        endLine = parseInt(linesMatch[2], 10);
+        lineNumber = null; // No single line for multi-line comments
+      } else {
+        // Single-line comment - get from previous row
+        const inlineCommentsRow = thread.closest('tr.inline-comments');
+        if (inlineCommentsRow) {
+          const prevRow = inlineCommentsRow.previousElementSibling;
+          if (prevRow) {
+            const lineNumElement = prevRow.querySelector('[data-line-number]');
+            if (lineNumElement) {
+              lineNumber = parseInt(lineNumElement.dataset.lineNumber, 10);
+              startLine = lineNumber;
+              endLine = lineNumber;
+            }
+          }
+        }
+      }
+
+      // Get comment body directly from the thread
+      const bodyElement = thread.querySelector('.comment-body');
+      if (!bodyElement) {
+        return;
+      }
+
+      const body = bodyElement.textContent.trim();
+      if (!body) {
+        return;
+      }
+
+      // Check if this is a suggestion
+      const suggestionElement = thread.querySelector('.js-suggested-changes-blob');
+      let suggestionDiff = null;
+      if (suggestionElement) {
+        const oldLines = [];
+        const newLines = [];
+
+        suggestionElement.querySelectorAll('.blob-code-deletion').forEach(cell => {
+          oldLines.push(cell.textContent.trim());
+        });
+
+        suggestionElement.querySelectorAll('.blob-code-addition').forEach(cell => {
+          newLines.push(cell.textContent.trim());
+        });
+
+        if (oldLines.length > 0 || newLines.length > 0) {
+          suggestionDiff = { oldLines, newLines };
+        }
+      }
+
+      // Get author
+      const authorElement = thread.querySelector('.author');
+      const author = authorElement ? authorElement.textContent.trim() : 'Unknown';
+
+      if (!commentsByFile.has(filePath)) {
+        commentsByFile.set(filePath, []);
+      }
+
+      commentsByFile.get(filePath).push({
+        line: lineNumber,
+        contextStart: startLine,
+        contextEnd: endLine,
+        author: author,
+        body: body,
+        bodyHTML: bodyElement.innerHTML,
+        suggestionDiff: suggestionDiff,
+        createdAt: null
+      });
+    });
+
+    return commentsByFile;
+  }
+
+  /**
+   * Extract all review comments and organize by file (new interface)
    */
   function extractComments(payload) {
     const threads = payload.threads || {};
@@ -567,14 +696,29 @@
    */
   async function main() {
     try {
-      const data = extractPayload();
-      const payload = data.payload;
+      // Detect which interface we're on
+      const interfaceType = detectInterface();
 
-      if (!payload) {
-        throw new Error('Invalid GitHub PR data structure');
+      if (!interfaceType) {
+        throw new Error('Could not find GitHub PR data. Make sure you are on the Files Changed tab of a PR.');
       }
 
-      const commentsByFile = extractComments(payload);
+      let commentsByFile;
+
+      if (interfaceType === 'new') {
+        // New interface: extract from JSON payload
+        const data = extractPayload();
+        const payload = data.payload;
+
+        if (!payload) {
+          throw new Error('Invalid GitHub PR data structure');
+        }
+
+        commentsByFile = extractComments(payload);
+      } else {
+        // Classic interface: extract from HTML DOM
+        commentsByFile = extractCommentsFromClassicInterface();
+      }
 
       if (commentsByFile.size === 0) {
         alert('No unresolved review comments found on this PR.\n\nNote: The bookmarklet only extracts unresolved comments by default.');

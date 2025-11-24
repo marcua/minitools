@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review — PR Comments Extractor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Newsreader', serif;
+            background: #fafaf9;
+            color: #1c1917;
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 80px 20px;
+        }
+
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 60px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid #e7e5e4;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 300;
+            line-height: 1.2;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: #57534e;
+            font-weight: 400;
+            font-style: italic;
+        }
+
+        .bookmarklet-section {
+            background: white;
+            border: 1px solid #e7e5e4;
+            padding: 48px;
+            margin: 48px 0;
+            text-align: center;
+        }
+
+        .bookmarklet {
+            display: inline-block;
+            background: #1c1917;
+            color: white;
+            text-decoration: none;
+            padding: 16px 32px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            transition: all 0.2s ease;
+            border: 2px solid #1c1917;
+        }
+
+        .bookmarklet:hover {
+            background: white;
+            color: #1c1917;
+        }
+
+        .hint {
+            margin-top: 16px;
+            color: #78716c;
+            font-size: 0.9rem;
+        }
+
+        .section {
+            margin: 48px 0;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 400;
+            margin-bottom: 24px;
+            letter-spacing: -0.01em;
+        }
+
+        ol {
+            list-style: decimal;
+            padding-left: 24px;
+        }
+
+        ol li {
+            margin: 12px 0;
+            color: #44403c;
+            font-size: 1rem;
+            padding-left: 8px;
+        }
+
+        code {
+            background: #f5f5f4;
+            border: 1px solid #e7e5e4;
+            padding: 2px 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.9em;
+            color: #1c1917;
+        }
+
+        pre {
+            background: white;
+            border: 1px solid #e7e5e4;
+            padding: 24px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            margin-top: 16px;
+        }
+
+        pre code {
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .note {
+            background: #fffbeb;
+            border-left: 3px solid #fbbf24;
+            padding: 20px;
+            margin: 40px 0;
+            font-size: 0.95rem;
+        }
+
+        .note strong {
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Review</h1>
+            <p class="subtitle">
+                Extract GitHub PR review comments and transform them into markdown,<br>
+                ready to paste into Claude Code.
+            </p>
+        </header>
+
+        <div class="bookmarklet-section">
+            <a href="javascript:%28function%28%29%20%7B%20%27use%20strict%27%3B%20function%20detectInterface%28%29%20%7B%20const%20newInterfaceTag%20%3D%20document.querySelector%28%27script%5Bdata-target%3D%22react-app.embeddedData%22%5D%27%29%3B%20if%20%28newInterfaceTag%29%20%7B%20return%20%27new%27%3B%20%7D%20const%20classicInterfaceElements%20%3D%20document.querySelectorAll%28%27.review-thread-component%27%29%3B%20if%20%28classicInterfaceElements.length%20%3E%200%29%20%7B%20return%20%27classic%27%3B%20%7D%20return%20null%3B%20%7D%20function%20extractPayload%28%29%20%7B%20const%20scriptTag%20%3D%20document.querySelector%28%27script%5Bdata-target%3D%22react-app.embeddedData%22%5D%27%29%3B%20if%20%28%21scriptTag%29%20%7B%20throw%20new%20Error%28%27Could%20not%20find%20GitHub%20PR%20data.%20Make%20sure%20you%20are%20on%20the%20Files%20Changed%20tab%20of%20a%20PR.%27%29%3B%20%7D%20try%20%7B%20return%20JSON.parse%28scriptTag.textContent%29%3B%20%7D%20catch%20%28e%29%20%7B%20throw%20new%20Error%28%27Failed%20to%20parse%20GitHub%20PR%20data%3A%20%27%20%2B%20e.message%29%3B%20%7D%20%7D%20function%20parseLineFromMarker%28marker%29%20%7B%20const%20match%20%3D%20marker.match%28/%5E%5BRL%5D%28%5Cd%2B%29%24/%29%3B%20return%20match%20%3F%20parseInt%28match%5B1%5D%2C%2010%29%20%3A%20null%3B%20%7D%20function%20extractSuggestionLineRange%28bodyHTML%29%20%7B%20if%20%28%21bodyHTML%20%7C%7C%20%21bodyHTML.includes%28%27js-suggested-changes-blob%27%29%29%20%7B%20return%20null%3B%20%7D%20const%20lineNumbers%20%3D%20%5B%5D%3B%20const%20regex%20%3D%20/data-line-number%3D%22%28%5Cd%2B%29%22/g%3B%20let%20match%3B%20while%20%28%28match%20%3D%20regex.exec%28bodyHTML%29%29%20%21%3D%3D%20null%29%20%7B%20lineNumbers.push%28parseInt%28match%5B1%5D%2C%2010%29%29%3B%20%7D%20if%20%28lineNumbers.length%20%3D%3D%3D%200%29%20%7B%20return%20null%3B%20%7D%20const%20uniqueLines%20%3D%20%5B...new%20Set%28lineNumbers%29%5D.sort%28%28a%2C%20b%29%20%3D%3E%20a%20-%20b%29%3B%20return%20%7B%20start%3A%20uniqueLines%5B0%5D%2C%20end%3A%20uniqueLines%5BuniqueLines.length%20-%201%5D%20%7D%3B%20%7D%20function%20extractSuggestionDiff%28bodyHTML%29%20%7B%20if%20%28%21bodyHTML%20%7C%7C%20%21bodyHTML.includes%28%27js-suggested-changes-blob%27%29%29%20%7B%20return%20null%3B%20%7D%20const%20parser%20%3D%20new%20DOMParser%28%29%3B%20const%20doc%20%3D%20parser.parseFromString%28bodyHTML%2C%20%27text/html%27%29%3B%20const%20oldLines%20%3D%20%5B%5D%3B%20const%20newLines%20%3D%20%5B%5D%3B%20const%20deletionCells%20%3D%20doc.querySelectorAll%28%27.blob-code-deletion%27%29%3B%20deletionCells.forEach%28cell%20%3D%3E%20%7B%20oldLines.push%28cell.textContent.trim%28%29%29%3B%20%7D%29%3B%20const%20additionCells%20%3D%20doc.querySelectorAll%28%27.blob-code-addition%27%29%3B%20additionCells.forEach%28cell%20%3D%3E%20%7B%20newLines.push%28cell.textContent.trim%28%29%29%3B%20%7D%29%3B%20return%20%7B%20oldLines%2C%20newLines%20%7D%3B%20%7D%20function%20buildThreadLocationMap%28diffSummaries%29%20%7B%20const%20map%20%3D%20new%20Map%28%29%3B%20diffSummaries.forEach%28file%20%3D%3E%20%7B%20const%20filePath%20%3D%20file.path%3B%20const%20markersMap%20%3D%20file.markersMap%20%7C%7C%20%7B%7D%3B%20Object.entries%28markersMap%29.forEach%28%28%5Bmarker%2C%20data%5D%29%20%3D%3E%20%7B%20const%20lineContext%20%3D%20data.ctx%20%7C%7C%20%5B%5D%3B%20const%20contextStart%20%3D%20lineContext%5B0%5D%3B%20const%20contextEnd%20%3D%20lineContext%5B1%5D%3B%20const%20lineFromMarker%20%3D%20parseLineFromMarker%28marker%29%3B%20%28data.threads%20%7C%7C%20%5B%5D%29.forEach%28thread%20%3D%3E%20%7B%20let%20hasMultiLine%20%3D%20false%3B%20let%20startLine%20%3D%20lineFromMarker%3B%20let%20endLine%20%3D%20lineFromMarker%3B%20if%20%28thread.startLine%20%21%3D%3D%20undefined%20%26%26%20thread.endLine%20%21%3D%3D%20undefined%29%20%7B%20hasMultiLine%20%3D%20true%3B%20startLine%20%3D%20thread.startLine%3B%20endLine%20%3D%20thread.endLine%3B%20%7D%20else%20if%20%28thread.start%29%20%7B%20hasMultiLine%20%3D%20true%3B%20startLine%20%3D%20parseLineFromMarker%28thread.start%29%3B%20endLine%20%3D%20lineFromMarker%3B%20%7D%20map.set%28thread.id.toString%28%29%2C%20%7B%20filePath%3A%20filePath%2C%20marker%3A%20marker%2C%20line%3A%20hasMultiLine%20%3F%20null%20%3A%20lineFromMarker%2C%20contextStart%3A%20hasMultiLine%20%3F%20startLine%20%3A%20contextStart%2C%20contextEnd%3A%20hasMultiLine%20%3F%20endLine%20%3A%20contextEnd%20%7D%29%3B%20%7D%29%3B%20%7D%29%3B%20const%20diffLines%20%3D%20file.diffLines%20%7C%7C%20%5B%5D%3B%20diffLines.forEach%28line%20%3D%3E%20%7B%20if%20%28line.threads%20%26%26%20line.threads.length%20%3E%200%29%20%7B%20const%20lineNumber%20%3D%20line.newLineNumber%20%7C%7C%20line.oldLineNumber%3B%20line.threads.forEach%28thread%20%3D%3E%20%7B%20if%20%28%21map.has%28thread.id.toString%28%29%29%29%20%7B%20const%20startLine%20%3D%20thread.startLine%20%7C%7C%20thread.line%20%7C%7C%20lineNumber%3B%20const%20endLine%20%3D%20thread.endLine%20%7C%7C%20startLine%3B%20map.set%28thread.id.toString%28%29%2C%20%7B%20filePath%3A%20filePath%2C%20marker%3A%20%60L%24%7BlineNumber%7D%60%2C%20line%3A%20startLine%2C%20contextStart%3A%20startLine%2C%20contextEnd%3A%20endLine%20%7D%29%3B%20%7D%20%7D%29%3B%20%7D%20%7D%29%3B%20%7D%29%3B%20return%20map%3B%20%7D%20function%20extractCommentsFromClassicInterface%28%29%20%7B%20const%20commentsByFile%20%3D%20new%20Map%28%29%3B%20const%20threads%20%3D%20document.querySelectorAll%28%27.review-thread-component%27%29%3B%20threads.forEach%28thread%20%3D%3E%20%7B%20if%20%28thread.dataset.resolved%20%3D%3D%3D%20%27true%27%29%20%7B%20return%3B%20%7D%20const%20fileContainer%20%3D%20thread.closest%28%27.file%27%29%3B%20if%20%28%21fileContainer%29%20%7B%20return%3B%20%7D%20const%20filePath%20%3D%20fileContainer.dataset.tagsearchPath%3B%20if%20%28%21filePath%29%20%7B%20return%3B%20%7D%20let%20lineNumber%20%3D%20null%3B%20let%20startLine%20%3D%20null%3B%20let%20endLine%20%3D%20null%3B%20const%20threadText%20%3D%20thread.textContent%3B%20const%20linesMatch%20%3D%20threadText.match%28/Comment%20on%20lines%3F%5Cs%2B%5B%2B-%5D%3F%28%5Cd%2B%29%5Cs%2Bto%5Cs%2B%5B%2B-%5D%3F%28%5Cd%2B%29/i%29%3B%20if%20%28linesMatch%29%20%7B%20startLine%20%3D%20parseInt%28linesMatch%5B1%5D%2C%2010%29%3B%20endLine%20%3D%20parseInt%28linesMatch%5B2%5D%2C%2010%29%3B%20lineNumber%20%3D%20null%3B%20%7D%20else%20%7B%20const%20inlineCommentsRow%20%3D%20thread.closest%28%27tr.inline-comments%27%29%3B%20if%20%28inlineCommentsRow%29%20%7B%20const%20prevRow%20%3D%20inlineCommentsRow.previousElementSibling%3B%20if%20%28prevRow%29%20%7B%20const%20lineNumElement%20%3D%20prevRow.querySelector%28%27%5Bdata-line-number%5D%27%29%3B%20if%20%28lineNumElement%29%20%7B%20lineNumber%20%3D%20parseInt%28lineNumElement.dataset.lineNumber%2C%2010%29%3B%20startLine%20%3D%20lineNumber%3B%20endLine%20%3D%20lineNumber%3B%20%7D%20%7D%20%7D%20%7D%20const%20bodyElement%20%3D%20thread.querySelector%28%27.comment-body%27%29%3B%20if%20%28%21bodyElement%29%20%7B%20return%3B%20%7D%20const%20body%20%3D%20bodyElement.textContent.trim%28%29%3B%20if%20%28%21body%29%20%7B%20return%3B%20%7D%20const%20suggestionElement%20%3D%20thread.querySelector%28%27.js-suggested-changes-blob%27%29%3B%20let%20suggestionDiff%20%3D%20null%3B%20if%20%28suggestionElement%29%20%7B%20const%20oldLines%20%3D%20%5B%5D%3B%20const%20newLines%20%3D%20%5B%5D%3B%20suggestionElement.querySelectorAll%28%27.blob-code-deletion%27%29.forEach%28cell%20%3D%3E%20%7B%20oldLines.push%28cell.textContent.trim%28%29%29%3B%20%7D%29%3B%20suggestionElement.querySelectorAll%28%27.blob-code-addition%27%29.forEach%28cell%20%3D%3E%20%7B%20newLines.push%28cell.textContent.trim%28%29%29%3B%20%7D%29%3B%20if%20%28oldLines.length%20%3E%200%20%7C%7C%20newLines.length%20%3E%200%29%20%7B%20suggestionDiff%20%3D%20%7B%20oldLines%2C%20newLines%20%7D%3B%20%7D%20%7D%20const%20authorElement%20%3D%20thread.querySelector%28%27.author%27%29%3B%20const%20author%20%3D%20authorElement%20%3F%20authorElement.textContent.trim%28%29%20%3A%20%27Unknown%27%3B%20if%20%28%21commentsByFile.has%28filePath%29%29%20%7B%20commentsByFile.set%28filePath%2C%20%5B%5D%29%3B%20%7D%20commentsByFile.get%28filePath%29.push%28%7B%20line%3A%20lineNumber%2C%20contextStart%3A%20startLine%2C%20contextEnd%3A%20endLine%2C%20author%3A%20author%2C%20body%3A%20body%2C%20bodyHTML%3A%20bodyElement.innerHTML%2C%20suggestionDiff%3A%20suggestionDiff%2C%20createdAt%3A%20null%20%7D%29%3B%20%7D%29%3B%20return%20commentsByFile%3B%20%7D%20function%20extractComments%28payload%29%20%7B%20const%20threads%20%3D%20payload.threads%20%7C%7C%20%7B%7D%3B%20const%20diffSummaries%20%3D%20payload.diffSummaries%20%7C%7C%20%5B%5D%3B%20const%20locationMap%20%3D%20buildThreadLocationMap%28diffSummaries%29%3B%20const%20commentsByFile%20%3D%20new%20Map%28%29%3B%20let%20totalThreads%20%3D%200%3B%20let%20resolvedThreads%20%3D%200%3B%20let%20missingLocationThreads%20%3D%200%3B%20let%20emptyThreads%20%3D%200%3B%20let%20extractedThreads%20%3D%200%3B%20Object.values%28threads%29.forEach%28thread%20%3D%3E%20%7B%20totalThreads%2B%2B%3B%20if%20%28thread.isResolved%29%20%7B%20resolvedThreads%2B%2B%3B%20return%3B%20%7D%20const%20location%20%3D%20locationMap.get%28thread.id.toString%28%29%29%3B%20if%20%28%21location%29%20%7B%20missingLocationThreads%2B%2B%3B%20return%3B%20%7D%20const%20comments%20%3D%20thread.commentsData%3F.comments%20%7C%7C%20%5B%5D%3B%20if%20%28comments.length%20%3D%3D%3D%200%29%20%7B%20emptyThreads%2B%2B%3B%20return%3B%20%7D%20const%20filePath%20%3D%20location.filePath%3B%20if%20%28%21commentsByFile.has%28filePath%29%29%20%7B%20commentsByFile.set%28filePath%2C%20%5B%5D%29%3B%20%7D%20comments.forEach%28comment%20%3D%3E%20%7B%20const%20suggestionRange%20%3D%20extractSuggestionLineRange%28comment.bodyHTML%29%3B%20const%20suggestionDiff%20%3D%20extractSuggestionDiff%28comment.bodyHTML%29%3B%20const%20commentData%20%3D%20%7B%20line%3A%20suggestionRange%20%3F%20null%20%3A%20location.line%2C%20marker%3A%20location.marker%2C%20contextStart%3A%20suggestionRange%20%3F%20suggestionRange.start%20%3A%20location.contextStart%2C%20contextEnd%3A%20suggestionRange%20%3F%20suggestionRange.end%20%3A%20location.contextEnd%2C%20author%3A%20comment.author%3F.login%20%7C%7C%20%27Unknown%27%2C%20body%3A%20comment.body%20%7C%7C%20%27%27%2C%20bodyHTML%3A%20comment.bodyHTML%20%7C%7C%20%27%27%2C%20suggestionDiff%3A%20suggestionDiff%2C%20createdAt%3A%20comment.createdAt%20%7D%3B%20commentsByFile.get%28filePath%29.push%28commentData%29%3B%20extractedThreads%2B%2B%3B%20%7D%29%3B%20%7D%29%3B%20return%20commentsByFile%3B%20%7D%20function%20formatSuggestionDiff%28suggestionDiff%29%20%7B%20if%20%28%21suggestionDiff%29%20%7B%20return%20%27%27%3B%20%7D%20const%20%7B%20oldLines%2C%20newLines%20%7D%20%3D%20suggestionDiff%3B%20let%20diff%20%3D%20%27%27%3B%20if%20%28oldLines.length%20%3E%200%29%20%7B%20diff%20%2B%3D%20oldLines.map%28line%20%3D%3E%20%60-%20%24%7Bline%7D%60%29.join%28%27%5Cn%27%29%3B%20%7D%20if%20%28oldLines.length%20%3E%200%20%26%26%20newLines.length%20%3E%200%29%20%7B%20diff%20%2B%3D%20%27%5Cn%27%3B%20%7D%20if%20%28newLines.length%20%3E%200%29%20%7B%20diff%20%2B%3D%20newLines.map%28line%20%3D%3E%20%60%2B%20%24%7Bline%7D%60%29.join%28%27%5Cn%27%29%3B%20%7D%20return%20diff%3B%20%7D%20function%20formatAsMarkdown%28commentsByFile%29%20%7B%20let%20markdown%20%3D%20%27%23%20PR%20Review%20Comments%5Cn%5Cn%27%3B%20const%20sortedFiles%20%3D%20Array.from%28commentsByFile.keys%28%29%29.sort%28%29%3B%20sortedFiles.forEach%28filePath%20%3D%3E%20%7B%20const%20comments%20%3D%20commentsByFile.get%28filePath%29%3B%20comments.sort%28%28a%2C%20b%29%20%3D%3E%20%28a.line%20%7C%7C%200%29%20-%20%28b.line%20%7C%7C%200%29%29%3B%20comments.forEach%28comment%20%3D%3E%20%7B%20let%20lineRef%20%3D%20%27%27%3B%20if%20%28comment.line%29%20%7B%20lineRef%20%3D%20%60line%20%24%7Bcomment.line%7D%60%3B%20%7D%20else%20if%20%28comment.contextStart%20%3D%3D%3D%20comment.contextEnd%29%20%7B%20lineRef%20%3D%20%60line%20%24%7Bcomment.contextStart%7D%60%3B%20%7D%20else%20%7B%20lineRef%20%3D%20%60lines%20%24%7Bcomment.contextStart%7D-%24%7Bcomment.contextEnd%7D%60%3B%20%7D%20markdown%20%2B%3D%20%60%23%23%20%24%7BfilePath%7D%3A%20%24%7BlineRef%7D%5Cn%5Cn%60%3B%20if%20%28comment.suggestionDiff%29%20%7B%20const%20diff%20%3D%20formatSuggestionDiff%28comment.suggestionDiff%29%3B%20if%20%28diff%29%20%7B%20markdown%20%2B%3D%20%27%60%60%60diff%5Cn%27%3B%20markdown%20%2B%3D%20diff%20%2B%20%27%5Cn%27%3B%20markdown%20%2B%3D%20%27%60%60%60%5Cn%5Cn%27%3B%20%7D%20%7D%20else%20%7B%20markdown%20%2B%3D%20%60%24%7Bcomment.body%7D%5Cn%5Cn%60%3B%20%7D%20markdown%20%2B%3D%20%27---%5Cn%5Cn%27%3B%20%7D%29%3B%20%7D%29%3B%20return%20markdown%3B%20%7D%20function%20showModal%28markdown%29%20%7B%20const%20backdrop%20%3D%20document.createElement%28%27div%27%29%3B%20backdrop.style.cssText%20%3D%20%60%20position%3A%20fixed%3B%20top%3A%200%3B%20left%3A%200%3B%20right%3A%200%3B%20bottom%3A%200%3B%20background%3A%20rgba%280%2C%200%2C%200%2C%200.5%29%3B%20z-index%3A%20999999%3B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20justify-content%3A%20center%3B%20padding%3A%2020px%3B%20%60%3B%20const%20modal%20%3D%20document.createElement%28%27div%27%29%3B%20modal.style.cssText%20%3D%20%60%20background%3A%20white%3B%20border-radius%3A%208px%3B%20box-shadow%3A%200%208px%2032px%20rgba%280%2C%200%2C%200%2C%200.3%29%3B%20max-width%3A%201200px%3B%20width%3A%2095%25%3B%20height%3A%2095vh%3B%20display%3A%20flex%3B%20flex-direction%3A%20column%3B%20font-family%3A%20-apple-system%2C%20BlinkMacSystemFont%2C%20%27Segoe%20UI%27%2C%20Helvetica%2C%20Arial%2C%20sans-serif%3B%20%60%3B%20const%20header%20%3D%20document.createElement%28%27div%27%29%3B%20header.style.cssText%20%3D%20%60%20padding%3A%2020px%3B%20border-bottom%3A%201px%20solid%20%23e1e4e8%3B%20display%3A%20flex%3B%20justify-content%3A%20space-between%3B%20align-items%3A%20center%3B%20%60%3B%20header.innerHTML%20%3D%20%60%20%3Ch2%20style%3D%22margin%3A%200%3B%20font-size%3A%2020px%3B%20font-weight%3A%20600%3B%20color%3A%20%2324292e%3B%22%3EPR%20Review%20Comments%3C/h2%3E%20%3Cbutton%20id%3D%22closeModal%22%20style%3D%22%20background%3A%20transparent%3B%20border%3A%20none%3B%20font-size%3A%2024px%3B%20color%3A%20%23586069%3B%20cursor%3A%20pointer%3B%20padding%3A%200%3B%20width%3A%2032px%3B%20height%3A%2032px%3B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20justify-content%3A%20center%3B%20border-radius%3A%204px%3B%20%22%3E%26times%3B%3C/button%3E%20%60%3B%20const%20textareaContainer%20%3D%20document.createElement%28%27div%27%29%3B%20textareaContainer.style.cssText%20%3D%20%60%20padding%3A%2020px%3B%20flex%3A%201%3B%20overflow%3A%20hidden%3B%20display%3A%20flex%3B%20flex-direction%3A%20column%3B%20%60%3B%20const%20textarea%20%3D%20document.createElement%28%27textarea%27%29%3B%20textarea.value%20%3D%20markdown%3B%20textarea.style.cssText%20%3D%20%60%20width%3A%20100%25%3B%20height%3A%20100%25%3B%20border%3A%201px%20solid%20%23e1e4e8%3B%20border-radius%3A%206px%3B%20padding%3A%2012px%3B%20font-family%3A%20%27SFMono-Regular%27%2C%20Consolas%2C%20%27Liberation%20Mono%27%2C%20Menlo%2C%20monospace%3B%20font-size%3A%2013px%3B%20line-height%3A%201.5%3B%20resize%3A%20none%3B%20color%3A%20%2324292e%3B%20%60%3B%20textarea.readOnly%20%3D%20false%3B%20textareaContainer.appendChild%28textarea%29%3B%20const%20footer%20%3D%20document.createElement%28%27div%27%29%3B%20footer.style.cssText%20%3D%20%60%20padding%3A%2020px%3B%20border-top%3A%201px%20solid%20%23e1e4e8%3B%20display%3A%20flex%3B%20justify-content%3A%20space-between%3B%20align-items%3A%20center%3B%20%60%3B%20const%20info%20%3D%20document.createElement%28%27div%27%29%3B%20info.style.cssText%20%3D%20%27color%3A%20%23586069%3B%20font-size%3A%2014px%3B%27%3B%20const%20commentCount%20%3D%20%28markdown.match%28/%5E%23%23%20/gm%29%20%7C%7C%20%5B%5D%29.length%3B%20info.textContent%20%3D%20%60%24%7BcommentCount%7D%20comment%24%7BcommentCount%20%3D%3D%3D%201%20%3F%20%27%27%20%3A%20%27s%27%7D%20extracted%60%3B%20const%20buttonContainer%20%3D%20document.createElement%28%27div%27%29%3B%20buttonContainer.style.cssText%20%3D%20%27display%3A%20flex%3B%20gap%3A%2010px%3B%27%3B%20const%20copyButton%20%3D%20document.createElement%28%27button%27%29%3B%20copyButton.textContent%20%3D%20%27Copy%20to%20Clipboard%27%3B%20copyButton.style.cssText%20%3D%20%60%20background%3A%20%232ea44f%3B%20color%3A%20white%3B%20border%3A%20none%3B%20padding%3A%208px%2016px%3B%20border-radius%3A%206px%3B%20font-size%3A%2014px%3B%20font-weight%3A%20600%3B%20cursor%3A%20pointer%3B%20transition%3A%20background%200.2s%3B%20%60%3B%20copyButton.onmouseover%20%3D%20%28%29%20%3D%3E%20copyButton.style.background%20%3D%20%27%232c974b%27%3B%20copyButton.onmouseout%20%3D%20%28%29%20%3D%3E%20copyButton.style.background%20%3D%20%27%232ea44f%27%3B%20const%20closeButton%20%3D%20document.createElement%28%27button%27%29%3B%20closeButton.textContent%20%3D%20%27Close%27%3B%20closeButton.style.cssText%20%3D%20%60%20background%3A%20%23f6f8fa%3B%20color%3A%20%2324292e%3B%20border%3A%201px%20solid%20%23e1e4e8%3B%20padding%3A%208px%2016px%3B%20border-radius%3A%206px%3B%20font-size%3A%2014px%3B%20font-weight%3A%20600%3B%20cursor%3A%20pointer%3B%20transition%3A%20background%200.2s%3B%20%60%3B%20closeButton.onmouseover%20%3D%20%28%29%20%3D%3E%20closeButton.style.background%20%3D%20%27%23e1e4e8%27%3B%20closeButton.onmouseout%20%3D%20%28%29%20%3D%3E%20closeButton.style.background%20%3D%20%27%23f6f8fa%27%3B%20buttonContainer.appendChild%28copyButton%29%3B%20buttonContainer.appendChild%28closeButton%29%3B%20footer.appendChild%28info%29%3B%20footer.appendChild%28buttonContainer%29%3B%20modal.appendChild%28header%29%3B%20modal.appendChild%28textareaContainer%29%3B%20modal.appendChild%28footer%29%3B%20backdrop.appendChild%28modal%29%3B%20const%20closeModal%20%3D%20%28%29%20%3D%3E%20%7B%20document.body.removeChild%28backdrop%29%3B%20%7D%3B%20header.querySelector%28%27%23closeModal%27%29.onclick%20%3D%20closeModal%3B%20closeButton.onclick%20%3D%20closeModal%3B%20backdrop.onclick%20%3D%20%28e%29%20%3D%3E%20%7B%20if%20%28e.target%20%3D%3D%3D%20backdrop%29%20closeModal%28%29%3B%20%7D%3B%20copyButton.onclick%20%3D%20async%20%28%29%20%3D%3E%20%7B%20try%20%7B%20await%20copyToClipboard%28textarea.value%29%3B%20const%20originalText%20%3D%20copyButton.textContent%3B%20copyButton.textContent%20%3D%20%27%E2%9C%93%20Copied%21%27%3B%20copyButton.style.background%20%3D%20%27%2328a745%27%3B%20setTimeout%28%28%29%20%3D%3E%20%7B%20copyButton.textContent%20%3D%20originalText%3B%20copyButton.style.background%20%3D%20%27%232ea44f%27%3B%20%7D%2C%202000%29%3B%20%7D%20catch%20%28err%29%20%7B%20copyButton.textContent%20%3D%20%27%E2%9C%97%20Failed%27%3B%20copyButton.style.background%20%3D%20%27%23d73a49%27%3B%20setTimeout%28%28%29%20%3D%3E%20%7B%20copyButton.textContent%20%3D%20%27Copy%20to%20Clipboard%27%3B%20copyButton.style.background%20%3D%20%27%232ea44f%27%3B%20%7D%2C%202000%29%3B%20%7D%20%7D%3B%20document.body.appendChild%28backdrop%29%3B%20setTimeout%28%28%29%20%3D%3E%20textarea.focus%28%29%2C%20100%29%3B%20%7D%20function%20copyToClipboard%28text%29%20%7B%20if%20%28navigator.clipboard%20%26%26%20navigator.clipboard.writeText%29%20%7B%20return%20navigator.clipboard.writeText%28text%29.catch%28err%20%3D%3E%20%7B%20console.warn%28%27Clipboard%20API%20failed%2C%20trying%20fallback%3A%27%2C%20err%29%3B%20return%20copyToClipboardFallback%28text%29%3B%20%7D%29%3B%20%7D%20return%20copyToClipboardFallback%28text%29%3B%20%7D%20function%20copyToClipboardFallback%28text%29%20%7B%20return%20new%20Promise%28%28resolve%2C%20reject%29%20%3D%3E%20%7B%20const%20textarea%20%3D%20document.createElement%28%27textarea%27%29%3B%20textarea.value%20%3D%20text%3B%20textarea.style.position%20%3D%20%27fixed%27%3B%20textarea.style.top%20%3D%20%270%27%3B%20textarea.style.left%20%3D%20%270%27%3B%20textarea.style.width%20%3D%20%271px%27%3B%20textarea.style.height%20%3D%20%271px%27%3B%20textarea.style.padding%20%3D%20%270%27%3B%20textarea.style.border%20%3D%20%27none%27%3B%20textarea.style.outline%20%3D%20%27none%27%3B%20textarea.style.boxShadow%20%3D%20%27none%27%3B%20textarea.style.background%20%3D%20%27transparent%27%3B%20document.body.appendChild%28textarea%29%3B%20textarea.focus%28%29%3B%20textarea.select%28%29%3B%20try%20%7B%20const%20successful%20%3D%20document.execCommand%28%27copy%27%29%3B%20document.body.removeChild%28textarea%29%3B%20if%20%28successful%29%20%7B%20resolve%28%29%3B%20%7D%20else%20%7B%20reject%28new%20Error%28%27execCommand%20copy%20failed%27%29%29%3B%20%7D%20%7D%20catch%20%28err%29%20%7B%20document.body.removeChild%28textarea%29%3B%20reject%28err%29%3B%20%7D%20%7D%29%3B%20%7D%20async%20function%20main%28%29%20%7B%20try%20%7B%20const%20interfaceType%20%3D%20detectInterface%28%29%3B%20if%20%28%21interfaceType%29%20%7B%20throw%20new%20Error%28%27Could%20not%20find%20GitHub%20PR%20data.%20Make%20sure%20you%20are%20on%20the%20Files%20Changed%20tab%20of%20a%20PR.%27%29%3B%20%7D%20let%20commentsByFile%3B%20if%20%28interfaceType%20%3D%3D%3D%20%27new%27%29%20%7B%20const%20data%20%3D%20extractPayload%28%29%3B%20const%20payload%20%3D%20data.payload%3B%20if%20%28%21payload%29%20%7B%20throw%20new%20Error%28%27Invalid%20GitHub%20PR%20data%20structure%27%29%3B%20%7D%20commentsByFile%20%3D%20extractComments%28payload%29%3B%20%7D%20else%20%7B%20commentsByFile%20%3D%20extractCommentsFromClassicInterface%28%29%3B%20%7D%20if%20%28commentsByFile.size%20%3D%3D%3D%200%29%20%7B%20alert%28%27No%20unresolved%20review%20comments%20found%20on%20this%20PR.%5Cn%5CnNote%3A%20The%20bookmarklet%20only%20extracts%20unresolved%20comments%20by%20default.%27%29%3B%20return%3B%20%7D%20const%20markdown%20%3D%20formatAsMarkdown%28commentsByFile%29%3B%20showModal%28markdown%29%3B%20%7D%20catch%20%28error%29%20%7B%20console.error%28%27Error%20extracting%20PR%20comments%3A%27%2C%20error%29%3B%20alert%28%27Error%3A%20%27%20%2B%20error.message%29%3B%20%7D%20%7D%20main%28%29%3B%20%7D%29%28%29%3B" class="bookmarklet">Review</a>
+            <p class="hint">Drag to your bookmarks bar, or right-click to bookmark</p>
+        </div>
+
+        <div class="section">
+            <h2>How to use</h2>
+            <ol>
+                <li>Navigate to a GitHub Pull Request</li>
+                <li>Click the <code>Files changed</code> tab</li>
+                <li>Click the Review bookmarklet</li>
+                <li>Copy the comments from the modal</li>
+                <li>Paste into Claude Code</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h2>Output format</h2>
+            <pre><code># PR Review Comments
+
+## filename.py: line 42
+
+Review comment text here
+
+---
+
+## another-file.js: lines 50-55
+
+Multi-line comment spanning several lines of code
+
+---</code></pre>
+        </div>
+
+        <div class="note">
+            <strong>Note:</strong> By default, this extracts only unresolved review comments.
+            To include resolved comments, modify <code>bookmarklet.src.js</code> and rebuild.
+        </div>
+    </div>
+</body>
+</html>

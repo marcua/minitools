@@ -10,6 +10,7 @@ A bookmarklet that extracts review comments from GitHub Pull Requests and copies
 - 🎯 Preserves comment structure (single-line and multi-line)
 - ✂️ Copy button to copy all comments, or select/copy a subset
 - 🔧 Easy to maintain with human-readable source code
+- ✨ **Works with both GitHub interfaces** - Supports both the new React-based UI and the classic HTML interface
 
 ## Installation
 
@@ -109,15 +110,25 @@ review/
 
 ### How It Works
 
-The bookmarklet:
+The bookmarklet automatically detects which GitHub interface you're using:
 
+**New Interface (React-based)**:
 1. Extracts the JSON payload from GitHub's React app (embedded in a `<script>` tag)
 2. Parses the `threads` object containing all review comments
 3. Matches thread IDs with file paths and line numbers from `diffSummaries`
 4. Filters out resolved threads (optional)
 5. Formats the comments as Markdown
-6. Shows a modal with an editable textarea
-7. Provides a copy button to copy all comments to clipboard
+
+**Classic Interface (HTML-based)**:
+1. Finds all review thread DOM elements (`.review-thread-component`)
+2. Extracts file paths, line numbers, and comment text from the HTML structure
+3. Parses suggestion diffs from the rendered HTML
+4. Filters out resolved threads (optional)
+5. Formats the comments as Markdown
+
+**Both interfaces**:
+6. Show a modal with an editable textarea
+7. Provide a copy button to copy all comments to clipboard
 
 ### Testing
 
