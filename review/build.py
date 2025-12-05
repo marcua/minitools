@@ -92,8 +92,37 @@ def generate_html(bookmarklet_url, minified_js):
         }}
 
         .container {{
-            max-width: 720px;
+            max-width: 1100px;
             margin: 0 auto;
+        }}
+
+        .two-column {{
+            display: flex;
+            gap: 48px;
+            align-items: flex-start;
+        }}
+
+        .two-column .left {{
+            flex: 0 0 auto;
+            min-width: 0;
+        }}
+
+        .two-column .right {{
+            flex: 1;
+            min-width: 0;
+        }}
+
+        .two-column video {{
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #e7e5e4;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }}
+
+        @media (max-width: 800px) {{
+            .two-column {{
+                flex-direction: column;
+            }}
         }}
 
         header {{
@@ -114,7 +143,6 @@ def generate_html(bookmarklet_url, minified_js):
             font-size: 1.1rem;
             color: #57534e;
             font-weight: 400;
-            font-style: italic;
         }}
 
         .bookmarklet-section {{
@@ -215,10 +243,7 @@ def generate_html(bookmarklet_url, minified_js):
     <div class="container">
         <header>
             <h1>Review</h1>
-            <p class="subtitle">
-                Extract GitHub PR review comments and transform them into markdown,<br>
-                ready to paste into Claude Code.
-            </p>
+            <p class="subtitle">Extract GitHub PR review comments and transform them into markdown, ready to paste into your coding agent.</p>
         </header>
 
         <div class="bookmarklet-section">
@@ -227,14 +252,24 @@ def generate_html(bookmarklet_url, minified_js):
         </div>
 
         <div class="section">
-            <h2>How to use</h2>
-            <ol>
-                <li>Navigate to a GitHub Pull Request</li>
-                <li>Click the <code>Files changed</code> tab</li>
-                <li>Click the Review bookmarklet</li>
-                <li>Copy the comments from the modal</li>
-                <li>Paste into Claude Code</li>
-            </ol>
+            <div class="two-column">
+                <div class="left">
+                    <h2>How to use</h2>
+                    <ol>
+                        <li>Navigate to a GitHub Pull Request</li>
+                        <li>Click the <code>Files changed</code> tab</li>
+                        <li>Click the Review bookmarklet</li>
+                        <li>Copy the comments from the modal</li>
+                        <li>Paste into your coding agent</li>
+                    </ol>
+                </div>
+                <div class="right">
+                    <video autoplay loop muted playsinline controls>
+                        <source src="review.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -254,10 +289,6 @@ Multi-line comment spanning several lines of code
 ---</code></pre>
         </div>
 
-        <div class="note">
-            <strong>Note:</strong> By default, this extracts only unresolved review comments.
-            To include resolved comments, modify <code>bookmarklet.src.js</code> and rebuild.
-        </div>
     </div>
 </body>
 </html>
@@ -282,10 +313,10 @@ def main():
     bookmarklet_url = create_bookmarklet_url(minified_js)
 
     # Generate HTML
-    print('Generating bookmarklet.html...')
+    print('Generating index.html...')
     html = generate_html(bookmarklet_url, minified_js)
 
-    with open('bookmarklet.html', 'w') as f:
+    with open('index.html', 'w') as f:
         f.write(html)
 
     print('')
@@ -294,7 +325,7 @@ def main():
     print(f'  Minified size: {len(minified_js):,} bytes')
     print(f'  Reduction: {((len(source_js) - len(minified_js)) / len(source_js)) * 100:.1f}%')
     print('')
-    print('Open bookmarklet.html in your browser to install the bookmarklet.')
+    print('Open index.html in your browser to install the bookmarklet.')
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 # GitHub PR Review Comments Extractor
 
-A bookmarklet that extracts review comments from GitHub Pull Requests and copies them to your clipboard in Markdown format, ready to paste into Claude Code.
+A bookmarklet that extracts review comments from GitHub Pull Requests and copies them to your clipboard in Markdown format, ready to paste into your coding agent.
 
 ## Features
 
@@ -14,7 +14,7 @@ A bookmarklet that extracts review comments from GitHub Pull Requests and copies
 
 ## Installation
 
-1. Open `bookmarklet.html` in your web browser
+1. Open `index.html` in your web browser
 2. Drag the "📋 Extract PR Comments" link to your bookmarks bar
 3. Alternatively, right-click the link and select "Add to Bookmarks"
 
@@ -25,7 +25,7 @@ A bookmarklet that extracts review comments from GitHub Pull Requests and copies
 3. Click the **📋 Extract PR Comments** bookmarklet in your bookmarks bar
 4. A modal will appear with all comments in a textarea
 5. Click **Copy to Clipboard** to copy everything, or select/highlight specific comments to copy just those
-6. Paste the comments into Claude Code (or anywhere else)
+6. Paste the comments into your coding agent (or anywhere else)
 7. Click **Close** or click outside the modal to dismiss it
 
 ## Output Format
@@ -73,7 +73,7 @@ if (thread.isResolved) {
 
 3. Comment out or remove those lines
 4. Run `python3 build.py` to rebuild the bookmarklet
-5. Reload `bookmarklet.html` and reinstall the bookmarklet
+5. Reload `index.html` and reinstall the bookmarklet
 
 ### Changing the Output Format
 
@@ -94,7 +94,7 @@ After making changes, run `python3 build.py` to rebuild.
 review/
 ├── bookmarklet.src.js   # Human-readable source code
 ├── build.py             # Build script that minifies the bookmarklet
-├── bookmarklet.html     # Generated HTML with bookmarklet link (do not edit directly)
+├── index.html     # Generated HTML with bookmarklet link (do not edit directly)
 └── README.md            # This file
 ```
 
@@ -105,7 +105,7 @@ review/
    ```bash
    python3 build.py
    ```
-3. Open `bookmarklet.html` in your browser
+3. Open `index.html` in your browser
 4. Reinstall the bookmarklet by dragging it to your bookmarks bar again
 
 ### How It Works
