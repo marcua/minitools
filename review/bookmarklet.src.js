@@ -530,6 +530,7 @@
       line-height: 1.5;
       resize: none;
       color: #24292e;
+      background-color: #ffffff;
     `;
     textarea.readOnly = false;
 
