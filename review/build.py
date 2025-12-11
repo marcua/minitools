@@ -243,7 +243,7 @@ def generate_html(bookmarklet_url, minified_js):
     <div class="container">
         <header>
             <h1>Review</h1>
-            <p class="subtitle">Extract GitHub PR review comments and transform them into markdown, ready to paste into your coding agent.</p>
+            <p class="subtitle">Extract GitHub PR review comments and transform them into markdown, ready to paste into your coding agent. <a href="https://blog.marcua.net/2025/12/08/review-bookmarklet-code-review-ai-agents">Read the blog post</a> for more details.</p>
         </header>
 
         <div class="bookmarklet-section">
