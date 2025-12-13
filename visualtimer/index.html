@@ -571,41 +571,41 @@
             }
         });
 
-        // Generate PNG icon for iOS home screen
+        // Generate PNG icon for iOS and Android home screen
         (function generateAppIcon() {
             const canvas = document.createElement('canvas');
-            canvas.width = 180;
-            canvas.height = 180;
+            canvas.width = 192;
+            canvas.height = 192;
             const ctx = canvas.getContext('2d');
 
             // Background gradient
-            const gradient = ctx.createLinearGradient(0, 0, 180, 180);
+            const gradient = ctx.createLinearGradient(0, 0, 192, 192);
             gradient.addColorStop(0, '#667eea');
             gradient.addColorStop(1, '#764ba2');
 
             // Rounded rectangle background
             ctx.beginPath();
-            ctx.roundRect(0, 0, 180, 180, 40);
+            ctx.roundRect(0, 0, 192, 192, 42);
             ctx.fillStyle = gradient;
             ctx.fill();
 
             // White clock face
             ctx.beginPath();
-            ctx.arc(90, 95, 55, 0, Math.PI * 2);
+            ctx.arc(96, 102, 58, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.fill();
 
             // Clock border
             ctx.beginPath();
-            ctx.arc(90, 95, 48, 0, Math.PI * 2);
+            ctx.arc(96, 102, 51, 0, Math.PI * 2);
             ctx.strokeStyle = '#667eea';
             ctx.lineWidth = 4;
             ctx.stroke();
 
             // Hour hand
             ctx.beginPath();
-            ctx.moveTo(90, 95);
-            ctx.lineTo(90, 55);
+            ctx.moveTo(96, 102);
+            ctx.lineTo(96, 60);
             ctx.strokeStyle = '#444';
             ctx.lineWidth = 6;
             ctx.lineCap = 'round';
@@ -613,27 +613,53 @@
 
             // Minute hand
             ctx.beginPath();
-            ctx.moveTo(90, 95);
-            ctx.lineTo(120, 95);
+            ctx.moveTo(96, 102);
+            ctx.lineTo(128, 102);
             ctx.strokeStyle = '#444';
             ctx.lineWidth = 4;
             ctx.stroke();
 
             // Center dot
             ctx.beginPath();
-            ctx.arc(90, 95, 6, 0, Math.PI * 2);
+            ctx.arc(96, 102, 6, 0, Math.PI * 2);
             ctx.fillStyle = '#667eea';
             ctx.fill();
 
             // Duck emoji at top
-            ctx.font = '28px serif';
+            ctx.font = '30px serif';
             ctx.textAlign = 'center';
-            ctx.fillText('🦆', 90, 35);
+            ctx.fillText('🦆', 96, 38);
+
+            const iconDataUrl = canvas.toDataURL('image/png');
 
             // Set as apple-touch-icon
-            const link = document.querySelector('link[rel="apple-touch-icon"]');
-            if (link) {
-                link.href = canvas.toDataURL('image/png');
+            const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+            if (appleIcon) {
+                appleIcon.href = iconDataUrl;
+            }
+
+            // Update manifest with icon for Android
+            const manifest = {
+                name: 'Visual Timer',
+                short_name: 'Timer',
+                start_url: '.',
+                display: 'standalone',
+                background_color: '#667eea',
+                theme_color: '#667eea',
+                icons: [
+                    {
+                        src: iconDataUrl,
+                        sizes: '192x192',
+                        type: 'image/png',
+                        purpose: 'any maskable'
+                    }
+                ]
+            };
+
+            const manifestLink = document.querySelector('link[rel="manifest"]');
+            if (manifestLink) {
+                const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+                manifestLink.href = URL.createObjectURL(manifestBlob);
             }
         })();
     </script>
