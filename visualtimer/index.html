@@ -140,7 +140,7 @@
 
         .timer-empty {
             position: absolute;
-            bottom: 0;
+            top: 0;
             left: 0;
             width: 100%;
             height: 0%;
@@ -175,10 +175,6 @@
             margin-bottom: 20px;
         }
 
-        .progress-text {
-            font-size: 1.5rem;
-            opacity: 0.9;
-        }
 
         .cancel-btn {
             margin-top: 40px;
@@ -322,7 +318,6 @@
         </svg>
         <div class="timer-content">
             <div class="time-display" id="timeDisplay">00:00</div>
-            <div class="progress-text" id="progressText">100% remaining</div>
             <button class="cancel-btn" onclick="cancelTimer()">Cancel</button>
         </div>
     </div>
@@ -337,12 +332,120 @@
     </div>
 
     <script>
-        // Audio context for generating sounds
-        let audioContext = null;
+        // Duck quack audio (base64 encoded WAV - generated programmatically)
+        let quackAudio = null;
         let quackInterval = null;
         let timerInterval = null;
         let totalSeconds = 0;
         let remainingSeconds = 0;
+
+        // Generate duck quack WAV as base64
+        function generateQuackWav() {
+            const sampleRate = 22050;
+            const duration = 0.35;
+            const numSamples = Math.floor(sampleRate * duration);
+
+            // Create audio buffer
+            const buffer = new ArrayBuffer(44 + numSamples * 2);
+            const view = new DataView(buffer);
+
+            // WAV header
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + numSamples * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, numSamples * 2, true);
+
+            // Generate duck quack samples
+            for (let i = 0; i < numSamples; i++) {
+                const t = i / sampleRate;
+                const progress = t / duration;
+
+                // Frequency drops from ~1800Hz to ~800Hz (duck formant)
+                const freq = 1800 - 1000 * progress;
+
+                // Add harmonics for "quacky" nasal sound
+                let sample = 0;
+                sample += Math.sin(2 * Math.PI * freq * t) * 0.4;
+                sample += Math.sin(2 * Math.PI * freq * 2 * t) * 0.3;
+                sample += Math.sin(2 * Math.PI * freq * 3 * t) * 0.15;
+                sample += Math.sin(2 * Math.PI * freq * 4 * t) * 0.1;
+
+                // Add some noise for realism
+                sample += (Math.random() - 0.5) * 0.15;
+
+                // Amplitude envelope - quick attack, longer decay
+                let envelope;
+                if (progress < 0.05) {
+                    envelope = progress / 0.05;
+                } else if (progress < 0.15) {
+                    envelope = 1.0;
+                } else {
+                    envelope = 1.0 - ((progress - 0.15) / 0.85) * 0.8;
+                }
+
+                // Add a "wa" modulation
+                const waModulation = 1.0 - 0.3 * Math.sin(Math.PI * progress * 2);
+
+                sample *= envelope * waModulation * 0.8;
+
+                // Clip and convert to 16-bit
+                sample = Math.max(-1, Math.min(1, sample));
+                view.setInt16(44 + i * 2, sample * 32767, true);
+            }
+
+            // Convert to base64
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return 'data:audio/wav;base64,' + btoa(binary);
+        }
+
+        function initAudio() {
+            if (!quackAudio) {
+                const quackDataUrl = generateQuackWav();
+                quackAudio = new Audio(quackDataUrl);
+            }
+        }
+
+        function playQuack() {
+            initAudio();
+            // Clone the audio to allow overlapping playback
+            const quack = quackAudio.cloneNode();
+            quack.volume = 0.7;
+            quack.play().catch(() => {});
+        }
+
+        function startQuacking() {
+            playQuack();
+            quackInterval = setInterval(() => {
+                playQuack();
+                setTimeout(playQuack, 200); // Double quack
+            }, 900);
+        }
+
+        function stopQuacking() {
+            if (quackInterval) {
+                clearInterval(quackInterval);
+                quackInterval = null;
+            }
+        }
 
         // Fun color themes
         const colorThemes = [
@@ -360,65 +463,6 @@
 
         const patterns = ['dots', 'stripes', 'zigzag', 'circles'];
 
-        function initAudio() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }
-
-        function playQuack() {
-            initAudio();
-
-            // Create a duck-like quack sound
-            const oscillator1 = audioContext.createOscillator();
-            const oscillator2 = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator1.connect(gainNode);
-            oscillator2.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            // Duck quack characteristics
-            oscillator1.type = 'sawtooth';
-            oscillator2.type = 'square';
-
-            const startTime = audioContext.currentTime;
-
-            // Frequency envelope for quack
-            oscillator1.frequency.setValueAtTime(300, startTime);
-            oscillator1.frequency.exponentialRampToValueAtTime(150, startTime + 0.1);
-            oscillator1.frequency.exponentialRampToValueAtTime(100, startTime + 0.3);
-
-            oscillator2.frequency.setValueAtTime(600, startTime);
-            oscillator2.frequency.exponentialRampToValueAtTime(300, startTime + 0.1);
-            oscillator2.frequency.exponentialRampToValueAtTime(200, startTime + 0.3);
-
-            // Volume envelope
-            gainNode.gain.setValueAtTime(0.4, startTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.3, startTime + 0.05);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
-
-            oscillator1.start(startTime);
-            oscillator2.start(startTime);
-            oscillator1.stop(startTime + 0.35);
-            oscillator2.stop(startTime + 0.35);
-        }
-
-        function startQuacking() {
-            playQuack();
-            quackInterval = setInterval(() => {
-                playQuack();
-                setTimeout(playQuack, 150); // Double quack
-            }, 800);
-        }
-
-        function stopQuacking() {
-            if (quackInterval) {
-                clearInterval(quackInterval);
-                quackInterval = null;
-            }
-        }
-
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
             const secs = seconds % 60;
@@ -426,7 +470,6 @@
         }
 
         function startTimer(minutes) {
-            initAudio();
             totalSeconds = minutes * 60;
             remainingSeconds = totalSeconds;
 
@@ -474,14 +517,12 @@
 
         function updateTimerDisplay() {
             const timeDisplay = document.getElementById('timeDisplay');
-            const progressText = document.getElementById('progressText');
             const timerEmpty = document.getElementById('timerEmpty');
 
             const progress = remainingSeconds / totalSeconds;
             const emptyHeight = 100 - (progress * 100);
 
             timeDisplay.textContent = formatTime(remainingSeconds);
-            progressText.textContent = `${Math.round(progress * 100)}% remaining`;
             timerEmpty.style.height = `${emptyHeight}%`;
         }
 
