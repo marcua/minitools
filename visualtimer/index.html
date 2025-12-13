@@ -638,6 +638,13 @@
                 appleIcon.href = iconDataUrl;
             }
 
+            // Set as favicon
+            const favicon = document.querySelector('link[rel="icon"]');
+            if (favicon) {
+                favicon.href = iconDataUrl;
+                favicon.type = 'image/png';
+            }
+
             // Update manifest with icon for Android
             const manifest = {
                 name: 'Visual Timer',
