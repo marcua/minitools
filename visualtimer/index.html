@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Timer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: background 0.5s ease;
+        }
+
+        .setup-screen {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .setup-screen h1 {
+            font-size: 2.5rem;
+            color: #333;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .timer-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .timer-btn {
+            padding: 25px 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .timer-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .timer-btn:active {
+            transform: scale(0.98);
+        }
+
+        .timer-btn:nth-child(1) { background: linear-gradient(135deg, #FF6B6B, #FF8E8E); }
+        .timer-btn:nth-child(2) { background: linear-gradient(135deg, #4ECDC4, #6EE7DE); }
+        .timer-btn:nth-child(3) { background: linear-gradient(135deg, #45B7D1, #6DC8E0); }
+        .timer-btn:nth-child(4) { background: linear-gradient(135deg, #96E6A1, #B8F0BE); }
+        .timer-btn:nth-child(5) { background: linear-gradient(135deg, #DDA0DD, #E8B8E8); }
+        .timer-btn:nth-child(6) { background: linear-gradient(135deg, #F7DC6F, #F9E79F); }
+        .timer-btn:nth-child(7) { background: linear-gradient(135deg, #BB8FCE, #D2A8E0); }
+
+        .custom-time {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .custom-time input {
+            width: 120px;
+            padding: 20px;
+            font-size: 1.5rem;
+            border: 3px solid #ddd;
+            border-radius: 15px;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .custom-time input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .custom-time button {
+            padding: 20px 35px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .custom-time button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Timer Screen */
+        .timer-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .timer-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            transition: height 0.5s ease;
+        }
+
+        .timer-empty {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            background: #2c3e50;
+            z-index: 2;
+            transition: height 0.5s ease;
+        }
+
+        .pattern-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .timer-content {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            color: white;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        .time-display {
+            font-size: 8rem;
+            font-weight: bold;
+            letter-spacing: 5px;
+            margin-bottom: 20px;
+        }
+
+        .progress-text {
+            font-size: 1.5rem;
+            opacity: 0.9;
+        }
+
+        .cancel-btn {
+            margin-top: 40px;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .cancel-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        /* Alarm Screen */
+        .alarm-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #FF6B6B, #FFE66D);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+            animation: alarmPulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes alarmPulse {
+            from { background: linear-gradient(135deg, #FF6B6B, #FFE66D); }
+            to { background: linear-gradient(135deg, #FFE66D, #FF6B6B); }
+        }
+
+        .alarm-content {
+            text-align: center;
+            color: white;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .alarm-icon {
+            font-size: 8rem;
+            margin-bottom: 20px;
+            animation: bounce 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: scale(1) rotate(-5deg); }
+            to { transform: scale(1.1) rotate(5deg); }
+        }
+
+        .alarm-text {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 40px;
+        }
+
+        .dismiss-btn {
+            padding: 25px 60px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            background: white;
+            color: #FF6B6B;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .dismiss-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .timer-buttons {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .time-display {
+                font-size: 5rem;
+            }
+
+            .setup-screen h1 {
+                font-size: 1.8rem;
+            }
+
+            .timer-btn {
+                padding: 20px 15px;
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Setup Screen -->
+    <div class="setup-screen" id="setupScreen">
+        <h1>Visual Timer</h1>
+        <div class="timer-buttons">
+            <button class="timer-btn" onclick="startTimer(1)">1 min</button>
+            <button class="timer-btn" onclick="startTimer(2)">2 min</button>
+            <button class="timer-btn" onclick="startTimer(5)">5 min</button>
+            <button class="timer-btn" onclick="startTimer(10)">10 min</button>
+            <button class="timer-btn" onclick="startTimer(15)">15 min</button>
+            <button class="timer-btn" onclick="startTimer(20)">20 min</button>
+            <button class="timer-btn" onclick="startTimer(30)">30 min</button>
+        </div>
+        <div class="custom-time">
+            <input type="number" id="customMinutes" placeholder="Minutes" min="1" max="999">
+            <button onclick="startCustomTimer()">Start</button>
+        </div>
+    </div>
+
+    <!-- Timer Screen -->
+    <div class="timer-screen" id="timerScreen">
+        <div class="timer-background" id="timerBackground"></div>
+        <div class="timer-empty" id="timerEmpty"></div>
+        <svg class="pattern-overlay" id="patternOverlay">
+            <defs>
+                <pattern id="dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <circle cx="15" cy="15" r="5" fill="white"/>
+                </pattern>
+                <pattern id="stripes" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect x="0" y="0" width="10" height="20" fill="white"/>
+                </pattern>
+                <pattern id="zigzag" x="0" y="0" width="40" height="20" patternUnits="userSpaceOnUse">
+                    <path d="M0 10 L10 0 L20 10 L30 0 L40 10 L40 20 L30 10 L20 20 L10 10 L0 20 Z" fill="white"/>
+                </pattern>
+                <pattern id="circles" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="white" stroke-width="3"/>
+                </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#dots)"/>
+        </svg>
+        <div class="timer-content">
+            <div class="time-display" id="timeDisplay">00:00</div>
+            <div class="progress-text" id="progressText">100% remaining</div>
+            <button class="cancel-btn" onclick="cancelTimer()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Alarm Screen -->
+    <div class="alarm-screen" id="alarmScreen">
+        <div class="alarm-content">
+            <div class="alarm-icon">🦆</div>
+            <div class="alarm-text">Time's Up!</div>
+            <button class="dismiss-btn" onclick="dismissAlarm()">Dismiss</button>
+        </div>
+    </div>
+
+    <script>
+        // Audio context for generating sounds
+        let audioContext = null;
+        let quackInterval = null;
+        let timerInterval = null;
+        let totalSeconds = 0;
+        let remainingSeconds = 0;
+
+        // Fun color themes
+        const colorThemes = [
+            { bg: 'linear-gradient(135deg, #FF6B6B, #FF8E8E)', name: 'coral' },
+            { bg: 'linear-gradient(135deg, #4ECDC4, #44A08D)', name: 'teal' },
+            { bg: 'linear-gradient(135deg, #667eea, #764ba2)', name: 'purple' },
+            { bg: 'linear-gradient(135deg, #f093fb, #f5576c)', name: 'pink' },
+            { bg: 'linear-gradient(135deg, #4facfe, #00f2fe)', name: 'blue' },
+            { bg: 'linear-gradient(135deg, #43e97b, #38f9d7)', name: 'green' },
+            { bg: 'linear-gradient(135deg, #fa709a, #fee140)', name: 'sunset' },
+            { bg: 'linear-gradient(135deg, #a8edea, #fed6e3)', name: 'pastel' },
+            { bg: 'linear-gradient(135deg, #ff9a9e, #fecfef)', name: 'rose' },
+            { bg: 'linear-gradient(135deg, #ffecd2, #fcb69f)', name: 'peach' }
+        ];
+
+        const patterns = ['dots', 'stripes', 'zigzag', 'circles'];
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playQuack() {
+            initAudio();
+
+            // Create a duck-like quack sound
+            const oscillator1 = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Duck quack characteristics
+            oscillator1.type = 'sawtooth';
+            oscillator2.type = 'square';
+
+            const startTime = audioContext.currentTime;
+
+            // Frequency envelope for quack
+            oscillator1.frequency.setValueAtTime(300, startTime);
+            oscillator1.frequency.exponentialRampToValueAtTime(150, startTime + 0.1);
+            oscillator1.frequency.exponentialRampToValueAtTime(100, startTime + 0.3);
+
+            oscillator2.frequency.setValueAtTime(600, startTime);
+            oscillator2.frequency.exponentialRampToValueAtTime(300, startTime + 0.1);
+            oscillator2.frequency.exponentialRampToValueAtTime(200, startTime + 0.3);
+
+            // Volume envelope
+            gainNode.gain.setValueAtTime(0.4, startTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.3, startTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+
+            oscillator1.start(startTime);
+            oscillator2.start(startTime);
+            oscillator1.stop(startTime + 0.35);
+            oscillator2.stop(startTime + 0.35);
+        }
+
+        function startQuacking() {
+            playQuack();
+            quackInterval = setInterval(() => {
+                playQuack();
+                setTimeout(playQuack, 150); // Double quack
+            }, 800);
+        }
+
+        function stopQuacking() {
+            if (quackInterval) {
+                clearInterval(quackInterval);
+                quackInterval = null;
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer(minutes) {
+            initAudio();
+            totalSeconds = minutes * 60;
+            remainingSeconds = totalSeconds;
+
+            // Pick random theme and pattern
+            const theme = colorThemes[Math.floor(Math.random() * colorThemes.length)];
+            const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+
+            // Set up timer screen
+            const timerBackground = document.getElementById('timerBackground');
+            const patternOverlay = document.getElementById('patternOverlay');
+
+            timerBackground.style.background = theme.bg;
+            patternOverlay.querySelector('rect').setAttribute('fill', `url(#${pattern})`);
+
+            // Show timer screen
+            document.getElementById('setupScreen').style.display = 'none';
+            document.getElementById('timerScreen').style.display = 'flex';
+
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                remainingSeconds--;
+                updateTimerDisplay();
+
+                if (remainingSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    showAlarm();
+                }
+            }, 1000);
+        }
+
+        function startCustomTimer() {
+            const input = document.getElementById('customMinutes');
+            const minutes = parseInt(input.value);
+
+            if (minutes && minutes > 0 && minutes <= 999) {
+                startTimer(minutes);
+            } else {
+                input.style.borderColor = '#FF6B6B';
+                setTimeout(() => {
+                    input.style.borderColor = '#ddd';
+                }, 500);
+            }
+        }
+
+        function updateTimerDisplay() {
+            const timeDisplay = document.getElementById('timeDisplay');
+            const progressText = document.getElementById('progressText');
+            const timerEmpty = document.getElementById('timerEmpty');
+
+            const progress = remainingSeconds / totalSeconds;
+            const emptyHeight = 100 - (progress * 100);
+
+            timeDisplay.textContent = formatTime(remainingSeconds);
+            progressText.textContent = `${Math.round(progress * 100)}% remaining`;
+            timerEmpty.style.height = `${emptyHeight}%`;
+        }
+
+        function cancelTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+
+            document.getElementById('timerScreen').style.display = 'none';
+            document.getElementById('timerEmpty').style.height = '0%';
+            document.getElementById('setupScreen').style.display = 'block';
+        }
+
+        function showAlarm() {
+            document.getElementById('timerScreen').style.display = 'none';
+            document.getElementById('alarmScreen').style.display = 'flex';
+            startQuacking();
+        }
+
+        function dismissAlarm() {
+            stopQuacking();
+            document.getElementById('alarmScreen').style.display = 'none';
+            document.getElementById('timerEmpty').style.height = '0%';
+            document.getElementById('setupScreen').style.display = 'block';
+        }
+
+        // Handle Enter key on custom input
+        document.getElementById('customMinutes').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startCustomTimer();
+            }
+        });
+    </script>
+</body>
+</html>
