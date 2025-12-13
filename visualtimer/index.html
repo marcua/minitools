@@ -2,8 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Visual Timer</title>
+
+    <!-- PWA / Add to Home Screen support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Timer">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#667eea">
+
+    <!-- Inline SVG icon as base64 for all platforms -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNjY3ZWVhIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNzY0YmEyIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyOCIgZmlsbD0idXJsKCNiZykiLz48Y2lyY2xlIGN4PSI2NCIgY3k9IjY4IiByPSI0MCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC45Ii8+PGNpcmNsZSBjeD0iNjQiIGN5PSI2OCIgcj0iMzUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2N2VlYSIgc3Ryb2tlLXdpZHRoPSIzIi8+PGxpbmUgeDE9IjY0IiB5MT0iNjgiIHgyPSI2NCIgeTI9IjQyIiBzdHJva2U9IiM0NDQiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjY0IiB5MT0iNjgiIHgyPSI4NCIgeTI9IjY4IiBzdHJva2U9IiM0NDQiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iNjQiIGN5PSI2OCIgcj0iNCIgZmlsbD0iIzY2N2VlYSIvPjx0ZXh0IHg9IjY0IiB5PSIyNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZiI+8J+mhjwvdGV4dD48L3N2Zz4=">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNjY3ZWVhIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNzY0YmEyIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyOCIgZmlsbD0idXJsKCNiZykiLz48Y2lyY2xlIGN4PSI2NCIgY3k9IjY4IiByPSI0MCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC45Ii8+PGNpcmNsZSBjeD0iNjQiIGN5PSI2OCIgcj0iMzUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzY2N2VlYSIgc3Ryb2tlLXdpZHRoPSIzIi8+PGxpbmUgeDE9IjY0IiB5MT0iNjgiIHgyPSI2NCIgeTI9IjQyIiBzdHJva2U9IiM0NDQiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjY0IiB5MT0iNjgiIHgyPSI4NCIgeTI9IjY4IiBzdHJva2U9IiM0NDQiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iNjQiIGN5PSI2OCIgcj0iNCIgZmlsbD0iIzY2N2VlYSIvPjx0ZXh0IHg9IjY0IiB5PSIyNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZiI+8J+mhjwvdGV4dD48L3N2Zz4=">
+
+    <!-- Web App Manifest (inline) -->
+    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiVmlzdWFsIFRpbWVyIiwic2hvcnRfbmFtZSI6IlRpbWVyIiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiM2NjdlZWEiLCJ0aGVtZV9jb2xvciI6IiM2NjdlZWEifQ==">
     <style>
         * {
             margin: 0;
@@ -556,6 +570,72 @@
                 startCustomTimer();
             }
         });
+
+        // Generate PNG icon for iOS home screen
+        (function generateAppIcon() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 180;
+            canvas.height = 180;
+            const ctx = canvas.getContext('2d');
+
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, 180, 180);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+
+            // Rounded rectangle background
+            ctx.beginPath();
+            ctx.roundRect(0, 0, 180, 180, 40);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // White clock face
+            ctx.beginPath();
+            ctx.arc(90, 95, 55, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.fill();
+
+            // Clock border
+            ctx.beginPath();
+            ctx.arc(90, 95, 48, 0, Math.PI * 2);
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Hour hand
+            ctx.beginPath();
+            ctx.moveTo(90, 95);
+            ctx.lineTo(90, 55);
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Minute hand
+            ctx.beginPath();
+            ctx.moveTo(90, 95);
+            ctx.lineTo(120, 95);
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(90, 95, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#667eea';
+            ctx.fill();
+
+            // Duck emoji at top
+            ctx.font = '28px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🦆', 90, 35);
+
+            // Set as apple-touch-icon
+            const link = document.querySelector('link[rel="apple-touch-icon"]');
+            if (link) {
+                link.href = canvas.toDataURL('image/png');
+            }
+        })();
     </script>
 </body>
 </html>
