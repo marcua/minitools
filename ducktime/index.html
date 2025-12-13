@@ -288,6 +288,95 @@
                 font-size: 1.3rem;
             }
         }
+
+        /* Install button */
+        .install-btn {
+            margin-top: 25px;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: 2px dashed #667eea;
+            border-radius: 15px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .install-btn:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: scale(1.02);
+        }
+
+        .install-btn.hidden {
+            display: none;
+        }
+
+        /* iOS instructions modal */
+        .ios-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ios-modal.visible {
+            display: flex;
+        }
+
+        .ios-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 350px;
+            text-align: center;
+            margin: 20px;
+        }
+
+        .ios-modal-content h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .ios-modal-content p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .ios-modal-content .step {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            text-align: left;
+            margin: 15px 0;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 10px;
+        }
+
+        .ios-modal-content .step-icon {
+            font-size: 1.8rem;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .ios-modal-content .close-btn {
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -306,6 +395,30 @@
         <div class="custom-time">
             <input type="number" id="customMinutes" placeholder="Minutes" min="1" max="999">
             <button onclick="startCustomTimer()">Start</button>
+        </div>
+        <button class="install-btn hidden" id="installBtn" onclick="handleInstallClick()">
+            📱 Add to Home Screen
+        </button>
+    </div>
+
+    <!-- iOS Install Instructions Modal -->
+    <div class="ios-modal" id="iosModal">
+        <div class="ios-modal-content">
+            <h2>Add to Home Screen</h2>
+            <p>Install this app on your device:</p>
+            <div class="step">
+                <span class="step-icon">📤</span>
+                <span>Tap the <strong>Share</strong> button in Safari</span>
+            </div>
+            <div class="step">
+                <span class="step-icon">➕</span>
+                <span>Tap <strong>Add to Home Screen</strong></span>
+            </div>
+            <div class="step">
+                <span class="step-icon">✓</span>
+                <span>Tap <strong>Add</strong> to confirm</span>
+            </div>
+            <button class="close-btn" onclick="closeIosModal()">Got it!</button>
         </div>
     </div>
 
@@ -358,17 +471,90 @@
         let totalSeconds = 0;
         let remainingSeconds = 0;
 
+        // Mobile audio unlock - must happen on user gesture
+        let audioUnlocked = false;
+        
         function initAudio() {
             if (!quackAudio) {
                 quackAudio = new Audio(DUCK_QUACK_BASE64);
+                quackAudio.load(); // Pre-load the audio
             }
         }
+        
+        function unlockAudioOnMobile() {
+            if (audioUnlocked) return;
+            initAudio();
+            // Play and immediately pause to unlock audio on mobile
+            quackAudio.volume = 0;
+            quackAudio.play().then(() => {
+                quackAudio.pause();
+                quackAudio.currentTime = 0;
+                quackAudio.volume = 0.7;
+                audioUnlocked = true;
+            }).catch(() => {});
+        }
+        
+        // Unlock audio on first user interaction
+        document.addEventListener('touchstart', unlockAudioOnMobile, { once: true });
+        document.addEventListener('click', unlockAudioOnMobile, { once: true });
+        
+        // PWA Install handling
+        let deferredPrompt = null;
+        const installBtn = document.getElementById('installBtn');
+        const iosModal = document.getElementById('iosModal');
+        
+        function isIOS() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        }
+        
+        function isInstalled() {
+            return window.matchMedia('(display-mode: standalone)').matches || 
+                   window.navigator.standalone === true;
+        }
+        
+        function checkInstallability() {
+            if (isInstalled()) {
+                installBtn.classList.add('hidden');
+                return;
+            }
+            if (isIOS()) {
+                installBtn.classList.remove('hidden');
+            }
+        }
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.classList.remove('hidden');
+        });
+        
+        function handleInstallClick() {
+            if (isIOS()) {
+                iosModal.classList.add('visible');
+            } else if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        installBtn.classList.add('hidden');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
+        
+        function closeIosModal() {
+            iosModal.classList.remove('visible');
+        }
+        
+        checkInstallability();
 
         function playQuack() {
             initAudio();
             const quack = quackAudio.cloneNode();
             quack.volume = 0.7;
-            quack.play().catch(() => {});
+            quack.play().catch((e) => {
+                console.log('Audio play failed:', e);
+            });
         }
 
         function startQuacking() {
