@@ -598,12 +598,17 @@
                 let baseUrl, entity, database;
 
                 if (pathParts.length >= 3 && pathParts[0] === 'v1') {
-                    // Full URL with entity/database
+                    // API format: https://host/v1/entity/database
                     entity = pathParts[1];
                     database = pathParts[2];
                     baseUrl = urlObj.origin;
+                } else if (pathParts.length >= 2) {
+                    // Web format: https://host/entity/database
+                    entity = pathParts[0];
+                    database = pathParts[1];
+                    baseUrl = urlObj.origin;
                 } else {
-                    throw new Error('Invalid URL format. Expected: https://host/v1/entity/database');
+                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
                 }
 
                 this.config = { baseUrl, entity, database, token };
