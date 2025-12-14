@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Visual Timer</title>
+    <title>Duck Time</title>
 
     <!-- PWA / Add to Home Screen support -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -48,8 +48,14 @@
         .setup-screen h1 {
             font-size: 2.5rem;
             color: #333;
-            margin-bottom: 30px;
+            margin-bottom: 8px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .setup-screen .subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 25px;
         }
 
         .timer-buttons {
@@ -382,7 +388,8 @@
 <body>
     <!-- Setup Screen -->
     <div class="setup-screen" id="setupScreen">
-        <h1>Visual Timer</h1>
+        <h1>Duck Time</h1>
+        <p class="subtitle">A visual timer</p>
         <div class="timer-buttons">
             <button class="timer-btn" onclick="startTimer(1)">1 min</button>
             <button class="timer-btn" onclick="startTimer(2)">2 min</button>
@@ -469,7 +476,7 @@
         let quackInterval = null;
         let timerInterval = null;
         let totalSeconds = 0;
-        let remainingSeconds = 0;
+        let timerEndTime = 0;  // Timestamp when timer should end
 
         // Mobile audio unlock - must happen on user gesture
         let audioUnlocked = false;
@@ -594,7 +601,7 @@
 
         function startTimer(minutes) {
             totalSeconds = minutes * 60;
-            remainingSeconds = totalSeconds;
+            timerEndTime = Date.now() + (totalSeconds * 1000);  // Calculate end timestamp
 
             // Pick random theme and pattern
             const theme = colorThemes[Math.floor(Math.random() * colorThemes.length)];
@@ -613,15 +620,17 @@
 
             updateTimerDisplay();
 
+            // Use elapsed time calculation - works even if screen was off
             timerInterval = setInterval(() => {
-                remainingSeconds--;
-                updateTimerDisplay();
-
-                if (remainingSeconds <= 0) {
+                const remainingMs = timerEndTime - Date.now();
+                if (remainingMs <= 0) {
                     clearInterval(timerInterval);
+                    updateTimerDisplay();  // Show 0:00
                     showAlarm();
+                } else {
+                    updateTimerDisplay();
                 }
-            }, 1000);
+            }, 250);  // Check more frequently for accuracy
         }
 
         function startCustomTimer() {
@@ -642,6 +651,10 @@
             const timeDisplay = document.getElementById('timeDisplay');
             const timerEmpty = document.getElementById('timerEmpty');
 
+            // Calculate remaining time from end timestamp
+            const remainingMs = Math.max(0, timerEndTime - Date.now());
+            const remainingSeconds = Math.ceil(remainingMs / 1000);
+            
             const progress = remainingSeconds / totalSeconds;
             const emptyHeight = 100 - (progress * 100);
 
