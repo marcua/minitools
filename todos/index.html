@@ -378,6 +378,12 @@
             background: var(--bg);
             border-radius: 8px;
             font-size: 0.9rem;
+            cursor: text;
+        }
+
+        .notes-preview.empty {
+            color: var(--text-muted);
+            font-style: italic;
         }
 
         .notes-preview ul {
@@ -387,19 +393,34 @@
 
         .notes-preview li {
             padding: 4px 0;
+        }
+
+        .notes-preview li.checklist-item {
             display: flex;
             align-items: center;
             gap: 8px;
+            cursor: pointer;
         }
 
-        .notes-preview li::before {
-            content: '☐';
+        .notes-preview li.checklist-item:hover {
+            background: rgba(0,0,0,0.05);
+            margin: 0 -10px;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .notes-preview .check-box {
+            font-size: 1.1rem;
             color: var(--text-muted);
         }
 
-        .notes-preview li.checked::before {
-            content: '☑';
+        .notes-preview li.checklist-item.checked .check-box {
             color: var(--success);
+        }
+
+        .notes-preview li.checklist-item.checked .check-text {
+            text-decoration: line-through;
+            color: var(--text-muted);
         }
 
         /* Modal */
@@ -866,6 +887,7 @@
                 this.currentListId = id;
                 this.showScreen('todo');
                 await this.loadTodos();
+                document.getElementById('new-todo-input').focus();
             },
 
             async loadTodos() {
@@ -932,28 +954,34 @@
                                 <button class="todo-action-btn" data-action="delete" title="Delete">×</button>
                             </div>
                         </div>
-                        <div class="todo-notes ${hasNotes ? 'expanded' : ''}" data-todo-id="${todo.id}">
-                            <textarea class="notes-textarea" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
-                            ${hasNotes ? this.renderNotesPreview(todo.notes) : ''}
+                        <div class="todo-notes" data-todo-id="${todo.id}">
+                            <textarea class="notes-textarea hidden" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
+                            ${this.renderNotesPreview(todo.notes, todo.id)}
                         </div>
                     </li>
                 `;
             },
 
-            renderNotesPreview(notes) {
-                // Parse markdown checklist
-                const lines = notes.split('\n');
-                let html = '<div class="notes-preview"><ul>';
+            renderNotesPreview(notes, todoId) {
+                if (!notes || !notes.trim()) {
+                    return '<div class="notes-preview empty" data-action="edit-notes">Click to add notes...</div>';
+                }
 
-                for (const line of lines) {
+                const lines = notes.split('\n');
+                let html = '<div class="notes-preview" data-action="edit-notes"><ul>';
+
+                lines.forEach((line, idx) => {
                     const checkMatch = line.match(/^-\s*\[([ xX])\]\s*(.*)$/);
                     if (checkMatch) {
                         const checked = checkMatch[1].toLowerCase() === 'x';
-                        html += `<li class="${checked ? 'checked' : ''}">${this.escapeHtml(checkMatch[2])}</li>`;
+                        html += `<li class="checklist-item ${checked ? 'checked' : ''}" data-line="${idx}" data-action="toggle-check">
+                            <span class="check-box">${checked ? '☑' : '☐'}</span>
+                            <span class="check-text">${this.escapeHtml(checkMatch[2])}</span>
+                        </li>`;
                     } else if (line.trim()) {
                         html += `<li>${this.escapeHtml(line)}</li>`;
                     }
-                }
+                });
 
                 html += '</ul></div>';
                 return html;
@@ -963,12 +991,20 @@
                 // Click events
                 document.querySelectorAll('.todo-item').forEach(item => {
                     item.addEventListener('click', (e) => {
-                        const action = e.target.closest('[data-action]')?.dataset.action;
+                        const actionEl = e.target.closest('[data-action]');
+                        const action = actionEl?.dataset.action;
                         const id = parseInt(item.dataset.id);
 
                         if (action === 'toggle') this.toggleTodo(id);
                         else if (action === 'delete') this.deleteTodo(id);
                         else if (action === 'notes') this.toggleNotes(item);
+                        else if (action === 'toggle-check') {
+                            e.stopPropagation();
+                            const lineIdx = parseInt(actionEl.dataset.line);
+                            this.toggleChecklistItem(item, lineIdx);
+                        } else if (action === 'edit-notes') {
+                            this.showNotesEditor(item);
+                        }
                     });
 
                     // Drag events
@@ -988,6 +1024,10 @@
                             const todoId = parseInt(textarea.closest('.todo-notes').dataset.todoId);
                             this.saveNotes(todoId, textarea.value);
                         }, 500);
+                    });
+
+                    textarea.addEventListener('blur', (e) => {
+                        this.hideNotesEditor(textarea.closest('.todo-item'));
                     });
                 });
             },
@@ -1054,7 +1094,69 @@
                 notesEl.classList.toggle('expanded');
 
                 if (notesEl.classList.contains('expanded')) {
-                    notesEl.querySelector('textarea').focus();
+                    // Don't auto-focus textarea, show preview first
+                }
+            },
+
+            showNotesEditor(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                const textarea = notesEl.querySelector('.notes-textarea');
+                const preview = notesEl.querySelector('.notes-preview');
+
+                notesEl.classList.add('expanded');
+                textarea.classList.remove('hidden');
+                if (preview) preview.classList.add('hidden');
+                textarea.focus();
+            },
+
+            hideNotesEditor(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                const textarea = notesEl.querySelector('.notes-textarea');
+                const preview = notesEl.querySelector('.notes-preview');
+                const todoId = parseInt(notesEl.dataset.todoId);
+
+                textarea.classList.add('hidden');
+
+                // Update preview
+                const newPreview = this.renderNotesPreview(textarea.value, todoId);
+                if (preview) {
+                    preview.outerHTML = newPreview;
+                } else {
+                    textarea.insertAdjacentHTML('afterend', newPreview);
+                }
+
+                const newPreviewEl = notesEl.querySelector('.notes-preview');
+                if (newPreviewEl) newPreviewEl.classList.remove('hidden');
+
+                // Collapse if empty
+                if (!textarea.value.trim()) {
+                    notesEl.classList.remove('expanded');
+                }
+            },
+
+            async toggleChecklistItem(item, lineIdx) {
+                const notesEl = item.querySelector('.todo-notes');
+                const textarea = notesEl.querySelector('.notes-textarea');
+                const todoId = parseInt(notesEl.dataset.todoId);
+
+                const lines = textarea.value.split('\n');
+                if (lineIdx < lines.length) {
+                    const line = lines[lineIdx];
+                    // Toggle [ ] <-> [x]
+                    if (line.match(/^-\s*\[ \]/)) {
+                        lines[lineIdx] = line.replace(/^(-\s*)\[ \]/, '$1[x]');
+                    } else if (line.match(/^-\s*\[[xX]\]/)) {
+                        lines[lineIdx] = line.replace(/^(-\s*)\[[xX]\]/, '$1[ ]');
+                    }
+
+                    textarea.value = lines.join('\n');
+                    await this.saveNotes(todoId, textarea.value);
+
+                    // Update preview
+                    const preview = notesEl.querySelector('.notes-preview');
+                    if (preview) {
+                        preview.outerHTML = this.renderNotesPreview(textarea.value, todoId);
+                    }
                 }
             },
 
@@ -1077,8 +1179,8 @@
                     const position = posResult.rows?.[0]?.[0] ?? 0;
 
                     await DB.query(`
-                        INSERT INTO todo_list_item (list_id, title, position)
-                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', ${position})
+                        INSERT INTO todo_list_item (list_id, title, position, completed)
+                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', ${position}, 0)
                     `);
 
                     input.value = '';
@@ -1091,7 +1193,7 @@
 
             async toggleTodo(id) {
                 try {
-                    await DB.query(`UPDATE todo_list_item SET completed = NOT completed, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    await DB.query(`UPDATE todo_list_item SET completed = 1 - completed, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
                     await this.loadTodos();
                 } catch (e) {
                     console.error('Toggle todo error:', e);
