@@ -400,7 +400,7 @@
             <button class="timer-btn" onclick="startTimer(30)">30 min</button>
         </div>
         <div class="custom-time">
-            <input type="number" id="customMinutes" placeholder="Minutes" min="1" max="999">
+            <input type="number" id="customMinutes" placeholder="Minutes" min="0.1" max="999" step="any">
             <button onclick="startCustomTimer()">Start</button>
         </div>
         <button class="install-btn hidden" id="installBtn" onclick="handleInstallClick()">
@@ -660,9 +660,9 @@
 
         function startCustomTimer() {
             const input = document.getElementById('customMinutes');
-            const minutes = parseInt(input.value);
+            const minutes = parseFloat(input.value);
 
-            if (minutes && minutes > 0 && minutes <= 999) {
+            if (minutes && minutes >= 0.1 && minutes <= 999) {
                 startTimer(minutes);
             } else {
                 input.style.borderColor = '#FF6B6B';
