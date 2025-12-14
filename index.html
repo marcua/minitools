@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minitools - Tiny Tools, Big Help</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
+        }
+
+        .tagline {
+            font-size: 1.3rem;
+            color: rgba(255,255,255,0.9);
+            font-weight: 300;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: var(--accent-color);
+        }
+
+        .card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+        }
+
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .card-description {
+            font-size: 1rem;
+            color: #666;
+            line-height: 1.6;
+            flex-grow: 1;
+        }
+
+        .card-arrow {
+            margin-top: 20px;
+            color: var(--accent-color);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+        }
+
+        .card-arrow::after {
+            content: '\2192';
+            transition: transform 0.2s ease;
+        }
+
+        .card:hover .card-arrow::after {
+            transform: translateX(5px);
+        }
+
+        /* Individual card colors */
+        .card-checkmate { --accent-color: #10b981; }
+        .card-review { --accent-color: #3b82f6; }
+        .card-rich { --accent-color: #f59e0b; }
+        .card-ducktime { --accent-color: #ef4444; }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px dotted rgba(255,255,255,0.5);
+        }
+
+        footer a:hover {
+            border-bottom-color: white;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .tagline {
+                font-size: 1.1rem;
+            }
+
+            body {
+                padding: 30px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Minitools</h1>
+            <p class="tagline">Tiny tools, big help. All client-side, all privacy-friendly.</p>
+        </header>
+
+        <div class="grid">
+            <a href="checkmate/" class="card card-checkmate">
+                <div class="card-icon">&#9745;</div>
+                <h2 class="card-title">Checkmate</h2>
+                <p class="card-description">
+                    Complete a checklist before visiting a website. Combat distractions by making yourself pause and reflect before diving in.
+                </p>
+                <span class="card-arrow">Get focused</span>
+            </a>
+
+            <a href="review/" class="card card-review">
+                <div class="card-icon">&#128172;</div>
+                <h2 class="card-title">Review</h2>
+                <p class="card-description">
+                    Extract GitHub PR review comments as markdown. Perfect for pasting into your coding agent or saving for later reference.
+                </p>
+                <span class="card-arrow">Grab comments</span>
+            </a>
+
+            <a href="rich/" class="card card-rich">
+                <div class="card-icon">&#128202;</div>
+                <h2 class="card-title">Rich</h2>
+                <p class="card-description">
+                    Enrich your CSV files with AI-generated columns using OpenAI. Add insights, classifications, or summaries to your data.
+                </p>
+                <span class="card-arrow">Enhance data</span>
+            </a>
+
+            <a href="ducktime/" class="card card-ducktime">
+                <div class="card-icon">&#129414;</div>
+                <h2 class="card-title">Duck Time</h2>
+                <p class="card-description">
+                    A fun visual timer with preset options and custom durations. Get a cheerful duck quack when time's up!
+                </p>
+                <span class="card-arrow">Start timing</span>
+            </a>
+        </div>
+
+        <footer>
+            <p>Built with care. <a href="https://github.com/marcua/minitools">View on GitHub</a></p>
+        </footer>
+    </div>
+</body>
+</html>
