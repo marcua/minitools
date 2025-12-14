@@ -912,10 +912,11 @@
                         id: row[0],
                         title: row[1],
                         notes: row[2] || '',
-                        completed: !!row[3],
+                        completed: row[3] == 1,  // Use == to handle string "1" or number 1
                         position: row[4]
                     }));
 
+                    console.log('Loaded todos:', todos);
                     this.renderTodos(todos);
                 } catch (e) {
                     console.error('Load todos error:', e);
@@ -1192,8 +1193,9 @@
             },
 
             async toggleTodo(id) {
+                console.log('toggleTodo called with id:', id);
                 try {
-                    await DB.query(`UPDATE todo_list_item SET completed = 1 - completed, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    await DB.query(`UPDATE todo_list_item SET completed = CASE WHEN completed = 1 THEN 0 ELSE 1 END, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
                     await this.loadTodos();
                 } catch (e) {
                     console.error('Toggle todo error:', e);
