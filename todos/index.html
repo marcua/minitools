@@ -548,6 +548,11 @@
             align-items: center;
             gap: 8px;
             margin-top: 4px;
+            cursor: pointer;
+        }
+
+        .todo-indicators:hover .todo-indicator {
+            color: var(--ink-light);
         }
 
         .todo-indicator {
@@ -1345,7 +1350,7 @@
 
                 let indicatorsHtml = '';
                 if (hasPlainNotes || checklistStats) {
-                    indicatorsHtml = '<div class="todo-indicators">';
+                    indicatorsHtml = '<div class="todo-indicators" data-action="notes">';
                     if (hasPlainNotes) {
                         indicatorsHtml += `<span class="todo-indicator"><svg><use href="#icon-notes"/></svg></span>`;
                     }
