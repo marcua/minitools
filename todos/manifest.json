@@ -1,12 +1,12 @@
 {
     "name": "Todos",
     "short_name": "Todos",
-    "description": "A simple todo list app with ayb database sync",
+    "description": "A minimal todo list app with ayb database sync",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",
-    "background_color": "#f5f5f5",
-    "theme_color": "#4a90d9",
+    "background_color": "#FAF9F7",
+    "theme_color": "#FAF9F7",
     "orientation": "portrait-primary",
     "icons": [
         {
