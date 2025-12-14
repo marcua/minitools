@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#4a90d9">
+    <title>Todos</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --primary: #4a90d9;
+            --primary-dark: #357abd;
+            --success: #5cb85c;
+            --danger: #d9534f;
+            --bg: #f5f5f5;
+            --card-bg: #ffffff;
+            --text: #333333;
+            --text-muted: #888888;
+            --border: #e0e0e0;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 16px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .header-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 1.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .header-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        /* Setup Screen */
+        .setup-screen {
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .setup-screen h2 {
+            margin-bottom: 8px;
+        }
+
+        .setup-screen p {
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.1);
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--text-muted);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        /* Lists Screen */
+        .lists-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .list-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .list-card:active {
+            transform: scale(0.98);
+        }
+
+        .list-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .list-card .meta {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .add-list-card {
+            background: transparent;
+            border: 2px dashed var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--text-muted);
+            min-height: 80px;
+        }
+
+        .add-list-card:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Todo List View */
+        .todo-input-container {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+            display: flex;
+            gap: 8px;
+        }
+
+        .todo-input-container input {
+            flex: 1;
+            border: none;
+            font-size: 1rem;
+            padding: 8px;
+            background: transparent;
+        }
+
+        .todo-input-container input:focus {
+            outline: none;
+        }
+
+        .todo-input-container button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Todo Items */
+        .todo-section {
+            margin-bottom: 24px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header .arrow {
+            transition: transform 0.2s;
+        }
+
+        .section-header.collapsed .arrow {
+            transform: rotate(-90deg);
+        }
+
+        .todo-list {
+            list-style: none;
+        }
+
+        .todo-item {
+            background: var(--card-bg);
+            border-radius: 10px;
+            margin-bottom: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .todo-item.dragging {
+            opacity: 0.5;
+            transform: scale(1.02);
+        }
+
+        .todo-item.drag-over {
+            border-top: 3px solid var(--primary);
+        }
+
+        .todo-main {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            gap: 12px;
+        }
+
+        .drag-handle {
+            color: var(--text-muted);
+            cursor: grab;
+            padding: 4px;
+            font-size: 1.1rem;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .todo-checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .todo-checkbox:hover {
+            border-color: var(--primary);
+        }
+
+        .todo-checkbox.checked {
+            background: var(--success);
+            border-color: var(--success);
+            color: white;
+        }
+
+        .todo-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .todo-title {
+            font-size: 1rem;
+            word-break: break-word;
+        }
+
+        .todo-item.completed .todo-title {
+            text-decoration: line-through;
+            color: var(--text-muted);
+        }
+
+        .todo-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .todo-action-btn {
+            background: none;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .todo-action-btn:hover {
+            background: var(--bg);
+        }
+
+        /* Notes Section */
+        .todo-notes {
+            padding: 0 12px 12px 52px;
+            display: none;
+        }
+
+        .todo-notes.expanded {
+            display: block;
+        }
+
+        .notes-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+
+        .notes-preview {
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .notes-preview ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .notes-preview li {
+            padding: 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .notes-preview li::before {
+            content: '☐';
+            color: var(--text-muted);
+        }
+
+        .notes-preview li.checked::before {
+            content: '☑';
+            color: var(--success);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            padding: 20px;
+        }
+
+        .modal {
+            background: var(--card-bg);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 400px;
+            padding: 24px;
+        }
+
+        .modal h2 {
+            margin-bottom: 16px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+
+        /* Loading & Error */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-msg {
+            background: #fef2f2;
+            color: var(--danger);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .sync-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--primary);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            box-shadow: var(--shadow);
+            display: none;
+        }
+
+        .sync-indicator.visible {
+            display: block;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Setup Screen -->
+        <div id="setup-screen" class="setup-screen hidden">
+            <h2>Welcome to Todos</h2>
+            <p>Connect to your ayb database to get started</p>
+            <div class="container">
+                <div class="form-group">
+                    <label for="ayb-url">Database URL</label>
+                    <input type="url" id="ayb-url" placeholder="https://ayb.example.com/v1/user/database">
+                </div>
+                <div class="form-group">
+                    <label for="ayb-token">API Token</label>
+                    <input type="password" id="ayb-token" placeholder="Your ayb API token">
+                </div>
+                <div id="setup-error" class="error-msg hidden"></div>
+                <button class="btn" id="setup-btn">Connect</button>
+            </div>
+        </div>
+
+        <!-- Lists Screen -->
+        <div id="lists-screen" class="hidden">
+            <header class="header">
+                <h1>My Lists</h1>
+                <button class="header-btn" id="settings-btn" title="Settings">⚙</button>
+            </header>
+            <div class="container">
+                <div id="lists-container" class="lists-grid"></div>
+            </div>
+        </div>
+
+        <!-- Todo List Screen -->
+        <div id="todo-screen" class="hidden">
+            <header class="header">
+                <button class="header-btn" id="back-btn">←</button>
+                <h1 id="list-title">List</h1>
+                <button class="header-btn" id="edit-list-btn" title="Edit List">✎</button>
+                <button class="header-btn" id="delete-list-btn" title="Delete List">🗑</button>
+            </header>
+            <div class="container">
+                <div class="todo-input-container">
+                    <input type="text" id="new-todo-input" placeholder="Add a new item...">
+                    <button id="add-todo-btn">+</button>
+                </div>
+
+                <div class="todo-section" id="active-section">
+                    <ul class="todo-list" id="active-todos"></ul>
+                </div>
+
+                <div class="todo-section" id="completed-section">
+                    <div class="section-header" id="completed-header">
+                        <span class="arrow">▼</span>
+                        <span>Completed (<span id="completed-count">0</span>)</span>
+                    </div>
+                    <ul class="todo-list" id="completed-todos"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="loading">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Modal Template -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+    <div id="sync-indicator" class="sync-indicator">Syncing...</div>
+
+    <script>
+        // ============================================
+        // Database Layer
+        // ============================================
+        const DB = {
+            config: null,
+
+            init() {
+                const saved = localStorage.getItem('ayb_config');
+                if (saved) {
+                    this.config = JSON.parse(saved);
+                    return true;
+                }
+                return false;
+            },
+
+            saveConfig(url, token) {
+                // Parse URL to extract entity and database
+                // Expected format: https://host/v1/entity/database or just the base
+                const urlObj = new URL(url);
+                const pathParts = urlObj.pathname.split('/').filter(p => p);
+
+                let baseUrl, entity, database;
+
+                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
+                    // Full URL with entity/database
+                    entity = pathParts[1];
+                    database = pathParts[2];
+                    baseUrl = urlObj.origin;
+                } else {
+                    throw new Error('Invalid URL format. Expected: https://host/v1/entity/database');
+                }
+
+                this.config = { baseUrl, entity, database, token };
+                localStorage.setItem('ayb_config', JSON.stringify(this.config));
+            },
+
+            clearConfig() {
+                this.config = null;
+                localStorage.removeItem('ayb_config');
+            },
+
+            async query(sql) {
+                if (!this.config) throw new Error('Database not configured');
+
+                const { baseUrl, entity, database, token } = this.config;
+                const url = `${baseUrl}/v1/${entity}/${database}/query`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'text/plain'
+                    },
+                    body: sql
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Query failed: ${text}`);
+                }
+
+                return response.json();
+            },
+
+            async runMigrations() {
+                // Create migrations table if not exists
+                await this.query(`
+                    CREATE TABLE IF NOT EXISTS _migrations (
+                        version INTEGER PRIMARY KEY,
+                        applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+
+                // Get current version
+                const result = await this.query('SELECT MAX(version) as version FROM _migrations');
+                const currentVersion = result.rows?.[0]?.[0] ?? 0;
+
+                const migrations = [
+                    // Version 1: Initial schema
+                    `CREATE TABLE IF NOT EXISTS todo_list (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )`,
+                    // Version 2: Todo items table
+                    `CREATE TABLE IF NOT EXISTS todo_list_item (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        list_id INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        notes TEXT DEFAULT '',
+                        completed INTEGER DEFAULT 0,
+                        position INTEGER DEFAULT 0,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (list_id) REFERENCES todo_list(id) ON DELETE CASCADE
+                    )`
+                ];
+
+                for (let i = currentVersion; i < migrations.length; i++) {
+                    await this.query(migrations[i]);
+                    await this.query(`INSERT INTO _migrations (version) VALUES (${i + 1})`);
+                }
+            }
+        };
+
+        // ============================================
+        // App State & UI
+        // ============================================
+        const App = {
+            currentListId: null,
+            completedCollapsed: false,
+            draggedItem: null,
+
+            async init() {
+                this.bindEvents();
+
+                if (DB.init()) {
+                    try {
+                        await DB.runMigrations();
+                        this.showScreen('lists');
+                        await this.loadLists();
+                    } catch (e) {
+                        console.error('Init error:', e);
+                        DB.clearConfig();
+                        this.showScreen('setup');
+                    }
+                } else {
+                    this.showScreen('setup');
+                }
+            },
+
+            showScreen(screen) {
+                document.querySelectorAll('#app > div').forEach(el => el.classList.add('hidden'));
+                document.getElementById(`${screen}-screen`).classList.remove('hidden');
+            },
+
+            bindEvents() {
+                // Setup
+                document.getElementById('setup-btn').addEventListener('click', () => this.handleSetup());
+                document.getElementById('ayb-token').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.handleSetup();
+                });
+
+                // Lists screen
+                document.getElementById('settings-btn').addEventListener('click', () => this.showSettings());
+
+                // Todo screen
+                document.getElementById('back-btn').addEventListener('click', () => this.goBack());
+                document.getElementById('add-todo-btn').addEventListener('click', () => this.addTodo());
+                document.getElementById('new-todo-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.addTodo();
+                });
+                document.getElementById('completed-header').addEventListener('click', () => this.toggleCompleted());
+                document.getElementById('edit-list-btn').addEventListener('click', () => this.editCurrentList());
+                document.getElementById('delete-list-btn').addEventListener('click', () => this.deleteCurrentList());
+
+                // Modal
+                document.getElementById('modal-overlay').addEventListener('click', (e) => {
+                    if (e.target.id === 'modal-overlay') this.closeModal();
+                });
+            },
+
+            async handleSetup() {
+                const url = document.getElementById('ayb-url').value.trim();
+                const token = document.getElementById('ayb-token').value.trim();
+                const errorEl = document.getElementById('setup-error');
+
+                if (!url || !token) {
+                    errorEl.textContent = 'Please enter both URL and token';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                try {
+                    errorEl.classList.add('hidden');
+                    document.getElementById('setup-btn').disabled = true;
+                    document.getElementById('setup-btn').textContent = 'Connecting...';
+
+                    DB.saveConfig(url, token);
+                    await DB.runMigrations();
+
+                    this.showScreen('lists');
+                    await this.loadLists();
+                } catch (e) {
+                    console.error('Setup error:', e);
+                    errorEl.textContent = e.message;
+                    errorEl.classList.remove('hidden');
+                    DB.clearConfig();
+                } finally {
+                    document.getElementById('setup-btn').disabled = false;
+                    document.getElementById('setup-btn').textContent = 'Connect';
+                }
+            },
+
+            async loadLists() {
+                const container = document.getElementById('lists-container');
+                container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+                try {
+                    const result = await DB.query(`
+                        SELECT l.id, l.name,
+                               COUNT(i.id) as total,
+                               SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
+                        FROM todo_list l
+                        LEFT JOIN todo_list_item i ON i.list_id = l.id
+                        GROUP BY l.id
+                        ORDER BY l.updated_at DESC
+                    `);
+
+                    const lists = (result.rows || []).map(row => ({
+                        id: row[0],
+                        name: row[1],
+                        total: row[2] || 0,
+                        pending: row[3] || 0
+                    }));
+
+                    this.renderLists(lists);
+                } catch (e) {
+                    console.error('Load lists error:', e);
+                    container.innerHTML = `<div class="error-msg">${e.message}</div>`;
+                }
+            },
+
+            renderLists(lists) {
+                const container = document.getElementById('lists-container');
+
+                let html = lists.map(list => `
+                    <div class="list-card" data-id="${list.id}">
+                        <h3>${this.escapeHtml(list.name)}</h3>
+                        <div class="meta">${list.pending} of ${list.total} remaining</div>
+                    </div>
+                `).join('');
+
+                html += `
+                    <div class="list-card add-list-card" id="add-list-btn">
+                        <span>+ Add New List</span>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+
+                // Bind click events
+                container.querySelectorAll('.list-card[data-id]').forEach(card => {
+                    card.addEventListener('click', () => this.openList(parseInt(card.dataset.id)));
+                });
+
+                document.getElementById('add-list-btn').addEventListener('click', () => this.showAddListModal());
+            },
+
+            showAddListModal() {
+                this.showModal(`
+                    <h2>New List</h2>
+                    <div class="form-group">
+                        <label for="list-name-input">List Name</label>
+                        <input type="text" id="list-name-input" placeholder="My List">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn" onclick="App.createList()">Create</button>
+                    </div>
+                `);
+
+                setTimeout(() => document.getElementById('list-name-input').focus(), 100);
+                document.getElementById('list-name-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.createList();
+                });
+            },
+
+            async createList() {
+                const name = document.getElementById('list-name-input').value.trim();
+                if (!name) return;
+
+                try {
+                    await DB.query(`INSERT INTO todo_list (name) VALUES ('${this.escapeSQL(name)}')`);
+                    this.closeModal();
+                    await this.loadLists();
+                } catch (e) {
+                    console.error('Create list error:', e);
+                    alert('Failed to create list: ' + e.message);
+                }
+            },
+
+            async openList(id) {
+                this.currentListId = id;
+                this.showScreen('todo');
+                await this.loadTodos();
+            },
+
+            async loadTodos() {
+                if (!this.currentListId) return;
+
+                try {
+                    // Get list name
+                    const listResult = await DB.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
+                    if (listResult.rows?.length) {
+                        document.getElementById('list-title').textContent = listResult.rows[0][0];
+                    }
+
+                    // Get todos
+                    const result = await DB.query(`
+                        SELECT id, title, notes, completed, position
+                        FROM todo_list_item
+                        WHERE list_id = ${this.currentListId}
+                        ORDER BY position ASC, id ASC
+                    `);
+
+                    const todos = (result.rows || []).map(row => ({
+                        id: row[0],
+                        title: row[1],
+                        notes: row[2] || '',
+                        completed: !!row[3],
+                        position: row[4]
+                    }));
+
+                    this.renderTodos(todos);
+                } catch (e) {
+                    console.error('Load todos error:', e);
+                }
+            },
+
+            renderTodos(todos) {
+                const activeTodos = todos.filter(t => !t.completed);
+                const completedTodos = todos.filter(t => t.completed);
+
+                document.getElementById('active-todos').innerHTML = activeTodos.map(t => this.renderTodoItem(t)).join('');
+                document.getElementById('completed-todos').innerHTML = completedTodos.map(t => this.renderTodoItem(t)).join('');
+                document.getElementById('completed-count').textContent = completedTodos.length;
+
+                // Hide completed section if empty
+                document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
+
+                // Bind events
+                this.bindTodoEvents();
+            },
+
+            renderTodoItem(todo) {
+                const hasNotes = todo.notes && todo.notes.trim();
+                return `
+                    <li class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}" draggable="true">
+                        <div class="todo-main">
+                            <span class="drag-handle">⋮⋮</span>
+                            <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" data-action="toggle">
+                                ${todo.completed ? '✓' : ''}
+                            </div>
+                            <div class="todo-content">
+                                <div class="todo-title">${this.escapeHtml(todo.title)}</div>
+                            </div>
+                            <div class="todo-actions">
+                                <button class="todo-action-btn" data-action="notes" title="Notes">${hasNotes ? '📝' : '📄'}</button>
+                                <button class="todo-action-btn" data-action="delete" title="Delete">×</button>
+                            </div>
+                        </div>
+                        <div class="todo-notes ${hasNotes ? 'expanded' : ''}" data-todo-id="${todo.id}">
+                            <textarea class="notes-textarea" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
+                            ${hasNotes ? this.renderNotesPreview(todo.notes) : ''}
+                        </div>
+                    </li>
+                `;
+            },
+
+            renderNotesPreview(notes) {
+                // Parse markdown checklist
+                const lines = notes.split('\n');
+                let html = '<div class="notes-preview"><ul>';
+
+                for (const line of lines) {
+                    const checkMatch = line.match(/^-\s*\[([ xX])\]\s*(.*)$/);
+                    if (checkMatch) {
+                        const checked = checkMatch[1].toLowerCase() === 'x';
+                        html += `<li class="${checked ? 'checked' : ''}">${this.escapeHtml(checkMatch[2])}</li>`;
+                    } else if (line.trim()) {
+                        html += `<li>${this.escapeHtml(line)}</li>`;
+                    }
+                }
+
+                html += '</ul></div>';
+                return html;
+            },
+
+            bindTodoEvents() {
+                // Click events
+                document.querySelectorAll('.todo-item').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        const action = e.target.closest('[data-action]')?.dataset.action;
+                        const id = parseInt(item.dataset.id);
+
+                        if (action === 'toggle') this.toggleTodo(id);
+                        else if (action === 'delete') this.deleteTodo(id);
+                        else if (action === 'notes') this.toggleNotes(item);
+                    });
+
+                    // Drag events
+                    item.addEventListener('dragstart', (e) => this.handleDragStart(e, item));
+                    item.addEventListener('dragend', (e) => this.handleDragEnd(e, item));
+                    item.addEventListener('dragover', (e) => this.handleDragOver(e, item));
+                    item.addEventListener('dragleave', (e) => this.handleDragLeave(e, item));
+                    item.addEventListener('drop', (e) => this.handleDrop(e, item));
+                });
+
+                // Notes textarea events
+                document.querySelectorAll('.notes-textarea').forEach(textarea => {
+                    let saveTimeout;
+                    textarea.addEventListener('input', (e) => {
+                        clearTimeout(saveTimeout);
+                        saveTimeout = setTimeout(() => {
+                            const todoId = parseInt(textarea.closest('.todo-notes').dataset.todoId);
+                            this.saveNotes(todoId, textarea.value);
+                        }, 500);
+                    });
+                });
+            },
+
+            handleDragStart(e, item) {
+                this.draggedItem = item;
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            },
+
+            handleDragEnd(e, item) {
+                item.classList.remove('dragging');
+                document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                this.draggedItem = null;
+            },
+
+            handleDragOver(e, item) {
+                e.preventDefault();
+                if (item !== this.draggedItem) {
+                    item.classList.add('drag-over');
+                }
+            },
+
+            handleDragLeave(e, item) {
+                item.classList.remove('drag-over');
+            },
+
+            async handleDrop(e, item) {
+                e.preventDefault();
+                item.classList.remove('drag-over');
+
+                if (!this.draggedItem || item === this.draggedItem) return;
+
+                const draggedId = parseInt(this.draggedItem.dataset.id);
+                const targetId = parseInt(item.dataset.id);
+
+                // Reorder in UI first
+                const list = item.parentNode;
+                const items = Array.from(list.querySelectorAll('.todo-item'));
+                const draggedIndex = items.indexOf(this.draggedItem);
+                const targetIndex = items.indexOf(item);
+
+                if (draggedIndex < targetIndex) {
+                    item.after(this.draggedItem);
+                } else {
+                    item.before(this.draggedItem);
+                }
+
+                // Update positions in database
+                await this.updatePositions(list);
+            },
+
+            async updatePositions(list) {
+                const items = Array.from(list.querySelectorAll('.todo-item'));
+
+                for (let i = 0; i < items.length; i++) {
+                    const id = parseInt(items[i].dataset.id);
+                    await DB.query(`UPDATE todo_list_item SET position = ${i} WHERE id = ${id}`);
+                }
+            },
+
+            toggleNotes(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                notesEl.classList.toggle('expanded');
+
+                if (notesEl.classList.contains('expanded')) {
+                    notesEl.querySelector('textarea').focus();
+                }
+            },
+
+            async saveNotes(todoId, notes) {
+                try {
+                    await DB.query(`UPDATE todo_list_item SET notes = '${this.escapeSQL(notes)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${todoId}`);
+                } catch (e) {
+                    console.error('Save notes error:', e);
+                }
+            },
+
+            async addTodo() {
+                const input = document.getElementById('new-todo-input');
+                const title = input.value.trim();
+                if (!title || !this.currentListId) return;
+
+                try {
+                    // Get max position
+                    const posResult = await DB.query(`SELECT COALESCE(MAX(position), -1) + 1 FROM todo_list_item WHERE list_id = ${this.currentListId}`);
+                    const position = posResult.rows?.[0]?.[0] ?? 0;
+
+                    await DB.query(`
+                        INSERT INTO todo_list_item (list_id, title, position)
+                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', ${position})
+                    `);
+
+                    input.value = '';
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Add todo error:', e);
+                    alert('Failed to add item: ' + e.message);
+                }
+            },
+
+            async toggleTodo(id) {
+                try {
+                    await DB.query(`UPDATE todo_list_item SET completed = NOT completed, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Toggle todo error:', e);
+                }
+            },
+
+            async deleteTodo(id) {
+                if (!confirm('Delete this item?')) return;
+
+                try {
+                    await DB.query(`DELETE FROM todo_list_item WHERE id = ${id}`);
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Delete todo error:', e);
+                }
+            },
+
+            toggleCompleted() {
+                this.completedCollapsed = !this.completedCollapsed;
+                document.getElementById('completed-header').classList.toggle('collapsed', this.completedCollapsed);
+                document.getElementById('completed-todos').classList.toggle('hidden', this.completedCollapsed);
+            },
+
+            goBack() {
+                this.currentListId = null;
+                this.showScreen('lists');
+                this.loadLists();
+            },
+
+            editCurrentList() {
+                const currentName = document.getElementById('list-title').textContent;
+
+                this.showModal(`
+                    <h2>Edit List</h2>
+                    <div class="form-group">
+                        <label for="edit-list-name">List Name</label>
+                        <input type="text" id="edit-list-name" value="${this.escapeHtml(currentName)}">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn" onclick="App.saveListName()">Save</button>
+                    </div>
+                `);
+
+                setTimeout(() => {
+                    const input = document.getElementById('edit-list-name');
+                    input.focus();
+                    input.select();
+                }, 100);
+            },
+
+            async saveListName() {
+                const name = document.getElementById('edit-list-name').value.trim();
+                if (!name || !this.currentListId) return;
+
+                try {
+                    await DB.query(`UPDATE todo_list SET name = '${this.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
+                    document.getElementById('list-title').textContent = name;
+                    this.closeModal();
+                } catch (e) {
+                    console.error('Save list name error:', e);
+                    alert('Failed to save: ' + e.message);
+                }
+            },
+
+            async deleteCurrentList() {
+                if (!confirm('Delete this list and all its items?')) return;
+
+                try {
+                    await DB.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
+                    await DB.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
+                    this.goBack();
+                } catch (e) {
+                    console.error('Delete list error:', e);
+                    alert('Failed to delete: ' + e.message);
+                }
+            },
+
+            showSettings() {
+                this.showModal(`
+                    <h2>Settings</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 16px;">Connected to: ${this.escapeHtml(DB.config?.baseUrl || 'Unknown')}</p>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+                        <button class="btn btn-danger" onclick="App.disconnect()">Disconnect</button>
+                    </div>
+                `);
+            },
+
+            disconnect() {
+                if (!confirm('Disconnect from database? Your data will remain on the server.')) return;
+
+                DB.clearConfig();
+                this.closeModal();
+                document.getElementById('ayb-url').value = '';
+                document.getElementById('ayb-token').value = '';
+                this.showScreen('setup');
+            },
+
+            showModal(content) {
+                document.getElementById('modal-content').innerHTML = content;
+                document.getElementById('modal-overlay').classList.remove('hidden');
+            },
+
+            closeModal() {
+                document.getElementById('modal-overlay').classList.add('hidden');
+            },
+
+            escapeHtml(str) {
+                if (!str) return '';
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            },
+
+            escapeSQL(str) {
+                if (!str) return '';
+                return str.replace(/'/g, "''");
+            }
+        };
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', () => App.init());
+
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker registered'))
+                .catch(err => console.log('Service Worker registration failed:', err));
+        }
+    </script>
+</body>
+</html>
