@@ -725,8 +725,7 @@
                 if (DB.init()) {
                     try {
                         await DB.runMigrations();
-                        this.showScreen('lists');
-                        await this.loadLists();
+                        await this.handleRoute();
                     } catch (e) {
                         console.error('Init error:', e);
                         DB.clearConfig();
@@ -734,6 +733,19 @@
                     }
                 } else {
                     this.showScreen('setup');
+                }
+            },
+
+            async handleRoute() {
+                const hash = window.location.hash;
+                const match = hash.match(/^#list\/(\d+)$/);
+
+                if (match) {
+                    const listId = parseInt(match[1]);
+                    await this.openList(listId, false);
+                } else {
+                    this.showScreen('lists');
+                    await this.loadLists();
                 }
             },
 
@@ -766,6 +778,9 @@
                 document.getElementById('modal-overlay').addEventListener('click', (e) => {
                     if (e.target.id === 'modal-overlay') this.closeModal();
                 });
+
+                // Hash navigation
+                window.addEventListener('hashchange', () => this.handleRoute());
             },
 
             async handleSetup() {
@@ -888,8 +903,11 @@
                 }
             },
 
-            async openList(id) {
+            async openList(id, updateHash = true) {
                 this.currentListId = id;
+                if (updateHash) {
+                    window.location.hash = `list/${id}`;
+                }
                 this.showScreen('todo');
                 await this.loadTodos();
                 document.getElementById('new-todo-input').focus();
@@ -1224,6 +1242,7 @@
 
             goBack() {
                 this.currentListId = null;
+                window.location.hash = '';
                 this.showScreen('lists');
                 this.loadLists();
             },
