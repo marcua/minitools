@@ -1568,6 +1568,34 @@
                     if (preview) {
                         preview.outerHTML = this.renderNotesPreview(textarea.value, todoId);
                     }
+
+                    // Update the checklist indicator
+                    this.updateChecklistIndicator(item, textarea.value);
+                }
+            },
+
+            updateChecklistIndicator(item, notes) {
+                const stats = this.getChecklistStats(notes);
+                const indicatorsEl = item.querySelector('.todo-indicators');
+                const contentEl = item.querySelector('.todo-content');
+
+                if (stats) {
+                    const allDone = stats.checked === stats.total;
+                    const indicatorHtml = `<span class="todo-indicator checklist-progress ${allDone ? 'all-done' : ''}">
+                        <svg><use href="#icon-check"/></svg>
+                        ${stats.checked}/${stats.total}
+                    </span>`;
+
+                    if (indicatorsEl) {
+                        const existing = indicatorsEl.querySelector('.checklist-progress');
+                        if (existing) {
+                            existing.outerHTML = indicatorHtml;
+                        } else {
+                            indicatorsEl.insertAdjacentHTML('beforeend', indicatorHtml);
+                        }
+                    } else {
+                        contentEl.insertAdjacentHTML('beforeend', `<div class="todo-indicators">${indicatorHtml}</div>`);
+                    }
                 }
             },
 
