@@ -81,6 +81,59 @@
             color: var(--ink);
         }
 
+        .title-editable {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .title-editable h1 {
+            flex: 0 1 auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .title-input {
+            flex: 1;
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--ink);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid var(--accent);
+            padding: 0 0 2px 0;
+            outline: none;
+            min-width: 0;
+        }
+
+        .edit-title-btn {
+            background: none;
+            border: none;
+            color: var(--ink-faint);
+            cursor: pointer;
+            padding: 4px;
+            opacity: 0;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+            flex-shrink: 0;
+        }
+
+        .title-editable:hover .edit-title-btn {
+            opacity: 1;
+        }
+
+        .edit-title-btn:hover {
+            color: var(--accent);
+        }
+
+        .edit-title-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
         .header-btn {
             background: none;
             border: none;
@@ -490,6 +543,34 @@
             transition: all var(--duration-normal);
         }
 
+        .todo-indicators {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .todo-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            color: var(--ink-faint);
+        }
+
+        .todo-indicator svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .checklist-progress {
+            color: var(--ink-light);
+        }
+
+        .checklist-progress.all-done {
+            color: var(--success);
+        }
+
         .todo-item.completed .todo-title {
             text-decoration: line-through;
             color: var(--ink-light);
@@ -821,7 +902,7 @@
         <!-- Lists Screen -->
         <div id="lists-screen" class="hidden">
             <header class="header">
-                <h1>My Lists</h1>
+                <h1>Todos</h1>
                 <button class="header-btn" id="settings-btn" title="Settings">
                     <svg><use href="#icon-settings"/></svg>
                 </button>
@@ -837,10 +918,13 @@
                 <button class="header-btn" id="back-btn">
                     <svg><use href="#icon-back"/></svg>
                 </button>
-                <h1 id="list-title">List</h1>
-                <button class="header-btn" id="edit-list-btn" title="Edit List">
-                    <svg><use href="#icon-edit"/></svg>
-                </button>
+                <div class="title-editable">
+                    <h1 id="list-title">List</h1>
+                    <input type="text" id="list-title-input" class="title-input hidden">
+                    <button class="edit-title-btn" id="edit-list-btn" title="Edit List">
+                        <svg><use href="#icon-edit"/></svg>
+                    </button>
+                </div>
                 <button class="header-btn" id="delete-list-btn" title="Delete List">
                     <svg><use href="#icon-trash"/></svg>
                 </button>
@@ -858,11 +942,11 @@
                 </div>
 
                 <div class="todo-section" id="completed-section">
-                    <div class="section-header" id="completed-header">
+                    <div class="section-header collapsed" id="completed-header">
                         <svg class="arrow"><use href="#icon-chevron"/></svg>
                         <span>Completed (<span id="completed-count">0</span>)</span>
                     </div>
-                    <ul class="todo-list" id="completed-todos"></ul>
+                    <ul class="todo-list hidden" id="completed-todos"></ul>
                 </div>
             </div>
         </div>
@@ -988,7 +1072,7 @@
         // ============================================
         const App = {
             currentListId: null,
-            completedCollapsed: false,
+            completedCollapsed: true,
             draggedItem: null,
 
             async init() {
@@ -1040,7 +1124,12 @@
                     if (e.key === 'Enter') this.addTodo();
                 });
                 document.getElementById('completed-header').addEventListener('click', () => this.toggleCompleted());
-                document.getElementById('edit-list-btn').addEventListener('click', () => this.editCurrentList());
+                document.getElementById('edit-list-btn').addEventListener('click', () => this.startTitleEdit());
+                document.getElementById('list-title-input').addEventListener('blur', () => this.saveTitleEdit());
+                document.getElementById('list-title-input').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') this.saveTitleEdit();
+                    if (e.key === 'Escape') this.cancelTitleEdit();
+                });
                 document.getElementById('delete-list-btn').addEventListener('click', () => this.deleteCurrentList());
 
                 document.getElementById('modal-overlay').addEventListener('click', (e) => {
@@ -1235,8 +1324,41 @@
                 this.bindTodoEvents();
             },
 
+            getChecklistStats(notes) {
+                if (!notes) return null;
+                const lines = notes.split('\n');
+                let total = 0, checked = 0;
+                lines.forEach(line => {
+                    const match = line.match(/^-\s*\[([ xX])\]/);
+                    if (match) {
+                        total++;
+                        if (match[1].toLowerCase() === 'x') checked++;
+                    }
+                });
+                return total > 0 ? { total, checked } : null;
+            },
+
             renderTodoItem(todo, index) {
                 const hasNotes = todo.notes && todo.notes.trim();
+                const checklistStats = this.getChecklistStats(todo.notes);
+                const hasPlainNotes = hasNotes && !checklistStats;
+
+                let indicatorsHtml = '';
+                if (hasPlainNotes || checklistStats) {
+                    indicatorsHtml = '<div class="todo-indicators">';
+                    if (hasPlainNotes) {
+                        indicatorsHtml += `<span class="todo-indicator"><svg><use href="#icon-notes"/></svg></span>`;
+                    }
+                    if (checklistStats) {
+                        const allDone = checklistStats.checked === checklistStats.total;
+                        indicatorsHtml += `<span class="todo-indicator checklist-progress ${allDone ? 'all-done' : ''}">
+                            <svg><use href="#icon-check"/></svg>
+                            ${checklistStats.checked}/${checklistStats.total}
+                        </span>`;
+                    }
+                    indicatorsHtml += '</div>';
+                }
+
                 return `
                     <li class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}" draggable="true" style="animation-delay: ${index * 30}ms">
                         <div class="todo-main">
@@ -1248,6 +1370,7 @@
                             </div>
                             <div class="todo-content">
                                 <div class="todo-title">${this.escapeHtml(todo.title)}</div>
+                                ${indicatorsHtml}
                             </div>
                             <div class="todo-actions">
                                 <button class="todo-action-btn" data-action="notes" title="Notes">
@@ -1511,40 +1634,50 @@
                 this.loadLists();
             },
 
-            editCurrentList() {
-                const currentName = document.getElementById('list-title').textContent;
+            startTitleEdit() {
+                const title = document.getElementById('list-title');
+                const input = document.getElementById('list-title-input');
+                const editBtn = document.getElementById('edit-list-btn');
 
-                this.showModal(`
-                    <h2>Edit List</h2>
-                    <div class="form-group">
-                        <label for="edit-list-name">List Name</label>
-                        <input type="text" id="edit-list-name" value="${this.escapeHtml(currentName)}">
-                    </div>
-                    <div class="modal-actions">
-                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
-                        <button class="btn" onclick="App.saveListName()">Save</button>
-                    </div>
-                `);
-
-                setTimeout(() => {
-                    const input = document.getElementById('edit-list-name');
-                    input.focus();
-                    input.select();
-                }, 100);
+                input.value = title.textContent;
+                title.classList.add('hidden');
+                editBtn.classList.add('hidden');
+                input.classList.remove('hidden');
+                input.focus();
+                input.select();
             },
 
-            async saveListName() {
-                const name = document.getElementById('edit-list-name').value.trim();
-                if (!name || !this.currentListId) return;
+            cancelTitleEdit() {
+                const title = document.getElementById('list-title');
+                const input = document.getElementById('list-title-input');
+                const editBtn = document.getElementById('edit-list-btn');
+
+                input.classList.add('hidden');
+                title.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
+            },
+
+            async saveTitleEdit() {
+                const title = document.getElementById('list-title');
+                const input = document.getElementById('list-title-input');
+                const editBtn = document.getElementById('edit-list-btn');
+                const name = input.value.trim();
+
+                if (!name || !this.currentListId) {
+                    this.cancelTitleEdit();
+                    return;
+                }
 
                 try {
                     await DB.query(`UPDATE todo_list SET name = '${this.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
-                    document.getElementById('list-title').textContent = name;
-                    this.closeModal();
+                    title.textContent = name;
                 } catch (e) {
                     console.error('Save list name error:', e);
-                    alert('Failed to save: ' + e.message);
                 }
+
+                input.classList.add('hidden');
+                title.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
             },
 
             deleteCurrentList() {
