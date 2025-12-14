@@ -1157,12 +1157,36 @@
                 }
             },
 
-            async deleteCurrentList() {
-                if (!confirm('Delete this list and all its items?')) return;
+            deleteCurrentList() {
+                const currentName = document.getElementById('list-title').textContent;
 
+                this.showModal(`
+                    <h2>Delete List</h2>
+                    <p style="margin-bottom: 16px;">Type <strong>${this.escapeHtml(currentName)}</strong> to confirm deletion:</p>
+                    <div class="form-group">
+                        <input type="text" id="delete-confirm-input" placeholder="Type list name to confirm">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn btn-danger" id="confirm-delete-btn" onclick="App.confirmDeleteList()" disabled>Delete</button>
+                    </div>
+                `);
+
+                const input = document.getElementById('delete-confirm-input');
+                const btn = document.getElementById('confirm-delete-btn');
+
+                input.addEventListener('input', () => {
+                    btn.disabled = input.value !== currentName;
+                });
+
+                setTimeout(() => input.focus(), 100);
+            },
+
+            async confirmDeleteList() {
                 try {
                     await DB.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
                     await DB.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
+                    this.closeModal();
                     this.goBack();
                 } catch (e) {
                     console.error('Delete list error:', e);
