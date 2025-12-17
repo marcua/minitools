@@ -1616,12 +1616,12 @@
                 if (!title || !this.currentListId) return;
 
                 try {
-                    const posResult = await DB.query(`SELECT COALESCE(MAX(position), -1) + 1 FROM todo_list_item WHERE list_id = ${this.currentListId}`);
-                    const position = posResult.rows?.[0]?.[0] ?? 0;
+                    // Shift existing items down to make room at position 0
+                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
 
                     await DB.query(`
                         INSERT INTO todo_list_item (list_id, title, position, completed)
-                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', ${position}, 0)
+                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', 0, 0)
                     `);
 
                     input.value = '';
