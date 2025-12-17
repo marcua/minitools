@@ -539,6 +539,12 @@
             word-break: break-word;
             color: var(--ink);
             transition: all var(--duration-normal);
+            user-select: text;
+            cursor: text;
+        }
+
+        .drag-handle {
+            user-select: none;
         }
 
         .todo-indicators {
@@ -1363,7 +1369,7 @@
                 }
 
                 return `
-                    <li class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}" draggable="true" style="animation-delay: ${index * 30}ms">
+                    <li class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}" style="animation-delay: ${index * 30}ms">
                         <div class="todo-main">
                             <span class="drag-handle" data-action="drag">
                                 <svg><use href="#icon-drag"/></svg>
@@ -1436,8 +1442,20 @@
                         }
                     });
 
+                    // Only allow dragging when initiated from drag handle
+                    const dragHandle = item.querySelector('.drag-handle');
+                    dragHandle.addEventListener('mousedown', () => {
+                        item.setAttribute('draggable', 'true');
+                    });
+                    dragHandle.addEventListener('touchstart', () => {
+                        item.setAttribute('draggable', 'true');
+                    }, { passive: true });
+
                     item.addEventListener('dragstart', (e) => this.handleDragStart(e, item));
-                    item.addEventListener('dragend', (e) => this.handleDragEnd(e, item));
+                    item.addEventListener('dragend', (e) => {
+                        this.handleDragEnd(e, item);
+                        item.removeAttribute('draggable');
+                    });
                     item.addEventListener('dragover', (e) => this.handleDragOver(e, item));
                     item.addEventListener('dragleave', (e) => this.handleDragLeave(e, item));
                     item.addEventListener('drop', (e) => this.handleDrop(e, item));
