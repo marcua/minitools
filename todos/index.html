@@ -545,6 +545,10 @@
 
         .drag-handle {
             user-select: none;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            padding: 8px;
+            margin: -8px;
         }
 
         .todo-indicators {
@@ -1447,9 +1451,12 @@
                     dragHandle.addEventListener('mousedown', () => {
                         item.setAttribute('draggable', 'true');
                     });
-                    dragHandle.addEventListener('touchstart', () => {
-                        item.setAttribute('draggable', 'true');
-                    }, { passive: true });
+
+                    // Touch drag support for mobile
+                    dragHandle.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.startTouchDrag(e, item);
+                    });
 
                     item.addEventListener('dragstart', (e) => this.handleDragStart(e, item));
                     item.addEventListener('dragend', (e) => {
@@ -1498,6 +1505,63 @@
 
             handleDragLeave(e, item) {
                 item.classList.remove('drag-over');
+            },
+
+            // Touch drag implementation for mobile
+            startTouchDrag(e, item) {
+                this.draggedItem = item;
+                item.classList.add('dragging');
+
+                const touch = e.touches[0];
+                this.touchStartY = touch.clientY;
+                this.touchCurrentY = touch.clientY;
+
+                const onTouchMove = (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    this.touchCurrentY = touch.clientY;
+
+                    // Find item under touch point
+                    const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const targetItem = elemBelow?.closest('.todo-item');
+
+                    // Clear previous drag-over states
+                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+
+                    if (targetItem && targetItem !== this.draggedItem) {
+                        targetItem.classList.add('drag-over');
+                    }
+                };
+
+                const onTouchEnd = async (e) => {
+                    document.removeEventListener('touchmove', onTouchMove);
+                    document.removeEventListener('touchend', onTouchEnd);
+
+                    item.classList.remove('dragging');
+
+                    const targetItem = document.querySelector('.todo-item.drag-over');
+                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+
+                    if (targetItem && targetItem !== this.draggedItem) {
+                        const list = targetItem.parentNode;
+                        const items = Array.from(list.querySelectorAll('.todo-item'));
+                        const draggedIndex = items.indexOf(this.draggedItem);
+                        const targetIndex = items.indexOf(targetItem);
+
+                        if (draggedIndex < targetIndex) {
+                            targetItem.after(this.draggedItem);
+                        } else {
+                            targetItem.before(this.draggedItem);
+                        }
+
+                        await this.updatePositions(list);
+                    }
+
+                    this.draggedItem = null;
+                };
+
+                document.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.addEventListener('touchend', onTouchEnd);
             },
 
             async handleDrop(e, item) {
