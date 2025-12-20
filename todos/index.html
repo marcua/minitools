@@ -761,6 +761,104 @@
             color: var(--ink-faint);
         }
 
+        /* Edit mode */
+        .todo-edit-header {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .todo-edit-btn, .todo-save-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border: 1px solid var(--ink-faint);
+            background: transparent;
+            color: var(--ink-light);
+            cursor: pointer;
+            transition: all var(--duration-fast);
+        }
+
+        .todo-edit-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .todo-save-btn {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .todo-save-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .todo-cancel-btn {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border: 1px solid var(--ink-faint);
+            background: transparent;
+            color: var(--ink-light);
+            cursor: pointer;
+            transition: all var(--duration-fast);
+        }
+
+        .todo-cancel-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .todo-edit-btn svg, .todo-save-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .todo-edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .todo-edit-form .form-group {
+            margin-bottom: 0;
+        }
+
+        .todo-edit-form .title-edit-input {
+            width: 100%;
+            padding: 8px 12px;
+            font-size: 1rem;
+            border: 1px solid var(--ink-faint);
+            background: white;
+        }
+
+        .todo-edit-form .title-edit-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .todo-edit-form .notes-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            font-size: 0.9rem;
+            font-family: var(--font-body);
+            border: 1px solid var(--ink-faint);
+            background: white;
+            resize: vertical;
+        }
+
+        .todo-edit-form .notes-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .todo-view-mode:empty {
+            display: none;
+        }
+
         /* Timestamps */
         .todo-timestamps {
             margin-top: 12px;
@@ -1808,9 +1906,33 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="todo-notes" data-todo-id="${todo.id}">
-                            <textarea class="notes-textarea hidden" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
-                            ${this.renderNotesPreview(todo.notes, todo.id)}
+                        <div class="todo-notes" data-todo-id="${todo.id}" data-title="${this.escapeHtml(todo.title)}">
+                            <div class="todo-edit-header">
+                                <button class="todo-edit-btn" data-action="toggle-edit">
+                                    <svg class="edit-icon"><use href="#icon-edit"/></svg>
+                                    <span class="edit-label">Edit</span>
+                                </button>
+                                <button class="todo-cancel-btn hidden" data-action="toggle-edit">
+                                    Cancel
+                                </button>
+                                <button class="todo-save-btn hidden" data-action="save-edit">
+                                    <svg><use href="#icon-check"/></svg>
+                                    <span>Save</span>
+                                </button>
+                            </div>
+                            <div class="todo-edit-form hidden">
+                                <div class="form-group">
+                                    <label>Title</label>
+                                    <input type="text" class="title-edit-input" value="${this.escapeHtml(todo.title)}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Notes</label>
+                                    <textarea class="notes-textarea" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
+                                </div>
+                            </div>
+                            <div class="todo-view-mode">
+                                ${this.renderNotesPreview(todo.notes, todo.id)}
+                            </div>
                             ${this.renderTimestamps(todo)}
                         </div>
                     </li>
@@ -1876,8 +1998,10 @@
                             e.stopPropagation();
                             const lineIdx = parseInt(actionEl.dataset.line);
                             this.toggleChecklistItem(item, lineIdx);
-                        } else if (action === 'edit-notes') {
-                            this.showNotesEditor(item);
+                        } else if (action === 'toggle-edit') {
+                            this.toggleEditMode(item);
+                        } else if (action === 'save-edit') {
+                            this.saveEditMode(item);
                         }
                     });
 
@@ -1904,15 +2028,6 @@
                 });
 
                 document.querySelectorAll('.notes-textarea').forEach(textarea => {
-                    let saveTimeout;
-                    textarea.addEventListener('input', (e) => {
-                        clearTimeout(saveTimeout);
-                        saveTimeout = setTimeout(() => {
-                            const todoId = parseInt(textarea.closest('.todo-notes').dataset.todoId);
-                            this.saveNotes(todoId, textarea.value);
-                        }, 500);
-                    });
-
                     textarea.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') {
                             const pos = textarea.selectionStart;
@@ -1930,15 +2045,8 @@
                                 const after = text.slice(pos);
                                 textarea.value = before + '\n' + prefix + after;
                                 textarea.selectionStart = textarea.selectionEnd = pos + 1 + prefix.length;
-
-                                // Trigger input event for auto-save
-                                textarea.dispatchEvent(new Event('input', { bubbles: true }));
                             }
                         }
-                    });
-
-                    textarea.addEventListener('blur', (e) => {
-                        this.hideNotesEditor(textarea.closest('.todo-item'));
                     });
                 });
             },
@@ -2055,6 +2163,81 @@
             toggleNotes(item) {
                 const notesEl = item.querySelector('.todo-notes');
                 notesEl.classList.toggle('expanded');
+            },
+
+            toggleEditMode(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                const editForm = notesEl.querySelector('.todo-edit-form');
+                const viewMode = notesEl.querySelector('.todo-view-mode');
+                const editBtn = notesEl.querySelector('.todo-edit-btn');
+                const cancelBtn = notesEl.querySelector('.todo-cancel-btn');
+                const saveBtn = notesEl.querySelector('.todo-save-btn');
+
+                const isEditing = !editForm.classList.contains('hidden');
+
+                if (isEditing) {
+                    // Cancel edit, restore original values
+                    const titleInput = editForm.querySelector('.title-edit-input');
+                    titleInput.value = notesEl.dataset.title;
+                    editForm.classList.add('hidden');
+                    viewMode.classList.remove('hidden');
+                    editBtn.classList.remove('hidden');
+                    cancelBtn.classList.add('hidden');
+                    saveBtn.classList.add('hidden');
+                } else {
+                    // Enter edit mode
+                    editForm.classList.remove('hidden');
+                    viewMode.classList.add('hidden');
+                    editBtn.classList.add('hidden');
+                    cancelBtn.classList.remove('hidden');
+                    saveBtn.classList.remove('hidden');
+                    editForm.querySelector('.title-edit-input').focus();
+                }
+            },
+
+            async saveEditMode(item) {
+                const todoId = parseInt(item.dataset.id);
+                const notesEl = item.querySelector('.todo-notes');
+                const editForm = notesEl.querySelector('.todo-edit-form');
+                const titleInput = editForm.querySelector('.title-edit-input');
+                const textarea = editForm.querySelector('.notes-textarea');
+
+                const newTitle = titleInput.value.trim();
+                const newNotes = textarea.value;
+
+                if (!newTitle) {
+                    alert('Title cannot be empty');
+                    return;
+                }
+
+                try {
+                    await DB.query(`UPDATE todo_list_item SET
+                        title = '${this.escapeSQL(newTitle)}',
+                        notes = '${this.escapeSQL(newNotes)}',
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${todoId}`);
+
+                    // Update the displayed title
+                    item.querySelector('.todo-title').textContent = newTitle;
+                    notesEl.dataset.title = newTitle;
+
+                    // Update view mode with new notes preview
+                    const viewMode = notesEl.querySelector('.todo-view-mode');
+                    viewMode.innerHTML = this.renderNotesPreview(newNotes, todoId);
+
+                    // Update indicators
+                    this.updateChecklistIndicator(item, newNotes);
+
+                    // Exit edit mode
+                    editForm.classList.add('hidden');
+                    viewMode.classList.remove('hidden');
+                    notesEl.querySelector('.todo-edit-btn').classList.remove('hidden');
+                    notesEl.querySelector('.todo-cancel-btn').classList.add('hidden');
+                    notesEl.querySelector('.todo-save-btn').classList.add('hidden');
+                } catch (e) {
+                    console.error('Save edit error:', e);
+                    alert('Failed to save: ' + e.message);
+                }
             },
 
             showNotesEditor(item) {
