@@ -1898,6 +1898,30 @@
                         }, 500);
                     });
 
+                    textarea.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            const pos = textarea.selectionStart;
+                            const text = textarea.value;
+                            const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+                            const line = text.slice(lineStart, pos);
+
+                            // Check if line starts with checklist pattern
+                            const match = line.match(/^([-*]\s*\[[ xX]\]\s*)/);
+                            if (match) {
+                                e.preventDefault();
+                                // Insert newline + unchecked checkbox prefix
+                                const prefix = match[1].replace(/\[[xX]\]/, '[ ]');
+                                const before = text.slice(0, pos);
+                                const after = text.slice(pos);
+                                textarea.value = before + '\n' + prefix + after;
+                                textarea.selectionStart = textarea.selectionEnd = pos + 1 + prefix.length;
+
+                                // Trigger input event for auto-save
+                                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        }
+                    });
+
                     textarea.addEventListener('blur', (e) => {
                         this.hideNotesEditor(textarea.closest('.todo-item'));
                     });
