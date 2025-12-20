@@ -1364,7 +1364,20 @@
             },
 
             async handleRoute() {
-                const hash = window.location.hash;
+                let hash = window.location.hash;
+
+                // Restore from localStorage if no hash in URL
+                if (!hash) {
+                    const savedHash = localStorage.getItem('todos_last_hash');
+                    if (savedHash) {
+                        hash = savedHash;
+                        window.location.hash = savedHash;
+                    }
+                }
+
+                // Save current hash to localStorage
+                localStorage.setItem('todos_last_hash', hash);
+
                 const match = hash.match(/^#list\/(\d+)$/);
 
                 if (match) {
@@ -1541,9 +1554,11 @@
 
             async openList(id, updateHash = true) {
                 this.currentListId = id;
+                const hash = `#list/${id}`;
                 if (updateHash) {
-                    window.location.hash = `list/${id}`;
+                    window.location.hash = hash;
                 }
+                localStorage.setItem('todos_last_hash', hash);
                 this.showScreen('todo');
                 await this.loadTodos();
                 document.getElementById('new-todo-input').focus();
@@ -2326,6 +2341,7 @@
             goBack() {
                 this.currentListId = null;
                 window.location.hash = '';
+                localStorage.setItem('todos_last_hash', '');
                 this.showScreen('lists');
                 this.loadLists();
             },
