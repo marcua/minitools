@@ -268,6 +268,19 @@
             background: #8a4040;
         }
 
+        .form-divider {
+            text-align: center;
+            color: var(--ink-faint);
+            margin: 20px 0;
+            font-size: 0.85rem;
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--ink-faint);
+            margin-top: 4px;
+        }
+
         /* Lists Screen */
         .lists-grid {
             display: flex;
@@ -529,6 +542,12 @@
             transform: scale(1);
         }
 
+        .todo-checkbox.saving {
+            background: var(--ink-faint);
+            border-color: var(--ink-faint);
+            pointer-events: none;
+        }
+
         .todo-content {
             flex: 1;
             min-width: 0;
@@ -582,6 +601,22 @@
 
         .checklist-progress.all-done {
             color: var(--success);
+        }
+
+        .upcoming-badge {
+            background: #E8F4FD;
+            color: #2B6CB0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .recurring-badge {
+            background: #F0E6FA;
+            color: #6B46C1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
         }
 
         .todo-item.completed .todo-title {
@@ -724,6 +759,24 @@
         .notes-preview li.checklist-item.checked .check-text {
             text-decoration: line-through;
             color: var(--ink-faint);
+        }
+
+        /* Timestamps */
+        .todo-timestamps {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--paper-shadow);
+            font-size: 0.75rem;
+            color: var(--ink-faint);
+        }
+
+        .todo-timestamps .timestamp {
+            padding: 2px 0;
+        }
+
+        .todo-timestamps .timestamp-label {
+            color: var(--ink-light);
+            margin-right: 4px;
         }
 
         /* Empty State */
@@ -971,6 +1024,16 @@
         <symbol id="icon-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6"></polyline>
         </symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </symbol>
+        <symbol id="icon-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </symbol>
         <symbol id="icon-notebook" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <rect x="16" y="8" width="48" height="64" rx="2"></rect>
             <line x1="28" y1="8" x2="28" y2="72"></line>
@@ -1058,6 +1121,22 @@
                     <button class="add-btn" id="add-todo-btn">
                         <svg width="20" height="20"><use href="#icon-plus"/></svg>
                     </button>
+                </div>
+
+                <div class="todo-section hidden" id="upcoming-section">
+                    <div class="section-header" id="upcoming-header">
+                        <svg class="arrow"><use href="#icon-chevron"/></svg>
+                        <span>Upcoming (<span id="upcoming-count">0</span>)</span>
+                    </div>
+                    <ul class="todo-list" id="upcoming-todos"></ul>
+                </div>
+
+                <div class="todo-section hidden" id="recurring-section">
+                    <div class="section-header" id="recurring-header">
+                        <svg class="arrow"><use href="#icon-chevron"/></svg>
+                        <span>Recurring (<span id="recurring-count">0</span>)</span>
+                    </div>
+                    <ul class="todo-list" id="recurring-todos"></ul>
                 </div>
 
                 <div class="todo-section" id="active-section">
@@ -1180,7 +1259,17 @@
                         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (list_id) REFERENCES todo_list(id) ON DELETE CASCADE
-                    )`
+                    )`,
+                    // Migration 3: Add completed_at timestamp
+                    `ALTER TABLE todo_list_item ADD COLUMN completed_at TEXT DEFAULT NULL`,
+                    // Migration 4: Add remind_at for "remind me on" feature
+                    `ALTER TABLE todo_list_item ADD COLUMN remind_at TEXT DEFAULT NULL`,
+                    // Migration 5: Add recurrence fields
+                    `ALTER TABLE todo_list_item ADD COLUMN recurrence_type TEXT DEFAULT NULL`,
+                    // Migration 6: Add recurrence_value (e.g., "monday,wednesday" or "15" for day of month)
+                    `ALTER TABLE todo_list_item ADD COLUMN recurrence_value TEXT DEFAULT NULL`,
+                    // Migration 7: Add parent_id for tracking which recurring item spawned this
+                    `ALTER TABLE todo_list_item ADD COLUMN parent_id INTEGER DEFAULT NULL`
                 ];
 
                 for (let i = currentVersion; i < migrations.length; i++) {
@@ -1309,6 +1398,8 @@
                 document.getElementById('new-todo-input').addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') this.addTodo();
                 });
+                document.getElementById('upcoming-header').addEventListener('click', () => this.toggleSection('upcoming'));
+                document.getElementById('recurring-header').addEventListener('click', () => this.toggleSection('recurring'));
                 document.getElementById('completed-header').addEventListener('click', () => this.toggleCompleted());
                 document.getElementById('edit-list-btn').addEventListener('click', () => this.startTitleEdit());
                 document.getElementById('list-title-input').addEventListener('blur', () => this.saveTitleEdit());
@@ -1458,6 +1549,79 @@
                 document.getElementById('new-todo-input').focus();
             },
 
+            async processRecurrences() {
+                if (!this.currentListId) return;
+
+                try {
+                    // Get recurring templates (items with recurrence_type but no parent_id)
+                    const result = await DB.query(`
+                        SELECT id, title, notes, recurrence_type, recurrence_value
+                        FROM todo_list_item
+                        WHERE list_id = ${this.currentListId}
+                          AND recurrence_type IS NOT NULL
+                          AND parent_id IS NULL
+                    `);
+
+                    if (!result.rows?.length) return;
+
+                    const today = new Date();
+                    const todayStr = today.toISOString().slice(0, 10);
+
+                    for (const row of result.rows) {
+                        const [id, title, notes, recType, recValue] = row;
+
+                        // Check if we should spawn today
+                        if (!this.shouldSpawnToday(recType, recValue, today)) continue;
+
+                        // Check if we already spawned today
+                        const existsResult = await DB.query(`
+                            SELECT id FROM todo_list_item
+                            WHERE parent_id = ${id}
+                              AND DATE(created_at) = '${todayStr}'
+                        `);
+
+                        if (existsResult.rows?.length > 0) continue;
+
+                        // Spawn new item at position 0
+                        await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
+                        await DB.query(`
+                            INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
+                            VALUES (${this.currentListId}, '${this.escapeSQL(title)}', '${this.escapeSQL(notes || '')}', 0, 0, ${id})
+                        `);
+                    }
+                } catch (e) {
+                    console.error('Process recurrences error:', e);
+                }
+            },
+
+            shouldSpawnToday(recType, recValue, today) {
+                const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+                const dayOfMonth = today.getDate();
+                const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                const monthDay = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase();
+
+                if (recType === 'daily') return true;
+
+                if (recType === 'weekly' && recValue) {
+                    const days = recValue.toLowerCase().split(',').map(d => d.trim());
+                    return days.some(d => dayOfWeek.startsWith(d) || d.startsWith(dayOfWeek.slice(0, 3)));
+                }
+
+                if (recType === 'monthly' && recValue) {
+                    const val = recValue.toLowerCase().trim();
+                    if (val === 'first' || val === '1') return dayOfMonth === 1;
+                    if (val === 'last') return dayOfMonth === lastDayOfMonth;
+                    const num = parseInt(val);
+                    if (!isNaN(num)) return dayOfMonth === num;
+                }
+
+                if (recType === 'yearly' && recValue) {
+                    return monthDay.includes(recValue.toLowerCase().trim());
+                }
+
+                return false;
+            },
+
             async loadTodos() {
                 if (!this.currentListId) return;
 
@@ -1467,8 +1631,13 @@
                         document.getElementById('list-title').textContent = listResult.rows[0][0];
                     }
 
+                    // Process recurring items first
+                    await this.processRecurrences();
+
                     const result = await DB.query(`
-                        SELECT id, title, notes, completed, position
+                        SELECT id, title, notes, completed, position,
+                               created_at, updated_at, completed_at,
+                               remind_at, recurrence_type, recurrence_value, parent_id
                         FROM todo_list_item
                         WHERE list_id = ${this.currentListId}
                         ORDER BY position ASC, id ASC
@@ -1479,7 +1648,14 @@
                         title: row[1],
                         notes: row[2] || '',
                         completed: row[3] == 1,
-                        position: row[4]
+                        position: row[4],
+                        created_at: row[5],
+                        updated_at: row[6],
+                        completed_at: row[7],
+                        remind_at: row[8],
+                        recurrence_type: row[9],
+                        recurrence_value: row[10],
+                        parent_id: row[11]
                     }));
 
                     this.renderTodos(todos);
@@ -1489,22 +1665,58 @@
             },
 
             renderTodos(todos) {
-                const activeTodos = todos.filter(t => !t.completed);
-                const completedTodos = todos.filter(t => t.completed);
+                const now = new Date();
+
+                // Categorize todos
+                const upcomingTodos = [];
+                const recurringTodos = [];
+                const activeTodos = [];
+                const completedTodos = [];
+
+                todos.forEach(t => {
+                    if (t.completed) {
+                        completedTodos.push(t);
+                    } else if (t.recurrence_type && !t.parent_id) {
+                        // Recurring template (not a spawned copy)
+                        recurringTodos.push(t);
+                    } else if (t.remind_at) {
+                        const remindDate = new Date(t.remind_at + 'Z');
+                        if (remindDate > now) {
+                            upcomingTodos.push(t);
+                        } else {
+                            activeTodos.push(t);
+                        }
+                    } else {
+                        activeTodos.push(t);
+                    }
+                });
+
+                // Sort upcoming by remind_at date
+                upcomingTodos.sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at));
 
                 const activeHtml = activeTodos.length > 0
                     ? activeTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('')
-                    : (completedTodos.length === 0 ? `
+                    : (completedTodos.length === 0 && upcomingTodos.length === 0 && recurringTodos.length === 0 ? `
                         <div class="empty-state">
                             <svg><use href="#icon-notebook"/></svg>
                             <p>Nothing here yet</p>
                         </div>
                     ` : '');
 
+                // Render upcoming section
+                document.getElementById('upcoming-todos').innerHTML = upcomingTodos.map((t, idx) => this.renderTodoItem(t, idx, 'upcoming')).join('');
+                document.getElementById('upcoming-count').textContent = upcomingTodos.length;
+                document.getElementById('upcoming-section').classList.toggle('hidden', upcomingTodos.length === 0);
+
+                // Render recurring section
+                document.getElementById('recurring-todos').innerHTML = recurringTodos.map((t, idx) => this.renderTodoItem(t, idx, 'recurring')).join('');
+                document.getElementById('recurring-count').textContent = recurringTodos.length;
+                document.getElementById('recurring-section').classList.toggle('hidden', recurringTodos.length === 0);
+
+                // Render active and completed
                 document.getElementById('active-todos').innerHTML = activeHtml;
                 document.getElementById('completed-todos').innerHTML = completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('');
                 document.getElementById('completed-count').textContent = completedTodos.length;
-
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
 
                 this.bindTodoEvents();
@@ -1524,25 +1736,36 @@
                 return total > 0 ? { total, checked } : null;
             },
 
-            renderTodoItem(todo, index) {
+            renderTodoItem(todo, index, type = 'active') {
                 const hasNotes = todo.notes && todo.notes.trim();
                 const checklistStats = this.getChecklistStats(todo.notes);
                 const hasPlainNotes = hasNotes && !checklistStats;
 
                 let indicatorsHtml = '';
-                if (hasPlainNotes || checklistStats) {
-                    indicatorsHtml = '<div class="todo-indicators" data-action="notes">';
-                    if (hasPlainNotes) {
-                        indicatorsHtml += `<span class="todo-indicator"><svg><use href="#icon-notes"/></svg></span>`;
-                    }
-                    if (checklistStats) {
-                        const allDone = checklistStats.checked === checklistStats.total;
-                        indicatorsHtml += `<span class="todo-indicator checklist-progress ${allDone ? 'all-done' : ''}">
-                            <svg><use href="#icon-check"/></svg>
-                            ${checklistStats.checked}/${checklistStats.total}
-                        </span>`;
-                    }
-                    indicatorsHtml += '</div>';
+                const indicators = [];
+
+                // Add type-specific badges
+                if (type === 'upcoming' && todo.remind_at) {
+                    const remindDate = new Date(todo.remind_at + 'Z');
+                    indicators.push(`<span class="todo-indicator upcoming-badge">${this.formatShortDate(remindDate)}</span>`);
+                }
+                if (type === 'recurring' && todo.recurrence_type) {
+                    indicators.push(`<span class="todo-indicator recurring-badge">${this.formatRecurrence(todo)}</span>`);
+                }
+
+                if (hasPlainNotes) {
+                    indicators.push(`<span class="todo-indicator"><svg><use href="#icon-notes"/></svg></span>`);
+                }
+                if (checklistStats) {
+                    const allDone = checklistStats.checked === checklistStats.total;
+                    indicators.push(`<span class="todo-indicator checklist-progress ${allDone ? 'all-done' : ''}">
+                        <svg><use href="#icon-check"/></svg>
+                        ${checklistStats.checked}/${checklistStats.total}
+                    </span>`);
+                }
+
+                if (indicators.length > 0) {
+                    indicatorsHtml = `<div class="todo-indicators" data-action="notes">${indicators.join('')}</div>`;
                 }
 
                 return `
@@ -1559,6 +1782,9 @@
                                 ${indicatorsHtml}
                             </div>
                             <div class="todo-actions">
+                                <button class="todo-action-btn" data-action="schedule" title="Schedule">
+                                    <svg><use href="#icon-clock"/></svg>
+                                </button>
                                 <button class="todo-action-btn" data-action="notes" title="Notes">
                                     <svg><use href="#icon-notes"/></svg>
                                 </button>
@@ -1570,9 +1796,29 @@
                         <div class="todo-notes" data-todo-id="${todo.id}">
                             <textarea class="notes-textarea hidden" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
                             ${this.renderNotesPreview(todo.notes, todo.id)}
+                            ${this.renderTimestamps(todo)}
                         </div>
                     </li>
                 `;
+            },
+
+            renderTimestamps(todo) {
+                const created = this.formatTimestamp(todo.created_at);
+                const updated = this.formatTimestamp(todo.updated_at);
+                const completed = this.formatTimestamp(todo.completed_at);
+
+                let html = '<div class="todo-timestamps">';
+                if (created) {
+                    html += `<div class="timestamp"><span class="timestamp-label">Created</span> ${created}</div>`;
+                }
+                if (updated && updated !== created) {
+                    html += `<div class="timestamp"><span class="timestamp-label">Updated</span> ${updated}</div>`;
+                }
+                if (completed) {
+                    html += `<div class="timestamp"><span class="timestamp-label">Completed</span> ${completed}</div>`;
+                }
+                html += '</div>';
+                return html;
             },
 
             renderNotesPreview(notes, todoId) {
@@ -1607,8 +1853,9 @@
                         const action = actionEl?.dataset.action;
                         const id = parseInt(item.dataset.id);
 
-                        if (action === 'toggle') this.toggleTodo(id);
+                        if (action === 'toggle') this.toggleTodo(id, actionEl);
                         else if (action === 'delete') this.deleteTodo(id);
+                        else if (action === 'schedule') this.showScheduleModal(id, item);
                         else if (action === 'notes') this.toggleNotes(item);
                         else if (action === 'toggle-check') {
                             e.stopPropagation();
@@ -1887,12 +2134,142 @@
                 }
             },
 
-            async toggleTodo(id) {
+            async toggleTodo(id, checkboxEl) {
+                // Immediate visual feedback
+                if (checkboxEl) {
+                    checkboxEl.classList.add('saving');
+                }
+
                 try {
-                    await DB.query(`UPDATE todo_list_item SET completed = CASE WHEN completed = 1 THEN 0 ELSE 1 END, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    await DB.query(`UPDATE todo_list_item SET
+                        completed = CASE WHEN completed = 1 THEN 0 ELSE 1 END,
+                        completed_at = CASE WHEN completed = 1 THEN NULL ELSE CURRENT_TIMESTAMP END,
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${id}`);
                     await this.loadTodos();
                 } catch (e) {
                     console.error('Toggle todo error:', e);
+                    // Remove saving state on error
+                    if (checkboxEl) {
+                        checkboxEl.classList.remove('saving');
+                    }
+                }
+            },
+
+            async showScheduleModal(id, item) {
+                // Get current values from the item data
+                const result = await DB.query(`SELECT remind_at, recurrence_type, recurrence_value FROM todo_list_item WHERE id = ${id}`);
+                const row = result.rows?.[0] || [];
+                const currentRemindAt = row[0] || '';
+                const currentRecurrenceType = row[1] || '';
+                const currentRecurrenceValue = row[2] || '';
+
+                // Format remind_at for datetime-local input
+                let remindAtValue = '';
+                if (currentRemindAt) {
+                    const d = new Date(currentRemindAt + 'Z');
+                    if (!isNaN(d.getTime())) {
+                        remindAtValue = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                    }
+                }
+
+                this.showModal(`
+                    <h2>Schedule</h2>
+                    <div class="form-group">
+                        <label>Remind me on</label>
+                        <input type="datetime-local" id="schedule-remind-at" value="${remindAtValue}">
+                        <p class="form-hint">Item will appear in your list on this date</p>
+                    </div>
+                    <div class="form-divider">— or —</div>
+                    <div class="form-group">
+                        <label>Repeat</label>
+                        <select id="schedule-recurrence">
+                            <option value="">No repeat</option>
+                            <option value="daily" ${currentRecurrenceType === 'daily' ? 'selected' : ''}>Daily</option>
+                            <option value="weekly" ${currentRecurrenceType === 'weekly' ? 'selected' : ''}>Weekly</option>
+                            <option value="monthly" ${currentRecurrenceType === 'monthly' ? 'selected' : ''}>Monthly</option>
+                            <option value="yearly" ${currentRecurrenceType === 'yearly' ? 'selected' : ''}>Yearly</option>
+                        </select>
+                    </div>
+                    <div class="form-group hidden" id="recurrence-value-group">
+                        <label id="recurrence-value-label">Details</label>
+                        <input type="text" id="schedule-recurrence-value" value="${this.escapeHtml(currentRecurrenceValue)}" placeholder="">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn btn-danger" onclick="App.clearSchedule(${id})" style="margin-left: auto;">Clear</button>
+                        <button class="btn" onclick="App.saveSchedule(${id})">Save</button>
+                    </div>
+                `);
+
+                // Setup recurrence value field toggling
+                const recurrenceSelect = document.getElementById('schedule-recurrence');
+                const recurrenceValueGroup = document.getElementById('recurrence-value-group');
+                const recurrenceValueLabel = document.getElementById('recurrence-value-label');
+                const recurrenceValueInput = document.getElementById('schedule-recurrence-value');
+
+                const updateRecurrenceFields = () => {
+                    const type = recurrenceSelect.value;
+                    if (type === 'weekly') {
+                        recurrenceValueGroup.classList.remove('hidden');
+                        recurrenceValueLabel.textContent = 'Days (e.g., Mon, Wed, Fri)';
+                        recurrenceValueInput.placeholder = 'Monday, Wednesday';
+                    } else if (type === 'monthly') {
+                        recurrenceValueGroup.classList.remove('hidden');
+                        recurrenceValueLabel.textContent = 'Day of month (1-31, first, last)';
+                        recurrenceValueInput.placeholder = '1 or first or last';
+                    } else if (type === 'yearly') {
+                        recurrenceValueGroup.classList.remove('hidden');
+                        recurrenceValueLabel.textContent = 'Date (e.g., Jan 15)';
+                        recurrenceValueInput.placeholder = 'January 15';
+                    } else {
+                        recurrenceValueGroup.classList.add('hidden');
+                    }
+                };
+
+                recurrenceSelect.addEventListener('change', updateRecurrenceFields);
+                updateRecurrenceFields();
+            },
+
+            async clearSchedule(id) {
+                try {
+                    await DB.query(`UPDATE todo_list_item SET remind_at = NULL, recurrence_type = NULL, recurrence_value = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    this.closeModal();
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Clear schedule error:', e);
+                    alert('Failed to clear schedule: ' + e.message);
+                }
+            },
+
+            async saveSchedule(id) {
+                const remindAt = document.getElementById('schedule-remind-at').value;
+                const recurrenceType = document.getElementById('schedule-recurrence').value;
+                const recurrenceValue = document.getElementById('schedule-recurrence-value').value.trim();
+
+                try {
+                    let remindAtUTC = 'NULL';
+                    if (remindAt) {
+                        // Convert local datetime to UTC
+                        const localDate = new Date(remindAt);
+                        remindAtUTC = `'${localDate.toISOString().slice(0, 19).replace('T', ' ')}'`;
+                    }
+
+                    const recTypeSQL = recurrenceType ? `'${this.escapeSQL(recurrenceType)}'` : 'NULL';
+                    const recValueSQL = recurrenceValue ? `'${this.escapeSQL(recurrenceValue)}'` : 'NULL';
+
+                    await DB.query(`UPDATE todo_list_item SET
+                        remind_at = ${remindAtUTC},
+                        recurrence_type = ${recTypeSQL},
+                        recurrence_value = ${recValueSQL},
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${id}`);
+
+                    this.closeModal();
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Save schedule error:', e);
+                    alert('Failed to save schedule: ' + e.message);
                 }
             },
 
@@ -1905,6 +2282,15 @@
                 } catch (e) {
                     console.error('Delete todo error:', e);
                 }
+            },
+
+            toggleSection(section) {
+                const header = document.getElementById(`${section}-header`);
+                const list = document.getElementById(`${section}-todos`);
+                const isCollapsed = header.classList.contains('collapsed');
+
+                header.classList.toggle('collapsed', !isCollapsed);
+                list.classList.toggle('hidden', !isCollapsed);
             },
 
             toggleCompleted() {
@@ -2041,6 +2427,63 @@
             escapeSQL(str) {
                 if (!str) return '';
                 return str.replace(/'/g, "''");
+            },
+
+            formatShortDate(date) {
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const isTomorrow = date.toDateString() === tomorrow.toDateString();
+
+                if (isToday) {
+                    return 'Today ' + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                } else if (isTomorrow) {
+                    return 'Tomorrow ' + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                } else {
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                }
+            },
+
+            formatRecurrence(todo) {
+                const type = todo.recurrence_type;
+                const value = todo.recurrence_value;
+
+                if (type === 'daily') return 'Daily';
+                if (type === 'weekly' && value) {
+                    const days = value.split(',').map(d => d.slice(0, 3)).join(', ');
+                    return `Weekly: ${days}`;
+                }
+                if (type === 'monthly') {
+                    if (value === 'first') return 'Monthly: 1st';
+                    if (value === 'last') return 'Monthly: Last';
+                    return `Monthly: ${value}`;
+                }
+                if (type === 'yearly') return `Yearly: ${value || ''}`;
+                return type || 'Recurring';
+            },
+
+            formatTimestamp(utcString) {
+                if (!utcString) return null;
+                // Parse UTC timestamp and format in local time
+                const date = new Date(utcString + 'Z'); // Append Z to treat as UTC
+                if (isNaN(date.getTime())) return null;
+
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const isYesterday = date.toDateString() === yesterday.toDateString();
+
+                const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+                if (isToday) {
+                    return `Today at ${timeStr}`;
+                } else if (isYesterday) {
+                    return `Yesterday at ${timeStr}`;
+                } else {
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined }) + ` at ${timeStr}`;
+                }
             }
         };
 
