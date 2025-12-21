@@ -156,6 +156,76 @@
             height: 20px;
         }
 
+        .header-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* Search Container */
+        .search-container {
+            padding: 0 24px 16px;
+            background: var(--paper);
+            border-bottom: 1px solid var(--ink-faint);
+        }
+
+        .search-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: white;
+            border: 1px solid var(--ink-faint);
+            border-radius: 8px;
+            padding: 0 12px;
+            transition: border-color var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .search-input-wrapper:focus-within {
+            border-color: var(--accent);
+        }
+
+        .search-input-wrapper .search-icon {
+            width: 18px;
+            height: 18px;
+            color: var(--ink-faint);
+            flex-shrink: 0;
+        }
+
+        .search-input-wrapper input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 0;
+            font-size: 1rem;
+            font-family: var(--font-body);
+            color: var(--ink);
+            outline: none;
+        }
+
+        .search-input-wrapper input::placeholder {
+            color: var(--ink-faint);
+        }
+
+        .search-clear-btn {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            color: var(--ink-faint);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .search-clear-btn:hover {
+            color: var(--ink);
+        }
+
+        .search-clear-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
         .container {
             max-width: 560px;
             margin: 0 auto;
@@ -1199,6 +1269,14 @@
             <line x1="36" y1="40" x2="48" y2="40"></line>
             <path d="M60 56l8-8v16l-8-8z" fill="currentColor" opacity="0.3"></path>
         </symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </symbol>
     </svg>
 
     <div id="app">
@@ -1268,10 +1346,22 @@
                         <svg><use href="#icon-edit"/></svg>
                     </button>
                 </div>
+                <button class="header-btn" id="search-btn" title="Search">
+                    <svg><use href="#icon-search"/></svg>
+                </button>
                 <button class="header-btn" id="delete-list-btn" title="Delete List">
                     <svg><use href="#icon-trash"/></svg>
                 </button>
             </header>
+            <div id="search-container" class="search-container hidden">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon"><use href="#icon-search"/></svg>
+                    <input type="text" id="search-input" placeholder="Search todos...">
+                    <button class="search-clear-btn hidden" id="search-clear-btn">
+                        <svg><use href="#icon-x"/></svg>
+                    </button>
+                </div>
+            </div>
             <div class="container">
                 <div class="todo-input-container">
                     <input type="text" id="new-todo-input" placeholder="Add a new item...">
@@ -1436,6 +1526,10 @@
             completedCollapsed: true,
             draggedItem: null,
             deferredPrompt: null,
+            allTodos: [],
+            searchTerm: '',
+            searchTimeout: null,
+            searchOpen: false,
 
             async init() {
                 this.bindEvents();
@@ -1569,6 +1663,11 @@
                     if (e.key === 'Escape') this.cancelTitleEdit();
                 });
                 document.getElementById('delete-list-btn').addEventListener('click', () => this.deleteCurrentList());
+
+                // Search
+                document.getElementById('search-btn').addEventListener('click', () => this.toggleSearch());
+                document.getElementById('search-input').addEventListener('input', (e) => this.handleSearchInput(e.target.value));
+                document.getElementById('search-clear-btn').addEventListener('click', () => this.clearSearch());
 
                 document.getElementById('modal-overlay').addEventListener('click', (e) => {
                     if (e.target.id === 'modal-overlay') this.closeModal();
@@ -1707,6 +1806,7 @@
                     window.location.hash = hash;
                 }
                 localStorage.setItem('todos_last_hash', hash);
+                this.resetSearch();
                 this.showScreen('todo');
                 await this.loadTodos();
                 document.getElementById('new-todo-input').focus();
@@ -1821,7 +1921,9 @@
                         parent_id: row[11]
                     }));
 
-                    this.renderTodos(todos);
+                    // Store all todos for search filtering
+                    this.allTodos = todos;
+                    this.applySearchFilter();
                 } catch (e) {
                     console.error('Load todos error:', e);
                 }
@@ -1884,6 +1986,90 @@
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
 
                 this.bindTodoEvents();
+            },
+
+            // Search functionality
+            toggleSearch() {
+                this.searchOpen = !this.searchOpen;
+                const container = document.getElementById('search-container');
+                const btn = document.getElementById('search-btn');
+                const input = document.getElementById('search-input');
+
+                container.classList.toggle('hidden', !this.searchOpen);
+                btn.classList.toggle('active', this.searchOpen);
+
+                if (this.searchOpen) {
+                    input.focus();
+                } else {
+                    this.clearSearch();
+                }
+            },
+
+            handleSearchInput(value) {
+                // Clear existing timeout
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+
+                // Update clear button visibility
+                const clearBtn = document.getElementById('search-clear-btn');
+                clearBtn.classList.toggle('hidden', !value);
+
+                // Debounce: wait 300ms after typing stops
+                this.searchTimeout = setTimeout(() => {
+                    this.searchTerm = value.toLowerCase().trim();
+                    this.applySearchFilter();
+                }, 300);
+            },
+
+            clearSearch() {
+                const input = document.getElementById('search-input');
+                const clearBtn = document.getElementById('search-clear-btn');
+
+                input.value = '';
+                clearBtn.classList.add('hidden');
+                this.searchTerm = '';
+
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+
+                this.applySearchFilter();
+            },
+
+            resetSearch() {
+                // Reset search state when switching lists
+                this.searchOpen = false;
+                this.searchTerm = '';
+                this.allTodos = [];
+
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+
+                const container = document.getElementById('search-container');
+                const btn = document.getElementById('search-btn');
+                const input = document.getElementById('search-input');
+                const clearBtn = document.getElementById('search-clear-btn');
+
+                if (container) container.classList.add('hidden');
+                if (btn) btn.classList.remove('active');
+                if (input) input.value = '';
+                if (clearBtn) clearBtn.classList.add('hidden');
+            },
+
+            applySearchFilter() {
+                let filtered = this.allTodos;
+
+                if (this.searchTerm) {
+                    filtered = this.allTodos.filter(todo => {
+                        const titleMatch = todo.title.toLowerCase().includes(this.searchTerm);
+                        const notesMatch = todo.notes && todo.notes.toLowerCase().includes(this.searchTerm);
+                        return titleMatch || notesMatch;
+                    });
+                }
+
+                this.renderTodos(filtered);
             },
 
             getChecklistStats(notes) {
