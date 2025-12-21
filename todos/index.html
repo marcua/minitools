@@ -2464,9 +2464,9 @@
                 try {
                     let remindAtUTC = 'NULL';
                     if (remindAt) {
-                        // Convert local datetime to UTC
+                        // Convert local datetime to UTC, keep T separator for proper ISO parsing
                         const localDate = new Date(remindAt);
-                        remindAtUTC = `'${localDate.toISOString().slice(0, 19).replace('T', ' ')}'`;
+                        remindAtUTC = `'${localDate.toISOString().slice(0, 19)}'`;
                     }
 
                     const recTypeSQL = recurrenceType ? `'${this.escapeSQL(recurrenceType)}'` : 'NULL';
