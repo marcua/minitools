@@ -940,12 +940,14 @@
         .modal input[type="date"],
         .modal input[type="time"] {
             width: 100%;
+            max-width: 100%;
             padding: 12px;
             font-size: 16px;
             border: 1px solid var(--ink-faint);
             background: white;
             color: var(--ink);
             min-height: 48px;
+            box-sizing: border-box;
         }
 
         .modal select {
