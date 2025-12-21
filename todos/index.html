@@ -1533,7 +1533,7 @@
                 `);
 
                 const result = await this.query('SELECT MAX(version) as version FROM _migrations');
-                const currentVersion = result.rows?.[0]?.[0] ?? 0;
+                let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
 
                 const migrations = [
                     `CREATE TABLE IF NOT EXISTS todo_list (
@@ -1567,9 +1567,23 @@
                     `ALTER TABLE todo_list ADD COLUMN position INTEGER DEFAULT 0`
                 ];
 
+                // Fix corrupted migration state (version higher than actual migrations)
+                if (currentVersion > migrations.length) {
+                    await this.query(`DELETE FROM _migrations WHERE version > ${migrations.length}`);
+                    currentVersion = migrations.length;
+                }
+
                 for (let i = currentVersion; i < migrations.length; i++) {
-                    await this.query(migrations[i]);
-                    await this.query(`INSERT INTO _migrations (version) VALUES (${i + 1})`);
+                    try {
+                        await this.query(migrations[i]);
+                    } catch (e) {
+                        // Ignore "duplicate column" errors for ALTER TABLE migrations
+                        if (!e.message.includes('duplicate column')) {
+                            throw e;
+                        }
+                    }
+                    // Use INSERT OR REPLACE to handle re-running migrations
+                    await this.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
                 }
             }
         };
