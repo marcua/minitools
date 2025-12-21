@@ -1221,24 +1221,16 @@
                     </button>
                 </div>
 
-                <div class="todo-section hidden" id="upcoming-section">
-                    <div class="section-header" id="upcoming-header">
-                        <svg class="arrow"><use href="#icon-chevron"/></svg>
-                        <span>Upcoming (<span id="upcoming-count">0</span>)</span>
-                    </div>
-                    <ul class="todo-list" id="upcoming-todos"></ul>
-                </div>
-
-                <div class="todo-section hidden" id="recurring-section">
-                    <div class="section-header" id="recurring-header">
-                        <svg class="arrow"><use href="#icon-chevron"/></svg>
-                        <span>Recurring (<span id="recurring-count">0</span>)</span>
-                    </div>
-                    <ul class="todo-list" id="recurring-todos"></ul>
-                </div>
-
                 <div class="todo-section" id="active-section">
                     <ul class="todo-list" id="active-todos"></ul>
+                </div>
+
+                <div class="todo-section hidden" id="scheduled-section">
+                    <div class="section-header" id="scheduled-header">
+                        <svg class="arrow"><use href="#icon-chevron"/></svg>
+                        <span>Upcoming / Recurring (<span id="scheduled-count">0</span>)</span>
+                    </div>
+                    <ul class="todo-list" id="scheduled-todos"></ul>
                 </div>
 
                 <div class="todo-section" id="completed-section">
@@ -1509,8 +1501,7 @@
                 document.getElementById('new-todo-input').addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') this.addTodo();
                 });
-                document.getElementById('upcoming-header').addEventListener('click', () => this.toggleSection('upcoming'));
-                document.getElementById('recurring-header').addEventListener('click', () => this.toggleSection('recurring'));
+                document.getElementById('scheduled-header').addEventListener('click', () => this.toggleSection('scheduled'));
                 document.getElementById('completed-header').addEventListener('click', () => this.toggleCompleted());
                 document.getElementById('edit-list-btn').addEventListener('click', () => this.startTitleEdit());
                 document.getElementById('list-title-input').addEventListener('blur', () => this.saveTitleEdit());
@@ -1781,8 +1772,7 @@
                 const now = new Date();
 
                 // Categorize todos
-                const upcomingTodos = [];
-                const recurringTodos = [];
+                const scheduledTodos = []; // upcoming + recurring
                 const activeTodos = [];
                 const completedTodos = [];
 
@@ -1791,11 +1781,11 @@
                         completedTodos.push(t);
                     } else if (t.recurrence_type && !t.parent_id) {
                         // Recurring template (not a spawned copy)
-                        recurringTodos.push(t);
+                        scheduledTodos.push({ ...t, scheduleType: 'recurring' });
                     } else if (t.remind_at) {
                         const remindDate = new Date(t.remind_at + 'Z');
                         if (remindDate > now) {
-                            upcomingTodos.push(t);
+                            scheduledTodos.push({ ...t, scheduleType: 'upcoming' });
                         } else {
                             activeTodos.push(t);
                         }
@@ -1804,30 +1794,32 @@
                     }
                 });
 
-                // Sort upcoming by remind_at date
-                upcomingTodos.sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at));
+                // Sort scheduled: upcoming first (by date), then recurring
+                scheduledTodos.sort((a, b) => {
+                    if (a.scheduleType === 'upcoming' && b.scheduleType === 'recurring') return -1;
+                    if (a.scheduleType === 'recurring' && b.scheduleType === 'upcoming') return 1;
+                    if (a.scheduleType === 'upcoming' && b.scheduleType === 'upcoming') {
+                        return new Date(a.remind_at) - new Date(b.remind_at);
+                    }
+                    return 0;
+                });
 
                 const activeHtml = activeTodos.length > 0
                     ? activeTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('')
-                    : (completedTodos.length === 0 && upcomingTodos.length === 0 && recurringTodos.length === 0 ? `
+                    : (completedTodos.length === 0 && scheduledTodos.length === 0 ? `
                         <div class="empty-state">
                             <svg><use href="#icon-notebook"/></svg>
                             <p>Nothing here yet</p>
                         </div>
                     ` : '');
 
-                // Render upcoming section
-                document.getElementById('upcoming-todos').innerHTML = upcomingTodos.map((t, idx) => this.renderTodoItem(t, idx, 'upcoming')).join('');
-                document.getElementById('upcoming-count').textContent = upcomingTodos.length;
-                document.getElementById('upcoming-section').classList.toggle('hidden', upcomingTodos.length === 0);
-
-                // Render recurring section
-                document.getElementById('recurring-todos').innerHTML = recurringTodos.map((t, idx) => this.renderTodoItem(t, idx, 'recurring')).join('');
-                document.getElementById('recurring-count').textContent = recurringTodos.length;
-                document.getElementById('recurring-section').classList.toggle('hidden', recurringTodos.length === 0);
-
-                // Render active and completed
+                // Render active
                 document.getElementById('active-todos').innerHTML = activeHtml;
+
+                // Render scheduled section (upcoming + recurring)
+                document.getElementById('scheduled-todos').innerHTML = scheduledTodos.map((t, idx) => this.renderTodoItem(t, idx, t.scheduleType)).join('');
+                document.getElementById('scheduled-count').textContent = scheduledTodos.length;
+                document.getElementById('scheduled-section').classList.toggle('hidden', scheduledTodos.length === 0);
                 document.getElementById('completed-todos').innerHTML = completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('');
                 document.getElementById('completed-count').textContent = completedTodos.length;
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
@@ -1960,7 +1952,7 @@
 
             renderNotesPreview(notes, todoId) {
                 if (!notes || !notes.trim()) {
-                    return '<div class="notes-preview empty" data-action="edit-notes">Click to add notes...</div>';
+                    return '<div class="notes-preview empty">No notes yet</div>';
                 }
 
                 const lines = notes.split('\n');
