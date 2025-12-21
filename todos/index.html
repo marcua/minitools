@@ -362,7 +362,6 @@
             background: white;
             padding: 20px 24px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
-            cursor: pointer;
             transition: all var(--duration-normal) var(--ease-out-expo);
             display: flex;
             align-items: center;
@@ -390,6 +389,37 @@
 
         .list-card-content {
             flex: 1;
+            cursor: pointer;
+        }
+
+        .list-drag-handle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            color: var(--ink-faint);
+            cursor: grab;
+            touch-action: none;
+            flex-shrink: 0;
+        }
+
+        .list-drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .list-drag-handle svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .list-card.dragging {
+            opacity: 0.5;
+            background: var(--paper-shadow);
+        }
+
+        .list-card.drag-over {
+            border-top: 2px solid var(--accent);
         }
 
         .list-card h3 {
@@ -408,6 +438,7 @@
         .list-card .arrow {
             color: var(--ink-faint);
             transition: transform var(--duration-fast) var(--ease-out-expo);
+            cursor: pointer;
         }
 
         .list-card:hover .arrow {
@@ -421,6 +452,7 @@
             box-shadow: none;
             justify-content: center;
             color: var(--ink-light);
+            cursor: pointer;
             min-height: 72px;
             font-size: 0.9rem;
         }
@@ -1117,6 +1149,28 @@
             opacity: 1;
         }
 
+        /* Load more button */
+        .load-more-item {
+            list-style: none;
+        }
+
+        .load-more-btn {
+            width: 100%;
+            padding: 16px;
+            background: transparent;
+            border: 1px dashed var(--ink-faint);
+            color: var(--ink-light);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .load-more-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
         /* Install button - mobile only */
         .install-btn {
             display: none;
@@ -1508,7 +1562,9 @@
                     // Migration 6: Add recurrence_value (e.g., "monday,wednesday" or "15" for day of month)
                     `ALTER TABLE todo_list_item ADD COLUMN recurrence_value TEXT DEFAULT NULL`,
                     // Migration 7: Add parent_id for tracking which recurring item spawned this
-                    `ALTER TABLE todo_list_item ADD COLUMN parent_id INTEGER DEFAULT NULL`
+                    `ALTER TABLE todo_list_item ADD COLUMN parent_id INTEGER DEFAULT NULL`,
+                    // Migration 8: Add position column to todo_list for drag-and-drop ordering
+                    `ALTER TABLE todo_list ADD COLUMN position INTEGER DEFAULT 0`
                 ];
 
                 for (let i = currentVersion; i < migrations.length; i++) {
@@ -1530,6 +1586,13 @@
             searchTerm: '',
             searchTimeout: null,
             searchOpen: false,
+            // Pagination for completed items
+            completedOffset: 0,
+            completedPageSize: 100,
+            completedHasMore: false,
+            loadingMoreCompleted: false,
+            // For list drag-and-drop
+            draggedList: null,
 
             async init() {
                 this.bindEvents();
@@ -1714,20 +1777,21 @@
 
                 try {
                     const result = await DB.query(`
-                        SELECT l.id, l.name,
+                        SELECT l.id, l.name, l.position,
                                COUNT(i.id) as total,
                                SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
                         FROM todo_list l
                         LEFT JOIN todo_list_item i ON i.list_id = l.id
                         GROUP BY l.id
-                        ORDER BY l.updated_at DESC
+                        ORDER BY l.position ASC, l.id ASC
                     `);
 
                     const lists = (result.rows || []).map(row => ({
                         id: row[0],
                         name: row[1],
-                        total: row[2] || 0,
-                        pending: row[3] || 0
+                        position: row[2] || 0,
+                        total: row[3] || 0,
+                        pending: row[4] || 0
                     }));
 
                     this.renderLists(lists);
@@ -1741,7 +1805,10 @@
                 const container = document.getElementById('lists-container');
 
                 let html = lists.map((list, idx) => `
-                    <div class="list-card" data-id="${list.id}" style="animation-delay: ${idx * 50}ms">
+                    <div class="list-card" data-id="${list.id}" data-position="${idx}" style="animation-delay: ${idx * 50}ms">
+                        <div class="list-drag-handle" draggable="true">
+                            <svg><use href="#icon-drag"/></svg>
+                        </div>
                         <div class="list-card-content">
                             <h3>${this.escapeHtml(list.name)}</h3>
                             <div class="meta">${list.pending} of ${list.total} remaining</div>
@@ -1760,10 +1827,136 @@
                 container.innerHTML = html;
 
                 container.querySelectorAll('.list-card[data-id]').forEach(card => {
-                    card.addEventListener('click', () => this.openList(parseInt(card.dataset.id)));
+                    // Click on content opens the list
+                    card.querySelector('.list-card-content').addEventListener('click', () => {
+                        this.openList(parseInt(card.dataset.id));
+                    });
+                    card.querySelector('.arrow').addEventListener('click', () => {
+                        this.openList(parseInt(card.dataset.id));
+                    });
                 });
 
                 document.getElementById('add-list-btn').addEventListener('click', () => this.showAddListModal());
+                this.bindListDragEvents();
+            },
+
+            bindListDragEvents() {
+                const container = document.getElementById('lists-container');
+                const cards = container.querySelectorAll('.list-card[data-id]');
+
+                cards.forEach(card => {
+                    const handle = card.querySelector('.list-drag-handle');
+
+                    // Desktop drag events
+                    handle.addEventListener('dragstart', (e) => {
+                        this.draggedList = card;
+                        card.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', card.dataset.id);
+                    });
+
+                    handle.addEventListener('dragend', () => {
+                        this.draggedList = null;
+                        card.classList.remove('dragging');
+                        container.querySelectorAll('.list-card').forEach(c => c.classList.remove('drag-over'));
+                    });
+
+                    card.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        if (!this.draggedList || this.draggedList === card) return;
+                        e.dataTransfer.dropEffect = 'move';
+                        card.classList.add('drag-over');
+                    });
+
+                    card.addEventListener('dragleave', () => {
+                        card.classList.remove('drag-over');
+                    });
+
+                    card.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        card.classList.remove('drag-over');
+                        if (!this.draggedList || this.draggedList === card) return;
+                        this.handleListDrop(this.draggedList, card);
+                    });
+
+                    // Touch events for mobile
+                    handle.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.draggedList = card;
+                        card.classList.add('dragging');
+                        this.listTouchStartY = e.touches[0].clientY;
+                        this.listTouchCurrentY = this.listTouchStartY;
+                    }, { passive: false });
+
+                    handle.addEventListener('touchmove', (e) => {
+                        if (!this.draggedList) return;
+                        e.preventDefault();
+                        this.listTouchCurrentY = e.touches[0].clientY;
+                        const deltaY = this.listTouchCurrentY - this.listTouchStartY;
+                        card.style.transform = `translateY(${deltaY}px)`;
+                        card.style.zIndex = '100';
+
+                        // Find potential drop target
+                        const allCards = Array.from(container.querySelectorAll('.list-card[data-id]'));
+                        allCards.forEach(c => c.classList.remove('drag-over'));
+
+                        const targetCard = allCards.find(c => {
+                            if (c === card) return false;
+                            const rect = c.getBoundingClientRect();
+                            return this.listTouchCurrentY > rect.top && this.listTouchCurrentY < rect.bottom;
+                        });
+
+                        if (targetCard) targetCard.classList.add('drag-over');
+                    }, { passive: false });
+
+                    handle.addEventListener('touchend', () => {
+                        if (!this.draggedList) return;
+                        card.style.transform = '';
+                        card.style.zIndex = '';
+                        card.classList.remove('dragging');
+
+                        const targetCard = container.querySelector('.list-card.drag-over');
+                        if (targetCard) {
+                            targetCard.classList.remove('drag-over');
+                            this.handleListDrop(this.draggedList, targetCard);
+                        }
+
+                        this.draggedList = null;
+                    });
+                });
+            },
+
+            async handleListDrop(draggedCard, targetCard) {
+                const container = document.getElementById('lists-container');
+                const cards = Array.from(container.querySelectorAll('.list-card[data-id]'));
+                const draggedIdx = cards.indexOf(draggedCard);
+                const targetIdx = cards.indexOf(targetCard);
+
+                if (draggedIdx === targetIdx) return;
+
+                // Reorder in DOM
+                if (draggedIdx < targetIdx) {
+                    targetCard.after(draggedCard);
+                } else {
+                    targetCard.before(draggedCard);
+                }
+
+                // Get new order and update positions
+                const newOrder = Array.from(container.querySelectorAll('.list-card[data-id]'))
+                    .map((card, idx) => ({ id: parseInt(card.dataset.id), position: idx }));
+
+                await this.updateListPositions(newOrder);
+            },
+
+            async updateListPositions(order) {
+                try {
+                    for (const item of order) {
+                        await DB.query(`UPDATE todo_list SET position = ${item.position}, updated_at = CURRENT_TIMESTAMP WHERE id = ${item.id}`);
+                    }
+                } catch (e) {
+                    console.error('Update list positions error:', e);
+                    this.loadLists(); // Reload on error
+                }
             },
 
             showAddListModal() {
@@ -1885,7 +2078,7 @@
                 return false;
             },
 
-            async loadTodos() {
+            async loadTodos(loadMoreCompleted = false) {
                 if (!this.currentListId) return;
 
                 try {
@@ -1894,39 +2087,81 @@
                         document.getElementById('list-title').textContent = listResult.rows[0][0];
                     }
 
-                    // Process recurring items first
-                    await this.processRecurrences();
+                    // Process recurring items first (only on initial load)
+                    if (!loadMoreCompleted) {
+                        await this.processRecurrences();
+                        this.completedOffset = 0;
+                    }
 
-                    const result = await DB.query(`
+                    // Build search clause if searching
+                    const searchClause = this.searchTerm
+                        ? ` AND (LOWER(title) LIKE '%${this.escapeSQL(this.searchTerm)}%' OR LOWER(notes) LIKE '%${this.escapeSQL(this.searchTerm)}%')`
+                        : '';
+
+                    // Load active items (not completed) - no pagination needed
+                    if (!loadMoreCompleted) {
+                        const activeResult = await DB.query(`
+                            SELECT id, title, notes, completed, position,
+                                   created_at, updated_at, completed_at,
+                                   remind_at, recurrence_type, recurrence_value, parent_id
+                            FROM todo_list_item
+                            WHERE list_id = ${this.currentListId} AND completed = 0${searchClause}
+                            ORDER BY position ASC, id ASC
+                        `);
+
+                        this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
+                    }
+
+                    // Load completed items with pagination
+                    const completedResult = await DB.query(`
                         SELECT id, title, notes, completed, position,
                                created_at, updated_at, completed_at,
                                remind_at, recurrence_type, recurrence_value, parent_id
                         FROM todo_list_item
-                        WHERE list_id = ${this.currentListId}
-                        ORDER BY position ASC, id ASC
+                        WHERE list_id = ${this.currentListId} AND completed = 1${searchClause}
+                        ORDER BY completed_at DESC, id DESC
+                        LIMIT ${this.completedPageSize + 1} OFFSET ${this.completedOffset}
                     `);
 
-                    const todos = (result.rows || []).map(row => ({
-                        id: row[0],
-                        title: row[1],
-                        notes: row[2] || '',
-                        completed: row[3] == 1,
-                        position: row[4],
-                        created_at: row[5],
-                        updated_at: row[6],
-                        completed_at: row[7],
-                        remind_at: row[8],
-                        recurrence_type: row[9],
-                        recurrence_value: row[10],
-                        parent_id: row[11]
-                    }));
+                    const completedRows = completedResult.rows || [];
+                    // Check if there are more items
+                    this.completedHasMore = completedRows.length > this.completedPageSize;
+                    const completedTodos = completedRows.slice(0, this.completedPageSize).map(row => this.mapTodoRow(row));
 
-                    // Store all todos for search filtering
-                    this.allTodos = todos;
-                    this.applySearchFilter();
+                    if (loadMoreCompleted) {
+                        // Append to existing completed todos
+                        this.allTodos = [...this.allTodos.filter(t => !t.completed), ...this.allTodos.filter(t => t.completed), ...completedTodos];
+                    } else {
+                        // Initial load - combine active and completed
+                        this.allTodos = [...this.allTodos, ...completedTodos];
+                    }
+
+                    this.completedOffset += completedTodos.length;
+                    this.renderTodos(this.allTodos);
                 } catch (e) {
                     console.error('Load todos error:', e);
                 }
+            },
+
+            mapTodoRow(row) {
+                return {
+                    id: row[0],
+                    title: row[1],
+                    notes: row[2] || '',
+                    completed: row[3] == 1,
+                    position: row[4],
+                    created_at: row[5],
+                    updated_at: row[6],
+                    completed_at: row[7],
+                    remind_at: row[8],
+                    recurrence_type: row[9],
+                    recurrence_value: row[10],
+                    parent_id: row[11]
+                };
+            },
+
+            escapeSQL(str) {
+                return str.replace(/'/g, "''").toLowerCase();
             },
 
             renderTodos(todos) {
@@ -1981,11 +2216,40 @@
                 document.getElementById('scheduled-todos').innerHTML = scheduledTodos.map((t, idx) => this.renderTodoItem(t, idx, t.scheduleType)).join('');
                 document.getElementById('scheduled-count').textContent = scheduledTodos.length;
                 document.getElementById('scheduled-section').classList.toggle('hidden', scheduledTodos.length === 0);
-                document.getElementById('completed-todos').innerHTML = completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('');
-                document.getElementById('completed-count').textContent = completedTodos.length;
+
+                // Render completed section with load more button
+                let completedHtml = completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('');
+                if (this.completedHasMore) {
+                    completedHtml += `
+                        <li class="load-more-item">
+                            <button class="load-more-btn" id="load-more-completed">
+                                Load more completed items...
+                            </button>
+                        </li>
+                    `;
+                }
+                document.getElementById('completed-todos').innerHTML = completedHtml;
+                document.getElementById('completed-count').textContent = completedTodos.length + (this.completedHasMore ? '+' : '');
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
 
                 this.bindTodoEvents();
+
+                // Bind load more button
+                const loadMoreBtn = document.getElementById('load-more-completed');
+                if (loadMoreBtn) {
+                    loadMoreBtn.addEventListener('click', () => this.loadMoreCompleted());
+                }
+            },
+
+            async loadMoreCompleted() {
+                if (this.loadingMoreCompleted || !this.completedHasMore) return;
+
+                this.loadingMoreCompleted = true;
+                const btn = document.getElementById('load-more-completed');
+                if (btn) btn.textContent = 'Loading...';
+
+                await this.loadTodos(true);
+                this.loadingMoreCompleted = false;
             },
 
             // Search functionality
@@ -2018,7 +2282,7 @@
                 // Debounce: wait 300ms after typing stops
                 this.searchTimeout = setTimeout(() => {
                     this.searchTerm = value.toLowerCase().trim();
-                    this.applySearchFilter();
+                    this.loadTodos(); // Backend search
                 }, 300);
             },
 
@@ -2034,7 +2298,7 @@
                     clearTimeout(this.searchTimeout);
                 }
 
-                this.applySearchFilter();
+                this.loadTodos(); // Reload without search filter
             },
 
             resetSearch() {
@@ -2056,20 +2320,6 @@
                 if (btn) btn.classList.remove('active');
                 if (input) input.value = '';
                 if (clearBtn) clearBtn.classList.add('hidden');
-            },
-
-            applySearchFilter() {
-                let filtered = this.allTodos;
-
-                if (this.searchTerm) {
-                    filtered = this.allTodos.filter(todo => {
-                        const titleMatch = todo.title.toLowerCase().includes(this.searchTerm);
-                        const notesMatch = todo.notes && todo.notes.toLowerCase().includes(this.searchTerm);
-                        return titleMatch || notesMatch;
-                    });
-                }
-
-                this.renderTodos(filtered);
             },
 
             getChecklistStats(notes) {
