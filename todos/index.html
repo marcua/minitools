@@ -969,6 +969,37 @@
             padding: 12px 16px;
         }
 
+        .days-checklist {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .day-check {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 12px;
+            border: 1px solid var(--ink-faint);
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            user-select: none;
+        }
+
+        .day-check:has(input:checked) {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .day-check input {
+            display: none;
+        }
+
+        .day-check span {
+            font-size: 0.9rem;
+        }
+
         /* Loading & Error */
         .loading {
             text-align: center;
@@ -2432,6 +2463,15 @@
                             <option value="yearly" ${currentRecurrenceType === 'yearly' ? 'selected' : ''}>Yearly</option>
                         </select>
                     </div>
+                    <div class="form-group hidden" id="weekly-days-group">
+                        <label>Days</label>
+                        <div class="days-checklist">
+                            ${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                                const isChecked = currentRecurrenceValue?.toLowerCase().includes(day.toLowerCase().slice(0, 3)) ? 'checked' : '';
+                                return `<label class="day-check"><input type="checkbox" value="${day}" ${isChecked}><span>${day.slice(0, 3)}</span></label>`;
+                            }).join('')}
+                        </div>
+                    </div>
                     <div class="form-group hidden" id="recurrence-value-group">
                         <label id="recurrence-value-label">Details</label>
                         <input type="text" id="schedule-recurrence-value" value="${this.escapeHtml(currentRecurrenceValue)}" placeholder="">
@@ -2445,16 +2485,18 @@
 
                 // Setup recurrence value field toggling
                 const recurrenceSelect = document.getElementById('schedule-recurrence');
+                const weeklyDaysGroup = document.getElementById('weekly-days-group');
                 const recurrenceValueGroup = document.getElementById('recurrence-value-group');
                 const recurrenceValueLabel = document.getElementById('recurrence-value-label');
                 const recurrenceValueInput = document.getElementById('schedule-recurrence-value');
 
                 const updateRecurrenceFields = () => {
                     const type = recurrenceSelect.value;
+                    weeklyDaysGroup.classList.add('hidden');
+                    recurrenceValueGroup.classList.add('hidden');
+
                     if (type === 'weekly') {
-                        recurrenceValueGroup.classList.remove('hidden');
-                        recurrenceValueLabel.textContent = 'Days (e.g., Mon, Wed, Fri)';
-                        recurrenceValueInput.placeholder = 'Monday, Wednesday';
+                        weeklyDaysGroup.classList.remove('hidden');
                     } else if (type === 'monthly') {
                         recurrenceValueGroup.classList.remove('hidden');
                         recurrenceValueLabel.textContent = 'Day of month (1-31, first, last)';
@@ -2463,8 +2505,6 @@
                         recurrenceValueGroup.classList.remove('hidden');
                         recurrenceValueLabel.textContent = 'Date (e.g., Jan 15)';
                         recurrenceValueInput.placeholder = 'January 15';
-                    } else {
-                        recurrenceValueGroup.classList.add('hidden');
                     }
                 };
 
@@ -2486,7 +2526,16 @@
             async saveSchedule(id) {
                 const remindAt = document.getElementById('schedule-remind-at').value;
                 const recurrenceType = document.getElementById('schedule-recurrence').value;
-                const recurrenceValue = document.getElementById('schedule-recurrence-value').value.trim();
+                let recurrenceValue = '';
+
+                if (recurrenceType === 'weekly') {
+                    // Get checked days from checkboxes
+                    const checkedDays = Array.from(document.querySelectorAll('#weekly-days-group input:checked'))
+                        .map(cb => cb.value);
+                    recurrenceValue = checkedDays.join(',');
+                } else {
+                    recurrenceValue = document.getElementById('schedule-recurrence-value').value.trim();
+                }
 
                 try {
                     let remindAtUTC = 'NULL';
