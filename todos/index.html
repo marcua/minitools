@@ -945,6 +945,7 @@
             border: 1px solid var(--ink-faint);
             background: white;
             color: var(--ink);
+            min-height: 48px;
         }
 
         .modal select {
@@ -1282,11 +1283,11 @@
                 </div>
 
                 <div class="todo-section hidden" id="scheduled-section">
-                    <div class="section-header" id="scheduled-header">
+                    <div class="section-header collapsed" id="scheduled-header">
                         <svg class="arrow"><use href="#icon-chevron"/></svg>
                         <span>Upcoming / Recurring (<span id="scheduled-count">0</span>)</span>
                     </div>
-                    <ul class="todo-list" id="scheduled-todos"></ul>
+                    <ul class="todo-list hidden" id="scheduled-todos"></ul>
                 </div>
 
                 <div class="todo-section" id="completed-section">
