@@ -2403,12 +2403,14 @@
                 const currentRecurrenceType = row[1] || '';
                 const currentRecurrenceValue = row[2] || '';
 
-                // Format remind_at for datetime-local input
+                // Format remind_at for date input (just the date part)
                 let remindAtValue = '';
                 if (currentRemindAt) {
                     const d = new Date(currentRemindAt + 'Z');
                     if (!isNaN(d.getTime())) {
-                        remindAtValue = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                        // Get local date in YYYY-MM-DD format
+                        const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+                        remindAtValue = localDate.toISOString().slice(0, 10);
                     }
                 }
 
@@ -2416,7 +2418,7 @@
                     <h2>Schedule</h2>
                     <div class="form-group">
                         <label>Remind me on</label>
-                        <input type="datetime-local" id="schedule-remind-at" value="${remindAtValue}">
+                        <input type="date" id="schedule-remind-at" value="${remindAtValue}">
                         <p class="form-hint">Item will appear in your list on this date</p>
                     </div>
                     <div class="form-divider">— or —</div>
@@ -2489,8 +2491,10 @@
                 try {
                     let remindAtUTC = 'NULL';
                     if (remindAt) {
-                        // Convert local datetime to UTC, keep T separator for proper ISO parsing
-                        const localDate = new Date(remindAt);
+                        // Date input gives YYYY-MM-DD, store as start of that day in UTC
+                        // Parse as local date at midnight, then convert to UTC
+                        const [year, month, day] = remindAt.split('-').map(Number);
+                        const localDate = new Date(year, month - 1, day, 0, 0, 0);
                         remindAtUTC = `'${localDate.toISOString().slice(0, 19)}'`;
                     }
 
