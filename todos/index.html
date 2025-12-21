@@ -1776,15 +1776,30 @@
                 container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
                 try {
-                    const result = await DB.query(`
-                        SELECT l.id, l.name, l.position,
-                               COUNT(i.id) as total,
-                               SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
-                        FROM todo_list l
-                        LEFT JOIN todo_list_item i ON i.list_id = l.id
-                        GROUP BY l.id
-                        ORDER BY l.position ASC, l.id ASC
-                    `);
+                    // Try query with position column (after migration 8)
+                    let result;
+                    try {
+                        result = await DB.query(`
+                            SELECT l.id, l.name, l.position,
+                                   COUNT(i.id) as total,
+                                   SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
+                            FROM todo_list l
+                            LEFT JOIN todo_list_item i ON i.list_id = l.id
+                            GROUP BY l.id
+                            ORDER BY l.position ASC, l.id ASC
+                        `);
+                    } catch (posErr) {
+                        // Fallback for databases without position column yet
+                        result = await DB.query(`
+                            SELECT l.id, l.name, 0 as position,
+                                   COUNT(i.id) as total,
+                                   SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
+                            FROM todo_list l
+                            LEFT JOIN todo_list_item i ON i.list_id = l.id
+                            GROUP BY l.id
+                            ORDER BY l.id ASC
+                        `);
+                    }
 
                     const lists = (result.rows || []).map(row => ({
                         id: row[0],
