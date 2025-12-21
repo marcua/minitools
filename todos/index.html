@@ -911,9 +911,11 @@
 
         .modal {
             background: white;
-            width: 100%;
+            width: calc(100% - 32px);
             max-width: 400px;
-            padding: 32px;
+            padding: 24px;
+            max-height: calc(100vh - 48px);
+            overflow-y: auto;
             animation: modalIn var(--duration-normal) var(--ease-out-expo);
         }
 
@@ -934,14 +936,37 @@
             margin-bottom: 24px;
         }
 
+        .modal input[type="datetime-local"],
+        .modal input[type="date"],
+        .modal input[type="time"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--ink-faint);
+            background: white;
+            color: var(--ink);
+        }
+
+        .modal select {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--ink-faint);
+            background: white;
+            color: var(--ink);
+        }
+
         .modal-actions {
             display: flex;
-            gap: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
             margin-top: 24px;
         }
 
         .modal-actions .btn {
             flex: 1;
+            min-width: 70px;
+            padding: 12px 16px;
         }
 
         /* Loading & Error */
