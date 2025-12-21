@@ -1042,7 +1042,6 @@
         .modal input[type="date"],
         .modal input[type="time"] {
             width: 100%;
-            max-width: 100%;
             padding: 12px;
             font-size: 16px;
             border: 1px solid var(--ink-faint);
@@ -1050,14 +1049,15 @@
             color: var(--ink);
             min-height: 48px;
             box-sizing: border-box;
-            -webkit-appearance: none;
-            appearance: none;
-            border-radius: 4px;
         }
 
         .modal .form-group {
             overflow: hidden;
-            max-width: 100%;
+        }
+
+        .date-input-wrapper {
+            overflow: hidden;
+            border-radius: 4px;
         }
 
         .modal select {
@@ -2927,7 +2927,9 @@
                     <h2>Schedule</h2>
                     <div class="form-group">
                         <label>Remind me on</label>
-                        <input type="date" id="schedule-remind-at" value="${remindAtValue}">
+                        <div class="date-input-wrapper">
+                            <input type="date" id="schedule-remind-at" value="${remindAtValue}">
+                        </div>
                         <p class="form-hint">Item will appear in your list on this date</p>
                     </div>
                     <div class="form-divider">— or —</div>
