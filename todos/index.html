@@ -1569,16 +1569,18 @@
 
                 // Fix corrupted migration state (version higher than actual migrations)
                 if (currentVersion > migrations.length) {
-                    await this.query(`DELETE FROM _migrations WHERE version > ${migrations.length}`);
-                    currentVersion = migrations.length;
+                    // Reset and re-run all migrations (they're idempotent or will be caught)
+                    await this.query(`DELETE FROM _migrations`);
+                    currentVersion = 0;
                 }
 
                 for (let i = currentVersion; i < migrations.length; i++) {
                     try {
                         await this.query(migrations[i]);
                     } catch (e) {
-                        // Ignore "duplicate column" errors for ALTER TABLE migrations
-                        if (!e.message.includes('duplicate column')) {
+                        // Ignore "duplicate column" or "table already exists" errors
+                        const msg = e.message.toLowerCase();
+                        if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
                             throw e;
                         }
                     }
