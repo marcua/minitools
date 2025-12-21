@@ -1049,6 +1049,21 @@
             color: var(--ink);
             min-height: 48px;
             box-sizing: border-box;
+            display: block;
+        }
+
+        /* Fix Safari date input internal sizing */
+        .modal input::-webkit-datetime-edit,
+        .modal input::-webkit-datetime-edit-fields-wrapper,
+        .modal input::-webkit-datetime-edit-text,
+        .modal input::-webkit-datetime-edit-day-field,
+        .modal input::-webkit-datetime-edit-month-field,
+        .modal input::-webkit-datetime-edit-year-field {
+            padding: 0;
+        }
+
+        .modal input::-webkit-date-and-time-value {
+            text-align: left;
         }
 
         .modal .form-group {
