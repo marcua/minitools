@@ -2048,6 +2048,9 @@
             },
 
             async openList(id, updateHash = true) {
+                // Prevent double-loading from hashchange event
+                if (this.currentListId === id && !updateHash) return;
+
                 this.currentListId = id;
                 const hash = `#list/${id}`;
                 if (updateHash) {
@@ -2076,7 +2079,6 @@
                     if (!result.rows?.length) return;
 
                     const today = new Date();
-                    const todayStr = today.toISOString().slice(0, 10);
 
                     for (const row of result.rows) {
                         const [id, title, notes, recType, recValue] = row;
@@ -2084,11 +2086,11 @@
                         // Check if we should spawn today
                         if (!this.shouldSpawnToday(recType, recValue, today)) continue;
 
-                        // Check if we already spawned today
+                        // Check if there's already an incomplete spawned copy (more robust than date check)
                         const existsResult = await DB.query(`
                             SELECT id FROM todo_list_item
                             WHERE parent_id = ${id}
-                              AND DATE(created_at) = '${todayStr}'
+                              AND completed = 0
                         `);
 
                         if (existsResult.rows?.length > 0) continue;
