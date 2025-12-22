@@ -2079,6 +2079,8 @@
                     if (!result.rows?.length) return;
 
                     const today = new Date();
+                    // Get start of today in local time, formatted for SQL comparison
+                    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 19).replace('T', ' ');
 
                     for (const row of result.rows) {
                         const [id, title, notes, recType, recValue] = row;
@@ -2086,11 +2088,13 @@
                         // Check if we should spawn today
                         if (!this.shouldSpawnToday(recType, recValue, today)) continue;
 
-                        // Check if there's already an incomplete spawned copy (more robust than date check)
+                        // Check if there's already a spawned copy that's either:
+                        // 1. Incomplete (not yet done), OR
+                        // 2. Created today (already done today, don't spawn again)
                         const existsResult = await DB.query(`
                             SELECT id FROM todo_list_item
                             WHERE parent_id = ${id}
-                              AND completed = 0
+                              AND (completed = 0 OR created_at >= '${todayStart}')
                         `);
 
                         if (existsResult.rows?.length > 0) continue;
