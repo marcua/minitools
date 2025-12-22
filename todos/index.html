@@ -1018,7 +1018,15 @@
             padding: 24px;
             max-height: calc(100vh - 48px);
             overflow-y: auto;
+            overflow-x: hidden;
             animation: modalIn var(--duration-normal) var(--ease-out-expo);
+        }
+
+        @media (max-width: 400px) {
+            .modal {
+                width: calc(100% - 16px);
+                padding: 16px;
+            }
         }
 
         @keyframes modalIn {
@@ -1049,30 +1057,23 @@
             color: var(--ink);
             min-height: 48px;
             box-sizing: border-box;
-            display: block;
         }
 
-        /* Fix Safari date input internal sizing */
-        .modal input::-webkit-datetime-edit,
-        .modal input::-webkit-datetime-edit-fields-wrapper,
-        .modal input::-webkit-datetime-edit-text,
-        .modal input::-webkit-datetime-edit-day-field,
-        .modal input::-webkit-datetime-edit-month-field,
-        .modal input::-webkit-datetime-edit-year-field {
-            padding: 0;
-        }
-
-        .modal input::-webkit-date-and-time-value {
-            text-align: left;
-        }
-
-        .modal .form-group {
-            overflow: hidden;
-        }
-
+        /* Wrapper to clip oversized iOS date picker */
         .date-input-wrapper {
+            display: block;
+            width: 100%;
+            max-width: 100%;
             overflow: hidden;
+            border: 1px solid var(--ink-faint);
             border-radius: 4px;
+            background: white;
+        }
+
+        .date-input-wrapper input[type="date"] {
+            border: none;
+            width: 100%;
+            min-width: 0;
         }
 
         .modal select {
