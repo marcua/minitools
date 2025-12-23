@@ -2125,15 +2125,21 @@
                 }
 
                 if (recType === 'monthly' && recValue) {
-                    const val = recValue.toLowerCase().trim();
-                    if (val === 'first' || val === '1') return dayOfMonth === 1;
-                    if (val === 'last') return dayOfMonth === lastDayOfMonth;
-                    const num = parseInt(val);
-                    if (!isNaN(num)) return dayOfMonth === num;
+                    // Split by comma or space to support multiple days (e.g., "1, 15" or "1 15")
+                    const values = recValue.toLowerCase().split(/[,\s]+/).map(v => v.trim()).filter(Boolean);
+                    return values.some(val => {
+                        if (val === 'first' || val === '1') return dayOfMonth === 1;
+                        if (val === 'last') return dayOfMonth === lastDayOfMonth;
+                        const num = parseInt(val);
+                        if (!isNaN(num)) return dayOfMonth === num;
+                        return false;
+                    });
                 }
 
                 if (recType === 'yearly' && recValue) {
-                    return monthDay.includes(recValue.toLowerCase().trim());
+                    // Split by comma to support multiple dates (e.g., "Jan 1, Jul 4")
+                    const values = recValue.toLowerCase().split(',').map(v => v.trim()).filter(Boolean);
+                    return values.some(val => monthDay.includes(val));
                 }
 
                 return false;
@@ -3001,12 +3007,12 @@
                         weeklyDaysGroup.classList.remove('hidden');
                     } else if (type === 'monthly') {
                         recurrenceValueGroup.classList.remove('hidden');
-                        recurrenceValueLabel.textContent = 'Day of month (1-31, first, last)';
-                        recurrenceValueInput.placeholder = '1 or first or last';
+                        recurrenceValueLabel.textContent = 'Day(s) of month';
+                        recurrenceValueInput.placeholder = '1, 15 or first, last';
                     } else if (type === 'yearly') {
                         recurrenceValueGroup.classList.remove('hidden');
-                        recurrenceValueLabel.textContent = 'Date (e.g., Jan 15)';
-                        recurrenceValueInput.placeholder = 'January 15';
+                        recurrenceValueLabel.textContent = 'Date(s)';
+                        recurrenceValueInput.placeholder = 'Jan 1, Jul 4';
                     }
                 };
 
