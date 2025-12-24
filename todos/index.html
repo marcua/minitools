@@ -1376,6 +1376,17 @@
             </div>
         </div>
 
+        <!-- Connection Error Screen -->
+        <div id="error-screen" class="setup-screen hidden">
+            <div class="setup-content">
+                <h2>Connection Failed</h2>
+                <p class="subtitle">Could not connect to the database. Check your internet connection and try again.</p>
+                <p id="error-details" class="error-msg"></p>
+                <button class="btn" id="retry-btn">Try Again</button>
+                <button class="btn btn-secondary" id="reconnect-btn" style="margin-top: 12px;">Use Different Database</button>
+            </div>
+        </div>
+
         <!-- Lists Screen -->
         <div id="lists-screen" class="hidden">
             <header class="header">
@@ -1639,17 +1650,51 @@
                 this.initInstallPrompt();
 
                 if (DB.init()) {
-                    try {
-                        await DB.runMigrations();
-                        await this.handleRoute();
-                    } catch (e) {
-                        console.error('Init error:', e);
-                        DB.clearConfig();
-                        this.showScreen('setup');
-                    }
+                    await this.tryConnect();
                 } else {
                     this.showScreen('setup');
                 }
+            },
+
+            async tryConnect() {
+                try {
+                    await DB.runMigrations();
+                    await this.handleRoute();
+                } catch (e) {
+                    console.error('Connection error:', e);
+                    // Don't clear config - show error screen with retry option
+                    this.showConnectionError(e.message);
+                }
+            },
+
+            showConnectionError(message) {
+                const details = document.getElementById('error-details');
+                if (details) {
+                    details.textContent = message || 'Unable to reach the server';
+                    details.classList.toggle('hidden', !message);
+                }
+                this.showScreen('error');
+            },
+
+            async retryConnection() {
+                const retryBtn = document.getElementById('retry-btn');
+                retryBtn.disabled = true;
+                retryBtn.textContent = 'Connecting...';
+
+                try {
+                    await this.tryConnect();
+                } finally {
+                    retryBtn.disabled = false;
+                    retryBtn.textContent = 'Try Again';
+                }
+            },
+
+            reconnectWithNewDatabase() {
+                // Only clear config when user explicitly wants to use different credentials
+                DB.clearConfig();
+                document.getElementById('ayb-url').value = '';
+                document.getElementById('ayb-token').value = '';
+                this.showScreen('setup');
             },
 
             // PWA Install handling
@@ -1745,6 +1790,10 @@
                 document.getElementById('ayb-token').addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') this.handleSetup();
                 });
+
+                // Connection error screen buttons
+                document.getElementById('retry-btn').addEventListener('click', () => this.retryConnection());
+                document.getElementById('reconnect-btn').addEventListener('click', () => this.reconnectWithNewDatabase());
 
                 document.getElementById('settings-btn').addEventListener('click', () => this.showSettings());
                 document.getElementById('install-btn').addEventListener('click', () => this.handleInstallClick());
