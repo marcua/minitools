@@ -1690,8 +1690,8 @@
             },
 
             reconnectWithNewDatabase() {
-                // Only clear config when user explicitly wants to use different credentials
-                DB.clearConfig();
+                // Don't clear config yet - only clear on successful new connection
+                // Clear form fields so user can enter new credentials
                 document.getElementById('ayb-url').value = '';
                 document.getElementById('ayb-token').value = '';
                 this.showScreen('setup');
@@ -1839,6 +1839,9 @@
                     return;
                 }
 
+                // Save old config in case new connection fails
+                const oldConfig = DB.config ? { ...DB.config } : null;
+
                 try {
                     errorEl.classList.add('hidden');
                     document.getElementById('setup-btn').disabled = true;
@@ -1847,13 +1850,20 @@
                     DB.saveConfig(url, token);
                     await DB.runMigrations();
 
+                    // Success - new config is already saved
                     this.showScreen('lists');
                     await this.loadLists();
                 } catch (e) {
                     console.error('Setup error:', e);
                     errorEl.textContent = e.message;
                     errorEl.classList.remove('hidden');
-                    DB.clearConfig();
+                    // Restore old config so user doesn't lose their credentials
+                    if (oldConfig) {
+                        DB.config = oldConfig;
+                        localStorage.setItem('ayb_config', JSON.stringify(oldConfig));
+                    } else {
+                        DB.clearConfig();
+                    }
                 } finally {
                     document.getElementById('setup-btn').disabled = false;
                     document.getElementById('setup-btn').textContent = 'Connect';
