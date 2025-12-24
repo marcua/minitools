@@ -1379,11 +1379,11 @@
         <!-- Connection Error Screen -->
         <div id="error-screen" class="setup-screen hidden">
             <div class="setup-content">
-                <h2>Connection Failed</h2>
+                <h2>Connection failed</h2>
                 <p class="subtitle">Could not connect to the database. Check your internet connection and try again.</p>
                 <p id="error-details" class="error-msg"></p>
-                <button class="btn" id="retry-btn">Try Again</button>
-                <button class="btn btn-secondary" id="reconnect-btn" style="margin-top: 12px;">Use Different Database</button>
+                <button class="btn" id="retry-btn">Try again</button>
+                <button class="btn btn-secondary" id="reconnect-btn" style="margin-top: 12px;">Use different database</button>
             </div>
         </div>
 
@@ -1685,7 +1685,7 @@
                     await this.tryConnect();
                 } finally {
                     retryBtn.disabled = false;
-                    retryBtn.textContent = 'Try Again';
+                    retryBtn.textContent = 'Try again';
                 }
             },
 
