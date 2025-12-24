@@ -3244,8 +3244,8 @@
                     <h2>Settings</h2>
                     <p style="color: var(--ink-light); margin-bottom: 20px; font-size: 0.9rem;">Connected to: ${this.escapeHtml(DB.config?.baseUrl || 'Unknown')}</p>
                     <div class="modal-actions">
-                        <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
-                        <button class="btn btn-danger" onclick="App.disconnect()">Disconnect</button>
+                        <button class="btn btn-secondary" onclick="App.disconnect()">Disconnect</button>
+                        <button class="btn" onclick="App.closeModal()">Close</button>
                     </div>
                 `);
             },
