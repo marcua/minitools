@@ -1,0 +1,118 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+      - '**'
+  delete:
+    branches:
+      - '**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Don't run on delete events for main branch
+    if: github.event_name != 'delete' || github.event.ref != 'main'
+
+    steps:
+      - name: Checkout repository
+        if: github.event_name != 'delete'
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Determine deployment path
+        id: deploy-path
+        run: |
+          if [ "${{ github.event_name }}" = "delete" ]; then
+            # Branch deletion event
+            BRANCH_NAME="${{ github.event.ref }}"
+            SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+            echo "action=delete" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # Main branch - deploy to root
+            echo "action=deploy" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}" >> $GITHUB_OUTPUT
+            echo "is_main=true" >> $GITHUB_OUTPUT
+          else
+            # Other branches - deploy to staging
+            BRANCH_NAME="${{ github.ref_name }}"
+            SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+            echo "action=deploy" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "is_main=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Delete staging directory (branch deletion)
+        if: steps.deploy-path.outputs.action == 'delete'
+        run: |
+          echo "🗑️ Deleting staging directory for branch: ${{ steps.deploy-path.outputs.staging_name }}"
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "rm -rf '${{ steps.deploy-path.outputs.path }}'"
+          echo "✅ Deleted: ${{ steps.deploy-path.outputs.path }}"
+
+          # GitHub Job Summary
+          echo "## 🗑️ Staging Directory Deleted" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.event.ref }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Staging Name | \`${{ steps.deploy-path.outputs.staging_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deleted Path | \`${{ steps.deploy-path.outputs.path }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Rsync to server
+        if: steps.deploy-path.outputs.action == 'deploy'
+        run: |
+          # Ensure target directory exists
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
+
+          # Rsync with delete to mirror the repo exactly
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            ./ \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
+
+      - name: Print deployment URL
+        if: steps.deploy-path.outputs.action == 'deploy'
+        run: |
+          if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
+            DEPLOY_URL="${{ secrets.SITE_URL }}"
+            DEPLOY_TYPE="Production"
+          else
+            DEPLOY_URL="${{ secrets.SITE_URL }}/_staging/${{ steps.deploy-path.outputs.staging_name }}"
+            DEPLOY_TYPE="Staging"
+          fi
+
+          # Console output
+          echo ""
+          echo "========================================"
+          echo "🚀 DEPLOYMENT COMPLETE"
+          echo "========================================"
+          echo ""
+          echo "📍 ${DEPLOY_TYPE} URL:"
+          echo "   ${DEPLOY_URL}"
+          echo ""
+          echo "========================================"
+
+          # GitHub Job Summary (prominent display in Actions UI)
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**${DEPLOY_TYPE} URL:** [${DEPLOY_URL}](${DEPLOY_URL})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Path | \`${{ steps.deploy-path.outputs.path }}\` |" >> $GITHUB_STEP_SUMMARY
