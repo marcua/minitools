@@ -27,6 +27,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
+          # Configure SSH to use this key for the host
+          cat >> ~/.ssh/config << EOF
+          Host ${{ secrets.SSH_HOST }}
+            IdentityFile ~/.ssh/deploy_key
+            User ${{ secrets.SSH_USER }}
+          EOF
+          chmod 600 ~/.ssh/config
+
       - name: Determine deployment path
         id: deploy-path
         run: |
@@ -56,8 +64,7 @@ jobs:
         if: steps.deploy-path.outputs.action == 'delete'
         run: |
           echo "🗑️ Deleting staging directory for branch: ${{ steps.deploy-path.outputs.staging_name }}"
-          ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "rm -rf '${{ steps.deploy-path.outputs.path }}'"
+          ssh ${{ secrets.SSH_HOST }} "rm -rf '${{ steps.deploy-path.outputs.path }}'"
           echo "✅ Deleted: ${{ steps.deploy-path.outputs.path }}"
 
           # GitHub Job Summary
@@ -73,16 +80,14 @@ jobs:
         if: steps.deploy-path.outputs.action == 'deploy'
         run: |
           # Ensure target directory exists
-          ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
+          ssh ${{ secrets.SSH_HOST }} "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
 
           # Rsync with delete to mirror the repo exactly
           rsync -avz --delete \
             --exclude '.git' \
             --exclude '.github' \
-            -e "ssh -i ~/.ssh/deploy_key" \
             ./ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
+            ${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
 
       - name: Print deployment URL
         if: steps.deploy-path.outputs.action == 'deploy'
