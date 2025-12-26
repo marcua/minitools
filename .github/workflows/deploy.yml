@@ -93,10 +93,10 @@ jobs:
         if: steps.deploy-path.outputs.action == 'deploy'
         run: |
           if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
-            DEPLOY_URL="${{ secrets.SITE_URL }}"
+            DEPLOY_URL="${{ vars.SITE_URL }}"
             DEPLOY_TYPE="Production"
           else
-            DEPLOY_URL="${{ secrets.SITE_URL }}/_staging/${{ steps.deploy-path.outputs.staging_name }}"
+            DEPLOY_URL="${{ vars.SITE_URL }}/_staging/${{ steps.deploy-path.outputs.staging_name }}"
             DEPLOY_TYPE="Staging"
           fi
 
