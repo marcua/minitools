@@ -12,9 +12,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ github.event_name == 'delete' && 'cleanup' || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
-      url: ${{ steps.deploy-path.outputs.url }}
     # Don't run on delete events for main branch
     if: github.event_name != 'delete' || github.event.ref != 'main'
 
@@ -53,7 +50,6 @@ jobs:
             echo "action=deploy" >> $GITHUB_OUTPUT
             echo "path=${{ secrets.DEPLOY_BASE_PATH }}" >> $GITHUB_OUTPUT
             echo "is_main=true" >> $GITHUB_OUTPUT
-            echo "url=https://marcua.net/minitools" >> $GITHUB_OUTPUT
           else
             # Other branches - deploy to staging
             BRANCH_NAME="${{ github.ref_name }}"
@@ -62,67 +58,41 @@ jobs:
             echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "is_main=false" >> $GITHUB_OUTPUT
-            echo "url=https://marcua.net/minitools/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
           fi
 
       - name: Delete staging directory (branch deletion)
         if: steps.deploy-path.outputs.action == 'delete'
         run: |
-          echo "🗑️ Deleting staging directory for branch: ${{ steps.deploy-path.outputs.staging_name }}"
           ssh ${{ secrets.SSH_HOST }} "rm -rf '${{ steps.deploy-path.outputs.path }}'"
-          echo "✅ Deleted: ${{ steps.deploy-path.outputs.path }}"
 
-          # GitHub Job Summary
           echo "## 🗑️ Staging Directory Deleted" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | \`${{ github.event.ref }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Staging Name | \`${{ steps.deploy-path.outputs.staging_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deleted Path | \`${{ steps.deploy-path.outputs.path }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "Branch \`${{ github.event.ref }}\` was deleted." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Staging directory \`${{ steps.deploy-path.outputs.staging_name }}\` has been removed from the server." >> $GITHUB_STEP_SUMMARY
 
       - name: Rsync to server
         if: steps.deploy-path.outputs.action == 'deploy'
         run: |
-          # Ensure target directory exists
           ssh ${{ secrets.SSH_HOST }} "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
 
-          # Rsync with delete to mirror the repo exactly
           rsync -avz --delete \
             --exclude '.git' \
             --exclude '.github' \
             ./ \
             ${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
 
-      - name: Print deployment URL
+      - name: Print deployment info
         if: steps.deploy-path.outputs.action == 'deploy'
         run: |
-          if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
-            DEPLOY_URL="https://marcua.net/minitools"
-            DEPLOY_TYPE="Production"
-          else
-            DEPLOY_URL="https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}"
-            DEPLOY_TYPE="Staging"
-          fi
-
-          # Console output
-          echo ""
-          echo "========================================"
-          echo "🚀 DEPLOYMENT COMPLETE"
-          echo "========================================"
-          echo ""
-          echo "📍 ${DEPLOY_TYPE} URL:"
-          echo "   ${DEPLOY_URL}"
-          echo ""
-          echo "========================================"
-
-          # GitHub Job Summary (prominent display in Actions UI)
           echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**${DEPLOY_TYPE} URL:** [${DEPLOY_URL}](${DEPLOY_URL})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deploy Path | \`${{ steps.deploy-path.outputs.path }}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
+            echo "**Production** deployment from \`main\` branch." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "View at: https://marcua.net/minitools" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Staging** deployment from \`${{ github.ref_name }}\` branch." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "View at: https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}" >> $GITHUB_STEP_SUMMARY
+          fi
