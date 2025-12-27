@@ -28,11 +28,11 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ vars.SSH_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
           # Configure SSH to use this key for the host
           cat >> ~/.ssh/config << EOF
-          Host ${{ vars.SSH_HOST }}
+          Host ${{ secrets.SSH_HOST }}
             IdentityFile ~/.ssh/deploy_key
             User ${{ secrets.SSH_USER }}
           EOF
@@ -46,30 +46,30 @@ jobs:
             BRANCH_NAME="${{ github.event.ref }}"
             SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
             echo "action=delete" >> $GITHUB_OUTPUT
-            echo "path=${{ vars.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
             # Main branch - deploy to root
             echo "action=deploy" >> $GITHUB_OUTPUT
-            echo "path=${{ vars.DEPLOY_BASE_PATH }}" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}" >> $GITHUB_OUTPUT
             echo "is_main=true" >> $GITHUB_OUTPUT
-            echo "url=${{ vars.SITE_URL }}" >> $GITHUB_OUTPUT
+            echo "url=https://marcua.net/minitools" >> $GITHUB_OUTPUT
           else
             # Other branches - deploy to staging
             BRANCH_NAME="${{ github.ref_name }}"
             SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
             echo "action=deploy" >> $GITHUB_OUTPUT
-            echo "path=${{ vars.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "is_main=false" >> $GITHUB_OUTPUT
-            echo "url=${{ vars.SITE_URL }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "url=https://marcua.net/minitools/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
           fi
 
       - name: Delete staging directory (branch deletion)
         if: steps.deploy-path.outputs.action == 'delete'
         run: |
           echo "🗑️ Deleting staging directory for branch: ${{ steps.deploy-path.outputs.staging_name }}"
-          ssh ${{ vars.SSH_HOST }} "rm -rf '${{ steps.deploy-path.outputs.path }}'"
+          ssh ${{ secrets.SSH_HOST }} "rm -rf '${{ steps.deploy-path.outputs.path }}'"
           echo "✅ Deleted: ${{ steps.deploy-path.outputs.path }}"
 
           # GitHub Job Summary
@@ -85,23 +85,23 @@ jobs:
         if: steps.deploy-path.outputs.action == 'deploy'
         run: |
           # Ensure target directory exists
-          ssh ${{ vars.SSH_HOST }} "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
+          ssh ${{ secrets.SSH_HOST }} "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
 
           # Rsync with delete to mirror the repo exactly
           rsync -avz --delete \
             --exclude '.git' \
             --exclude '.github' \
             ./ \
-            ${{ vars.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
+            ${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
 
       - name: Print deployment URL
         if: steps.deploy-path.outputs.action == 'deploy'
         run: |
           if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
-            DEPLOY_URL="${{ vars.SITE_URL }}"
+            DEPLOY_URL="https://marcua.net/minitools"
             DEPLOY_TYPE="Production"
           else
-            DEPLOY_URL="${{ vars.SITE_URL }}/_staging/${{ steps.deploy-path.outputs.staging_name }}"
+            DEPLOY_URL="https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}"
             DEPLOY_TYPE="Staging"
           fi
 
