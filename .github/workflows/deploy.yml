@@ -12,6 +12,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'delete' && 'cleanup' || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+      url: ${{ steps.deploy-path.outputs.url }}
     # Don't run on delete events for main branch
     if: github.event_name != 'delete' || github.event.ref != 'main'
 
@@ -50,6 +53,7 @@ jobs:
             echo "action=deploy" >> $GITHUB_OUTPUT
             echo "path=${{ secrets.DEPLOY_BASE_PATH }}" >> $GITHUB_OUTPUT
             echo "is_main=true" >> $GITHUB_OUTPUT
+            echo "url=${{ vars.SITE_URL }}" >> $GITHUB_OUTPUT
           else
             # Other branches - deploy to staging
             BRANCH_NAME="${{ github.ref_name }}"
@@ -58,6 +62,7 @@ jobs:
             echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
             echo "is_main=false" >> $GITHUB_OUTPUT
+            echo "url=${{ vars.SITE_URL }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
           fi
 
       - name: Delete staging directory (branch deletion)
