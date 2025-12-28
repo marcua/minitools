@@ -96,3 +96,40 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "View at: https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}" >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Comment on PR with staging URL
+        if: steps.deploy-path.outputs.action == 'deploy' && steps.deploy-path.outputs.is_main != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find PR for this branch
+          PR_NUMBER=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR found for branch ${{ github.ref_name }}, skipping comment"
+            exit 0
+          fi
+
+          DEPLOY_URL="https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}"
+          COMMENT_MARKER="<!-- staging-deploy-comment -->"
+          COMMENT_BODY="${COMMENT_MARKER}
+          🚀 **Staging deployment ready!**
+
+          $DEPLOY_URL
+
+          _Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Commit: ${{ github.sha }}_"
+
+          # Check for existing comment with our marker
+          EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${COMMENT_MARKER}\")) | .id" | head -1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            # Update existing comment
+            gh api "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -X PATCH -f body="$COMMENT_BODY"
+            echo "Updated existing comment"
+          else
+            # Create new comment
+            gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
+            echo "Created new comment"
+          fi
