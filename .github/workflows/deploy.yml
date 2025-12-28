@@ -1,0 +1,141 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+      - '**'
+  delete:
+    branches:
+      - '**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    # Don't run on delete events for main branch
+    if: github.event_name != 'delete' || github.event.ref != 'main'
+
+    steps:
+      - name: Checkout repository
+        if: github.event_name != 'delete'
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+          # Configure SSH to use this key for the host
+          cat >> ~/.ssh/config << EOF
+          Host ${{ secrets.SSH_HOST }}
+            IdentityFile ~/.ssh/deploy_key
+            User ${{ secrets.SSH_USER }}
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Determine deployment path
+        id: deploy-path
+        run: |
+          if [ "${{ github.event_name }}" = "delete" ]; then
+            # Branch deletion event
+            BRANCH_NAME="${{ github.event.ref }}"
+            SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+            echo "action=delete" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # Main branch - deploy to root
+            echo "action=deploy" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}" >> $GITHUB_OUTPUT
+            echo "is_main=true" >> $GITHUB_OUTPUT
+          else
+            # Other branches - deploy to staging
+            BRANCH_NAME="${{ github.ref_name }}"
+            SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+            echo "action=deploy" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.DEPLOY_BASE_PATH }}/_staging/${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "staging_name=${SANITIZED_BRANCH}" >> $GITHUB_OUTPUT
+            echo "is_main=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Delete staging directory (branch deletion)
+        if: steps.deploy-path.outputs.action == 'delete'
+        run: |
+          ssh ${{ secrets.SSH_HOST }} "rm -rf '${{ steps.deploy-path.outputs.path }}'"
+
+          echo "## 🗑️ Staging Directory Deleted" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Branch \`${{ github.event.ref }}\` was deleted." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Staging directory \`${{ steps.deploy-path.outputs.staging_name }}\` has been removed from the server." >> $GITHUB_STEP_SUMMARY
+
+      - name: Rsync to server
+        if: steps.deploy-path.outputs.action == 'deploy'
+        run: |
+          ssh ${{ secrets.SSH_HOST }} "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
+
+          RSYNC_OPTS="-avz --delete --exclude '.git' --exclude '.github'"
+
+          # Protect staging subdirectories when deploying main
+          if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
+            RSYNC_OPTS="$RSYNC_OPTS --filter='P _staging/*'"
+          fi
+
+          eval rsync $RSYNC_OPTS ./ "${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/"
+
+      - name: Print deployment info
+        if: steps.deploy-path.outputs.action == 'deploy'
+        run: |
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
+            echo "**Production** deployment from \`main\` branch." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "View at: https://marcua.net/minitools" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Staging** deployment from \`${{ github.ref_name }}\` branch." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "View at: https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR with staging URL
+        if: steps.deploy-path.outputs.action == 'deploy' && steps.deploy-path.outputs.is_main != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find PR for this branch
+          PR_NUMBER=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR found for branch ${{ github.ref_name }}, skipping comment"
+            exit 0
+          fi
+
+          DEPLOY_URL="https://marcua.net/minitools/_staging/${{ steps.deploy-path.outputs.staging_name }}"
+          COMMENT_MARKER="<!-- staging-deploy-comment -->"
+          COMMENT_BODY="${COMMENT_MARKER}
+          🚀 **Staging deployment ready!**
+
+          $DEPLOY_URL
+
+          _Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Commit: ${{ github.sha }}_"
+
+          # Check for existing comment with our marker
+          EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${COMMENT_MARKER}\")) | .id" | head -1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            # Update existing comment
+            gh api "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -X PATCH -f body="$COMMENT_BODY"
+            echo "Updated existing comment"
+          else
+            # Create new comment
+            gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
+            echo "Created new comment"
+          fi
