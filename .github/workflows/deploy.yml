@@ -23,7 +23,7 @@ jobs:
         if: github.event_name != 'delete'
         uses: actions/checkout@v4
 
-      - name: Setup SSH
+      - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
