@@ -79,11 +79,14 @@ jobs:
         run: |
           ssh ${{ secrets.SSH_HOST }} "mkdir -p '${{ steps.deploy-path.outputs.path }}'"
 
-          rsync -avz --delete \
-            --exclude '.git' \
-            --exclude '.github' \
-            ./ \
-            ${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/
+          RSYNC_OPTS="-avz --delete --exclude '.git' --exclude '.github'"
+
+          # Protect staging subdirectories when deploying main
+          if [ "${{ steps.deploy-path.outputs.is_main }}" = "true" ]; then
+            RSYNC_OPTS="$RSYNC_OPTS --filter='P _staging/*'"
+          fi
+
+          eval rsync $RSYNC_OPTS ./ "${{ secrets.SSH_HOST }}:${{ steps.deploy-path.outputs.path }}/"
 
       - name: Print deployment info
         if: steps.deploy-path.outputs.action == 'deploy'
