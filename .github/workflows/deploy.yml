@@ -12,6 +12,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     # Don't run on delete events for main branch
     if: github.event_name != 'delete' || github.event.ref != 'main'
 
