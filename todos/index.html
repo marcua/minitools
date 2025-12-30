@@ -2126,13 +2126,14 @@
                 if (!this.currentListId) return;
 
                 try {
-                    // Get recurring templates (items with recurrence_type but no parent_id)
+                    // Get active recurring templates (not completed, has recurrence_type, no parent_id)
                     const result = await DB.query(`
                         SELECT id, title, notes, recurrence_type, recurrence_value
                         FROM todo_list_item
                         WHERE list_id = ${this.currentListId}
                           AND recurrence_type IS NOT NULL
                           AND parent_id IS NULL
+                          AND completed = 0
                     `);
 
                     if (!result.rows?.length) return;
