@@ -476,6 +476,41 @@
         let timerInterval = null;
         let totalSeconds = 0;
         let timerEndTime = 0;  // Timestamp when timer should end
+        let wakeLock = null;   // Screen wake lock to prevent dimming
+
+        // Request wake lock to prevent screen dimming during timer
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => {
+                        wakeLock = null;
+                    });
+                } catch (err) {
+                    // Wake lock request failed (e.g., low battery, tab not visible)
+                    console.log('Wake lock request failed:', err.message);
+                }
+            }
+        }
+
+        // Release wake lock when timer is done
+        async function releaseWakeLock() {
+            if (wakeLock !== null) {
+                try {
+                    await wakeLock.release();
+                    wakeLock = null;
+                } catch (err) {
+                    console.log('Wake lock release failed:', err.message);
+                }
+            }
+        }
+
+        // Re-acquire wake lock when page becomes visible again (if timer is running)
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible' && timerInterval !== null) {
+                await requestWakeLock();
+            }
+        });
 
         // Simple audio setup - create element once, reuse it
         const quackSound = new Audio(DUCK_QUACK_BASE64);
@@ -586,6 +621,7 @@
         function startTimer(minutes) {
             totalSeconds = minutes * 60;
             timerEndTime = Date.now() + (totalSeconds * 1000);  // Calculate end timestamp
+            requestWakeLock();  // Prevent screen from dimming during timer
 
             // Pick random theme and pattern
             const theme = colorThemes[Math.floor(Math.random() * colorThemes.length)];
@@ -651,6 +687,7 @@
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
+            releaseWakeLock();  // Allow screen to dim again
 
             document.getElementById('timerScreen').style.display = 'none';
             document.getElementById('timerEmpty').style.height = '0%';
@@ -665,6 +702,7 @@
 
         function dismissAlarm() {
             stopQuacking();
+            releaseWakeLock();  // Allow screen to dim again
             document.getElementById('alarmScreen').style.display = 'none';
             document.getElementById('timerEmpty').style.height = '0%';
             document.getElementById('setupScreen').style.display = 'block';
