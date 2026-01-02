@@ -1,8 +1,9 @@
-const CACHE_NAME = 'streaks-v8';
+const CACHE_NAME = 'streaks-v9';
 const ASSETS = [
     './',
     './index.html',
-    './manifest.json'
+    './manifest.json',
+    './icon.svg'
 ];
 
 // Install - cache assets
