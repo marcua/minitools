@@ -321,8 +321,12 @@
             grid-auto-flow: column;
             grid-auto-columns: min-content;
             gap: 2px;
-            overflow-x: auto;
-            padding-bottom: 4px;
+        }
+
+        /* Smaller cells for daily grid to fit ~54 weeks */
+        .streak-grid.daily .streak-cell {
+            width: 8px;
+            height: 8px;
         }
 
         .streak-cell {
@@ -513,6 +517,17 @@
 
         .archived-goals {
             margin-top: 1rem;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 480px) {
+            .streak-grid.daily {
+                gap: 1px;
+            }
+            .streak-grid.daily .streak-cell {
+                width: 5px;
+                height: 5px;
+            }
         }
     </style>
 </head>
