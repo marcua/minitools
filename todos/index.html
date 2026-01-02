@@ -2199,7 +2199,27 @@
                 if (recType === 'yearly' && recValue) {
                     // Split by comma to support multiple dates (e.g., "Jan 1, Jul 4")
                     const values = recValue.toLowerCase().split(',').map(v => v.trim()).filter(Boolean);
-                    return values.some(val => monthDay.includes(val));
+                    const currentMonth = today.toLocaleDateString('en-US', { month: 'long' }).toLowerCase();
+                    const currentDay = today.getDate();
+
+                    const months = ['january', 'february', 'march', 'april', 'may', 'june',
+                                   'july', 'august', 'september', 'october', 'november', 'december'];
+
+                    return values.some(val => {
+                        // Parse "Jan 1" or "January 1" format - extract month name and day number
+                        const match = val.match(/^([a-z]+)\s*(\d+)$/);
+                        if (!match) return false;
+
+                        const [, monthInput, dayInput] = match;
+                        const dayNum = parseInt(dayInput);
+
+                        // Check if day matches
+                        if (dayNum !== currentDay) return false;
+
+                        // Check if month matches (support abbreviations like "jan" matching "january")
+                        return currentMonth.startsWith(monthInput) ||
+                               months.some(m => m.startsWith(monthInput) && m === currentMonth);
+                    });
                 }
 
                 return false;
@@ -3071,8 +3091,8 @@
                         recurrenceValueInput.placeholder = '1, 15 or first, last';
                     } else if (type === 'yearly') {
                         recurrenceValueGroup.classList.remove('hidden');
-                        recurrenceValueLabel.textContent = 'Date(s)';
-                        recurrenceValueInput.placeholder = 'Jan 1, Jul 4';
+                        recurrenceValueLabel.textContent = 'Date(s) - format: Mon Day';
+                        recurrenceValueInput.placeholder = 'Jan 1, Jul 4, Dec 25';
                     }
                 };
 
@@ -3103,6 +3123,30 @@
                     recurrenceValue = checkedDays.join(',');
                 } else {
                     recurrenceValue = document.getElementById('schedule-recurrence-value').value.trim();
+                }
+
+                // Validate yearly recurrence format
+                if (recurrenceType === 'yearly' && recurrenceValue) {
+                    const months = ['january', 'february', 'march', 'april', 'may', 'june',
+                                   'july', 'august', 'september', 'october', 'november', 'december'];
+                    const values = recurrenceValue.toLowerCase().split(',').map(v => v.trim()).filter(Boolean);
+                    const invalidDates = values.filter(val => {
+                        const match = val.match(/^([a-z]+)\s*(\d+)$/);
+                        if (!match) return true;
+                        const [, monthInput, dayInput] = match;
+                        const dayNum = parseInt(dayInput);
+                        // Check month is valid
+                        const monthMatch = months.find(m => m.startsWith(monthInput));
+                        if (!monthMatch) return true;
+                        // Check day is valid (1-31)
+                        if (dayNum < 1 || dayNum > 31) return true;
+                        return false;
+                    });
+
+                    if (invalidDates.length > 0) {
+                        alert(`Invalid date format: "${invalidDates.join(', ')}"\n\nPlease use format: Mon Day (e.g., Jan 1, Jul 4, Dec 25)`);
+                        return;
+                    }
                 }
 
                 try {
