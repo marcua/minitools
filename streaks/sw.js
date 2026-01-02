@@ -6,7 +6,7 @@ const ASSETS = [
 ];
 
 // Install - cache assets
-self.addEventListener('install', event => {
+self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => cache.addAll(ASSETS))
@@ -14,8 +14,8 @@ self.addEventListener('install', event => {
     );
 });
 
-// Activate - clean up old caches
-self.addEventListener('activate', event => {
+// Activate - clean old caches
+self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then(keys => {
             return Promise.all(
@@ -26,20 +26,22 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch - cache-first strategy for app shell
-self.addEventListener('fetch', event => {
+// Fetch - network only for API, cache first for assets
+self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // Only cache same-origin requests
-    if (url.origin !== location.origin) {
+    // API requests (ayb queries) - network only
+    if (url.pathname.includes('/v1/') && url.pathname.includes('/query')) {
+        event.respondWith(fetch(event.request));
         return;
     }
 
+    // Static assets - cache first, network fallback
     event.respondWith(
         caches.match(event.request)
             .then(cached => {
                 if (cached) {
-                    // Return cached version, but update cache in background
+                    // Return cached, but also update cache in background
                     fetch(event.request).then(response => {
                         if (response.ok) {
                             caches.open(CACHE_NAME).then(cache => {
@@ -50,9 +52,9 @@ self.addEventListener('fetch', event => {
                     return cached;
                 }
 
-                // Not in cache, fetch from network
                 return fetch(event.request).then(response => {
-                    if (response.ok) {
+                    // Cache successful GET responses
+                    if (response.ok && event.request.method === 'GET') {
                         const responseClone = response.clone();
                         caches.open(CACHE_NAME).then(cache => {
                             cache.put(event.request, responseClone);

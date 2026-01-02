@@ -1,7 +1,7 @@
 {
     "name": "Streaks",
     "short_name": "Streaks",
-    "description": "Track your daily, weekly, and monthly goals with GitHub-style streak charts",
+    "description": "Track your daily, weekly, and monthly goals with streak charts",
     "start_url": "./",
     "display": "standalone",
     "background_color": "#f5f2eb",

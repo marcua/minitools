@@ -588,7 +588,6 @@
     <script>
         // ============ Configuration ============
         const APP_NAME = 'streaks';
-        const CACHE_VERSION = 'v1';
 
         // ============ SQL Utilities ============
         function escapeSQL(str) {
@@ -673,57 +672,70 @@
         }
 
         // ============ Database ============
-        let dbConfig = null;
+        const DB = {
+            config: null,
 
-        function getStoredCredentials() {
-            const url = localStorage.getItem(`${APP_NAME}_db_url`);
-            const token = localStorage.getItem(`${APP_NAME}_api_token`);
-            return url && token ? { url, token } : null;
-        }
+            init() {
+                const saved = localStorage.getItem(`${APP_NAME}_config`);
+                if (saved) {
+                    this.config = JSON.parse(saved);
+                    return true;
+                }
+                return false;
+            },
 
-        function storeCredentials(url, token) {
-            localStorage.setItem(`${APP_NAME}_db_url`, url);
-            localStorage.setItem(`${APP_NAME}_api_token`, token);
-        }
+            saveConfig(url, token) {
+                const urlObj = new URL(url);
+                const pathParts = urlObj.pathname.split('/').filter(p => p);
 
-        function parseDbUrl(url) {
-            try {
-                const parsed = new URL(url);
-                const pathParts = parsed.pathname.split('/').filter(Boolean);
-                if (pathParts.length < 2) throw new Error('Invalid URL format');
+                let baseUrl, entity, database;
 
-                const entity = pathParts[0];
-                const database = pathParts.slice(1).join('/');
-                const baseUrl = `${parsed.protocol}//${parsed.host}`;
+                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
+                    // Format: https://host/v1/entity/database
+                    entity = pathParts[1];
+                    database = pathParts[2];
+                    baseUrl = urlObj.origin;
+                } else if (pathParts.length >= 2) {
+                    // Format: https://host/entity/database
+                    entity = pathParts[0];
+                    database = pathParts[1];
+                    baseUrl = urlObj.origin;
+                } else {
+                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
+                }
 
-                return { baseUrl, entity, database };
-            } catch (e) {
-                throw new Error('Invalid database URL. Expected format: https://host/entity/database');
-            }
-        }
+                this.config = { baseUrl, entity, database, token };
+                localStorage.setItem(`${APP_NAME}_config`, JSON.stringify(this.config));
+            },
 
-        async function query(sql) {
-            if (!dbConfig) throw new Error('Not connected to database');
+            clearConfig() {
+                this.config = null;
+                localStorage.removeItem(`${APP_NAME}_config`);
+            },
 
-            const response = await fetch(
-                `${dbConfig.baseUrl}/v1/${dbConfig.entity}/${dbConfig.database}/query`,
-                {
+            async query(sql) {
+                if (!this.config) throw new Error('Database not configured');
+
+                const { baseUrl, entity, database, token } = this.config;
+                const url = `${baseUrl}/v1/${entity}/${database}/query`;
+
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${dbConfig.token}`
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'text/plain'
                     },
-                    body: JSON.stringify({ query: sql })
+                    body: sql
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Query failed: ${text}`);
                 }
-            );
 
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(`Database error: ${text}`);
+                return response.json();
             }
-
-            return response.json();
-        }
+        };
 
         // ============ Migrations ============
         const migrations = [
@@ -753,45 +765,41 @@
 
         async function runMigrations() {
             // Create migrations table
-            await query(`CREATE TABLE IF NOT EXISTS _migrations (
-                version INTEGER PRIMARY KEY
+            await DB.query(`CREATE TABLE IF NOT EXISTS _migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT DEFAULT CURRENT_TIMESTAMP
             )`);
 
             // Get current version
-            const result = await query('SELECT version FROM _migrations LIMIT 1');
-            let version = result.rows && result.rows.length > 0 ? result.rows[0][0] : 0;
+            const result = await DB.query('SELECT MAX(version) as version FROM _migrations');
+            let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
 
             // Auto-repair if version is invalid
-            if (version > migrations.length) {
-                await query('DELETE FROM _migrations');
-                version = 0;
+            if (currentVersion > migrations.length) {
+                await DB.query('DELETE FROM _migrations');
+                currentVersion = 0;
             }
 
             // Run pending migrations
-            for (let i = version; i < migrations.length; i++) {
+            for (let i = currentVersion; i < migrations.length; i++) {
                 try {
-                    await query(migrations[i]);
+                    await DB.query(migrations[i]);
                 } catch (e) {
                     // Ignore "already exists" errors for idempotency
                     const msg = e.message.toLowerCase();
-                    if (!msg.includes('duplicate') && !msg.includes('already exists')) {
+                    if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
                         throw e;
                     }
                 }
-            }
-
-            // Update version
-            if (version === 0) {
-                await query(`INSERT INTO _migrations (version) VALUES (${migrations.length})`);
-            } else if (version < migrations.length) {
-                await query(`UPDATE _migrations SET version = ${migrations.length}`);
+                // Use INSERT OR REPLACE to handle re-running migrations
+                await DB.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
             }
         }
 
         // ============ Goals CRUD ============
         async function getGoals(includeArchived = false) {
             const where = includeArchived ? '' : 'WHERE archived = 0';
-            const result = await query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
+            const result = await DB.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
             return result.rows ? result.rows.map(row => ({
                 id: row[0],
                 name: row[1],
@@ -804,16 +812,16 @@
         }
 
         async function createGoal(name, frequency) {
-            const maxPosResult = await query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
             const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
 
-            await query(`INSERT INTO goals (name, frequency, position) VALUES (
+            await DB.query(`INSERT INTO goals (name, frequency, position) VALUES (
                 '${escapeSQL(name)}', '${escapeSQL(frequency)}', ${maxPos + 1}
             )`);
         }
 
         async function updateGoal(id, name, frequency) {
-            await query(`UPDATE goals SET
+            await DB.query(`UPDATE goals SET
                 name = '${escapeSQL(name)}',
                 frequency = '${escapeSQL(frequency)}',
                 updated_at = CURRENT_TIMESTAMP
@@ -821,14 +829,14 @@
         }
 
         async function archiveGoal(id) {
-            await query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+            await DB.query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
         }
 
         async function unarchiveGoal(id) {
-            const maxPosResult = await query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
             const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
 
-            await query(`UPDATE goals SET
+            await DB.query(`UPDATE goals SET
                 archived = 0,
                 position = ${maxPos + 1},
                 updated_at = CURRENT_TIMESTAMP
@@ -837,14 +845,14 @@
 
         async function reorderGoals(orderedIds) {
             for (let i = 0; i < orderedIds.length; i++) {
-                await query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
+                await DB.query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
             }
         }
 
         // ============ Completions CRUD ============
         async function getCompletionsForDate(dateStr) {
             const utcDate = localToUTC(dateStr);
-            const result = await query(`SELECT c.*, g.name, g.frequency FROM completions c
+            const result = await DB.query(`SELECT c.*, g.name, g.frequency FROM completions c
                 JOIN goals g ON c.goal_id = g.id
                 WHERE c.date = '${utcDate}'`);
             return result.rows ? result.rows.map(row => ({
@@ -863,17 +871,17 @@
             const utcDate = localToUTC(dateStr);
 
             // Check if already completed
-            const existing = await query(`SELECT id FROM completions
+            const existing = await DB.query(`SELECT id FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
 
             if (existing.rows && existing.rows.length > 0) {
                 // Delete completion
-                await query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                 return false;
             } else {
                 // Create completion
                 const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
-                await query(`INSERT INTO completions (goal_id, date, note)
+                await DB.query(`INSERT INTO completions (goal_id, date, note)
                     VALUES (${goalId}, '${utcDate}', ${noteValue})`);
                 return true;
             }
@@ -881,7 +889,7 @@
 
         async function updateCompletionNote(goalId, dateStr, note) {
             const utcDate = localToUTC(dateStr);
-            await query(`UPDATE completions SET
+            await DB.query(`UPDATE completions SET
                 note = '${escapeSQL(note)}',
                 updated_at = CURRENT_TIMESTAMP
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
@@ -890,7 +898,7 @@
         async function getCompletionsForYear(year) {
             const startDate = `${year}-01-01`;
             const endDate = `${year}-12-31`;
-            const result = await query(`SELECT goal_id, date FROM completions
+            const result = await DB.query(`SELECT goal_id, date FROM completions
                 WHERE date >= '${startDate}' AND date <= '${endDate}'
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
@@ -900,7 +908,7 @@
         }
 
         async function getYearsWithData() {
-            const result = await query(`SELECT DISTINCT substr(date, 1, 4) as year
+            const result = await DB.query(`SELECT DISTINCT substr(date, 1, 4) as year
                 FROM completions ORDER BY year DESC`);
             return result.rows ? result.rows.map(row => parseInt(row[0])) : [];
         }
@@ -930,17 +938,21 @@
             e.preventDefault();
             const url = document.getElementById('db-url').value.trim();
             const token = document.getElementById('api-token').value.trim();
-            await connect(url, token);
+
+            try {
+                DB.saveConfig(url, token);
+                await tryConnect();
+            } catch (e) {
+                showError(e.message);
+            }
         });
 
-        async function connect(url, token) {
+        async function tryConnect() {
             try {
-                dbConfig = { ...parseDbUrl(url), token };
                 await runMigrations();
-                storeCredentials(url, token);
-                await loadMainScreen();
+                await handleRoute();
             } catch (e) {
-                dbConfig = null;
+                console.error('Connection error:', e);
                 showError(e.message);
             }
         }
@@ -951,15 +963,22 @@
         }
 
         document.getElementById('retry-btn').addEventListener('click', async () => {
-            const creds = getStoredCredentials();
-            if (creds) {
-                await connect(creds.url, creds.token);
-            } else {
-                showScreen('setup-screen');
+            const retryBtn = document.getElementById('retry-btn');
+            retryBtn.disabled = true;
+            retryBtn.textContent = 'Connecting...';
+
+            try {
+                await tryConnect();
+            } finally {
+                retryBtn.disabled = false;
+                retryBtn.textContent = 'Try again';
             }
         });
 
         document.getElementById('change-db-btn').addEventListener('click', () => {
+            // Clear form fields so user can enter new credentials
+            document.getElementById('db-url').value = '';
+            document.getElementById('api-token').value = '';
             showScreen('setup-screen');
         });
 
@@ -1451,17 +1470,17 @@
         }
 
         // ============ Routing ============
-        function handleRoute() {
+        async function handleRoute() {
             const hash = window.location.hash.slice(1) || '';
             localStorage.setItem(`${APP_NAME}_last_hash`, hash);
 
             if (hash === 'goals') {
-                loadGoalsScreen();
+                await loadGoalsScreen();
             } else if (hash.startsWith('year/')) {
                 const year = parseInt(hash.split('/')[1]);
-                loadYearScreen(year);
+                await loadYearScreen(year);
             } else {
-                loadMainScreen();
+                await loadMainScreen();
             }
         }
 
@@ -1478,22 +1497,14 @@
                 }
             }
 
-            // Check for stored credentials
-            const creds = getStoredCredentials();
-            if (creds) {
-                // Pre-fill form in case connection fails
-                document.getElementById('db-url').value = creds.url;
-                document.getElementById('api-token').value = creds.token;
-
-                // Try to connect
-                await connect(creds.url, creds.token);
-
-                // Restore last hash
+            // Check for stored config
+            if (DB.init()) {
+                // Restore last hash before connecting
                 const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
                 if (lastHash) {
                     window.location.hash = lastHash;
                 }
-                handleRoute();
+                await tryConnect();
             } else {
                 showScreen('setup-screen');
             }
