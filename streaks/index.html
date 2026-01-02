@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#f5f2eb">
+    <title>Streaks</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+    <style>
+        :root {
+            --ink: #2c2416;
+            --ink-light: #5c5446;
+            --ink-faint: #d4cfc4;
+            --paper: #f5f2eb;
+            --accent: #e85d04;
+            --streak-empty: #e8e4db;
+            --streak-filled: #e85d04;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--paper);
+            color: var(--ink);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        /* Form elements */
+        label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+            color: var(--ink-light);
+        }
+
+        input[type="text"],
+        input[type="url"],
+        input[type="date"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            color: var(--ink);
+            margin-bottom: 1rem;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            touch-action: manipulation;
+            min-height: 48px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--ink-faint);
+            color: var(--ink);
+        }
+
+        .btn-danger {
+            background: #c1121f;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+            min-height: 40px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 1rem;
+        }
+
+        .btn-group-right {
+            justify-content: flex-end;
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* Goal items */
+        .goal-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            touch-action: none;
+        }
+
+        .goal-item.dragging {
+            opacity: 0.5;
+            border-style: dashed;
+        }
+
+        .goal-item.drag-over {
+            border-color: var(--accent);
+        }
+
+        .goal-item .drag-handle {
+            cursor: grab;
+            color: var(--ink-light);
+            padding: 8px;
+            touch-action: none;
+        }
+
+        .goal-item .goal-info {
+            flex: 1;
+        }
+
+        .goal-item .goal-name {
+            font-weight: 500;
+        }
+
+        .goal-item .goal-frequency {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+        }
+
+        .goal-item .goal-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .goal-item.archived {
+            opacity: 0.6;
+        }
+
+        /* Today's checklist */
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px;
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .checklist-item.completed {
+            border-color: var(--accent);
+            background: rgba(232, 93, 4, 0.05);
+        }
+
+        .checklist-checkbox {
+            width: 28px;
+            height: 28px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: white;
+            touch-action: manipulation;
+        }
+
+        .checklist-item.completed .checklist-checkbox {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .checklist-content {
+            flex: 1;
+        }
+
+        .checklist-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .checklist-frequency {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+            margin-bottom: 8px;
+        }
+
+        .checklist-note {
+            margin-top: 8px;
+        }
+
+        .checklist-note textarea {
+            margin-bottom: 0;
+            min-height: 60px;
+        }
+
+        .note-display {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: var(--paper);
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        .note-display a {
+            color: var(--accent);
+        }
+
+        /* Streak visualization */
+        .streak-section {
+            margin-top: 2rem;
+        }
+
+        .streak-chart {
+            margin-bottom: 1.5rem;
+        }
+
+        .streak-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .streak-title h3 {
+            margin-bottom: 0;
+        }
+
+        .streak-count {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+        }
+
+        .streak-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+
+        .streak-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: var(--streak-empty);
+        }
+
+        .streak-cell.filled {
+            background: var(--streak-filled);
+        }
+
+        .streak-cell.future {
+            background: transparent;
+            border: 1px solid var(--ink-faint);
+        }
+
+        /* Weekly/Monthly streaks */
+        .streak-grid.weekly .streak-cell,
+        .streak-grid.monthly .streak-cell {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        /* Year links */
+        .year-links {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 2px solid var(--ink-faint);
+        }
+
+        .year-links a {
+            display: inline-block;
+            margin-right: 12px;
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--paper);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal h2 {
+            margin-bottom: 1rem;
+        }
+
+        /* Date navigation */
+        .date-nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 1.5rem;
+        }
+
+        .date-nav button {
+            background: none;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 18px;
+            min-height: 44px;
+            touch-action: manipulation;
+        }
+
+        .date-nav .current-date {
+            font-size: 1.125rem;
+            font-weight: 500;
+            min-width: 180px;
+            text-align: center;
+        }
+
+        /* Links */
+        .edit-link {
+            display: inline-block;
+            color: var(--accent);
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+
+        /* Error message */
+        .error-message {
+            background: #fef2f2;
+            border: 2px solid #c1121f;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 1rem;
+            color: #c1121f;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--ink-light);
+        }
+
+        /* Section divider */
+        .section-divider {
+            margin: 2rem 0;
+            border: none;
+            border-top: 2px solid var(--ink-faint);
+        }
+
+        /* Archive section */
+        .archive-section {
+            margin-top: 2rem;
+        }
+
+        .archive-toggle {
+            color: var(--ink-light);
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .archived-goals {
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Setup Screen -->
+    <div id="setup-screen" class="screen">
+        <div class="container">
+            <h1>Streaks</h1>
+            <p style="margin-bottom: 1.5rem; color: var(--ink-light);">Connect to your ayb database to get started.</p>
+
+            <form id="setup-form">
+                <label for="db-url">Database URL</label>
+                <input type="url" id="db-url" placeholder="https://host/entity/database" required>
+
+                <label for="api-token">API token</label>
+                <input type="text" id="api-token" placeholder="Your API token" required>
+
+                <div class="btn-group btn-group-right">
+                    <button type="submit" class="btn">Connect</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Error Screen -->
+    <div id="error-screen" class="screen">
+        <div class="container">
+            <h1>Connection error</h1>
+            <div class="error-message" id="error-message"></div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="change-db-btn">Use different database</button>
+                <button class="btn" id="retry-btn">Try again</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Screen (Today's Goals) -->
+    <div id="main-screen" class="screen">
+        <div class="container">
+            <h1>Streaks</h1>
+
+            <div class="date-nav">
+                <button id="prev-day">←</button>
+                <span class="current-date" id="current-date"></span>
+                <button id="next-day">→</button>
+            </div>
+
+            <a href="#goals" class="edit-link">Edit goals</a>
+
+            <div id="checklist"></div>
+
+            <hr class="section-divider">
+
+            <div class="streak-section">
+                <h2 id="current-year-title"></h2>
+                <div id="streak-charts"></div>
+            </div>
+
+            <div class="year-links" id="year-links"></div>
+        </div>
+    </div>
+
+    <!-- Goals Management Screen -->
+    <div id="goals-screen" class="screen">
+        <div class="container">
+            <h1>Goals</h1>
+            <a href="#" class="edit-link">← Back to today</a>
+
+            <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn" id="add-goal-btn">Add goal</button>
+            </div>
+
+            <div id="goals-list"></div>
+
+            <div class="archive-section">
+                <span class="archive-toggle" id="archive-toggle">Show archived goals</span>
+                <div class="archived-goals" id="archived-goals" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Year View Screen -->
+    <div id="year-screen" class="screen">
+        <div class="container">
+            <h1 id="year-title"></h1>
+            <a href="#" class="edit-link">← Back to today</a>
+
+            <div id="year-streak-charts"></div>
+        </div>
+    </div>
+
+    <!-- Goal Modal -->
+    <div class="modal-overlay" id="goal-modal">
+        <div class="modal">
+            <h2 id="goal-modal-title">Add goal</h2>
+            <form id="goal-form">
+                <input type="hidden" id="goal-id">
+
+                <label for="goal-name">Goal name</label>
+                <input type="text" id="goal-name" required>
+
+                <label for="goal-frequency">Frequency</label>
+                <select id="goal-frequency" required>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" id="cancel-goal-btn">Cancel</button>
+                    <button type="submit" class="btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal">
+            <h2 id="confirm-title">Confirm</h2>
+            <p id="confirm-message"></p>
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+                <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============ Configuration ============
+        const APP_NAME = 'streaks';
+        const CACHE_VERSION = 'v1';
+
+        // ============ SQL Utilities ============
+        function escapeSQL(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/'/g, "''");
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Simple markdown to HTML (links only)
+        function renderMarkdown(text) {
+            if (!text) return '';
+            let html = escapeHtml(text);
+            // Convert URLs to links
+            html = html.replace(
+                /\[([^\]]+)\]\(([^)]+)\)/g,
+                '<a href="$2" target="_blank" rel="noopener">$1</a>'
+            );
+            // Convert bare URLs to links
+            html = html.replace(
+                /(https?:\/\/[^\s<]+)/g,
+                '<a href="$1" target="_blank" rel="noopener">$1</a>'
+            );
+            // Convert newlines to <br>
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        // ============ Date Utilities ============
+        function getLocalDate(date = new Date()) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function parseLocalDate(dateStr) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        function localToUTC(dateStr) {
+            const date = parseLocalDate(dateStr);
+            return date.toISOString().split('T')[0];
+        }
+
+        function formatDateDisplay(dateStr) {
+            const date = parseLocalDate(dateStr);
+            const today = new Date();
+            const todayStr = getLocalDate(today);
+
+            if (dateStr === todayStr) return 'Today';
+
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (dateStr === getLocalDate(yesterday)) return 'Yesterday';
+
+            return date.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function getWeekNumber(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+            const yearStart = new Date(d.getFullYear(), 0, 1);
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+
+        function getDayOfYear(date) {
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start;
+            return Math.floor(diff / (1000 * 60 * 60 * 24));
+        }
+
+        // ============ Database ============
+        let dbConfig = null;
+
+        function getStoredCredentials() {
+            const url = localStorage.getItem(`${APP_NAME}_db_url`);
+            const token = localStorage.getItem(`${APP_NAME}_api_token`);
+            return url && token ? { url, token } : null;
+        }
+
+        function storeCredentials(url, token) {
+            localStorage.setItem(`${APP_NAME}_db_url`, url);
+            localStorage.setItem(`${APP_NAME}_api_token`, token);
+        }
+
+        function parseDbUrl(url) {
+            try {
+                const parsed = new URL(url);
+                const pathParts = parsed.pathname.split('/').filter(Boolean);
+                if (pathParts.length < 2) throw new Error('Invalid URL format');
+
+                const entity = pathParts[0];
+                const database = pathParts.slice(1).join('/');
+                const baseUrl = `${parsed.protocol}//${parsed.host}`;
+
+                return { baseUrl, entity, database };
+            } catch (e) {
+                throw new Error('Invalid database URL. Expected format: https://host/entity/database');
+            }
+        }
+
+        async function query(sql) {
+            if (!dbConfig) throw new Error('Not connected to database');
+
+            const response = await fetch(
+                `${dbConfig.baseUrl}/v1/${dbConfig.entity}/${dbConfig.database}/query`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${dbConfig.token}`
+                    },
+                    body: JSON.stringify({ query: sql })
+                }
+            );
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`Database error: ${text}`);
+            }
+
+            return response.json();
+        }
+
+        // ============ Migrations ============
+        const migrations = [
+            // v0: Initial schema
+            `CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly', 'monthly')),
+                position INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS completions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (goal_id) REFERENCES goals(id),
+                UNIQUE(goal_id, date)
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_completions_date ON completions(date)`,
+            `CREATE INDEX IF NOT EXISTS idx_completions_goal ON completions(goal_id)`
+        ];
+
+        async function runMigrations() {
+            // Create migrations table
+            await query(`CREATE TABLE IF NOT EXISTS _migrations (
+                version INTEGER PRIMARY KEY
+            )`);
+
+            // Get current version
+            const result = await query('SELECT version FROM _migrations LIMIT 1');
+            let version = result.rows && result.rows.length > 0 ? result.rows[0][0] : 0;
+
+            // Auto-repair if version is invalid
+            if (version > migrations.length) {
+                await query('DELETE FROM _migrations');
+                version = 0;
+            }
+
+            // Run pending migrations
+            for (let i = version; i < migrations.length; i++) {
+                try {
+                    await query(migrations[i]);
+                } catch (e) {
+                    // Ignore "already exists" errors for idempotency
+                    const msg = e.message.toLowerCase();
+                    if (!msg.includes('duplicate') && !msg.includes('already exists')) {
+                        throw e;
+                    }
+                }
+            }
+
+            // Update version
+            if (version === 0) {
+                await query(`INSERT INTO _migrations (version) VALUES (${migrations.length})`);
+            } else if (version < migrations.length) {
+                await query(`UPDATE _migrations SET version = ${migrations.length}`);
+            }
+        }
+
+        // ============ Goals CRUD ============
+        async function getGoals(includeArchived = false) {
+            const where = includeArchived ? '' : 'WHERE archived = 0';
+            const result = await query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
+            return result.rows ? result.rows.map(row => ({
+                id: row[0],
+                name: row[1],
+                frequency: row[2],
+                position: row[3],
+                archived: row[4],
+                created_at: row[5],
+                updated_at: row[6]
+            })) : [];
+        }
+
+        async function createGoal(name, frequency) {
+            const maxPosResult = await query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
+
+            await query(`INSERT INTO goals (name, frequency, position) VALUES (
+                '${escapeSQL(name)}', '${escapeSQL(frequency)}', ${maxPos + 1}
+            )`);
+        }
+
+        async function updateGoal(id, name, frequency) {
+            await query(`UPDATE goals SET
+                name = '${escapeSQL(name)}',
+                frequency = '${escapeSQL(frequency)}',
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${id}`);
+        }
+
+        async function archiveGoal(id) {
+            await query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+        }
+
+        async function unarchiveGoal(id) {
+            const maxPosResult = await query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
+
+            await query(`UPDATE goals SET
+                archived = 0,
+                position = ${maxPos + 1},
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${id}`);
+        }
+
+        async function reorderGoals(orderedIds) {
+            for (let i = 0; i < orderedIds.length; i++) {
+                await query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
+            }
+        }
+
+        // ============ Completions CRUD ============
+        async function getCompletionsForDate(dateStr) {
+            const utcDate = localToUTC(dateStr);
+            const result = await query(`SELECT c.*, g.name, g.frequency FROM completions c
+                JOIN goals g ON c.goal_id = g.id
+                WHERE c.date = '${utcDate}'`);
+            return result.rows ? result.rows.map(row => ({
+                id: row[0],
+                goal_id: row[1],
+                date: row[2],
+                note: row[3],
+                created_at: row[4],
+                updated_at: row[5],
+                goal_name: row[6],
+                goal_frequency: row[7]
+            })) : [];
+        }
+
+        async function toggleCompletion(goalId, dateStr, note = null) {
+            const utcDate = localToUTC(dateStr);
+
+            // Check if already completed
+            const existing = await query(`SELECT id FROM completions
+                WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+
+            if (existing.rows && existing.rows.length > 0) {
+                // Delete completion
+                await query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                return false;
+            } else {
+                // Create completion
+                const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
+                await query(`INSERT INTO completions (goal_id, date, note)
+                    VALUES (${goalId}, '${utcDate}', ${noteValue})`);
+                return true;
+            }
+        }
+
+        async function updateCompletionNote(goalId, dateStr, note) {
+            const utcDate = localToUTC(dateStr);
+            await query(`UPDATE completions SET
+                note = '${escapeSQL(note)}',
+                updated_at = CURRENT_TIMESTAMP
+                WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+        }
+
+        async function getCompletionsForYear(year) {
+            const startDate = `${year}-01-01`;
+            const endDate = `${year}-12-31`;
+            const result = await query(`SELECT goal_id, date FROM completions
+                WHERE date >= '${startDate}' AND date <= '${endDate}'
+                ORDER BY date`);
+            return result.rows ? result.rows.map(row => ({
+                goal_id: row[0],
+                date: row[1]
+            })) : [];
+        }
+
+        async function getYearsWithData() {
+            const result = await query(`SELECT DISTINCT substr(date, 1, 4) as year
+                FROM completions ORDER BY year DESC`);
+            return result.rows ? result.rows.map(row => parseInt(row[0])) : [];
+        }
+
+        // ============ UI State ============
+        let currentDate = getLocalDate();
+        let goals = [];
+        let completions = [];
+        let draggedItem = null;
+
+        // ============ Screen Management ============
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        // ============ Setup Screen ============
+        document.getElementById('setup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = document.getElementById('db-url').value.trim();
+            const token = document.getElementById('api-token').value.trim();
+            await connect(url, token);
+        });
+
+        async function connect(url, token) {
+            try {
+                dbConfig = { ...parseDbUrl(url), token };
+                await runMigrations();
+                storeCredentials(url, token);
+                await loadMainScreen();
+            } catch (e) {
+                dbConfig = null;
+                showError(e.message);
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            showScreen('error-screen');
+        }
+
+        document.getElementById('retry-btn').addEventListener('click', async () => {
+            const creds = getStoredCredentials();
+            if (creds) {
+                await connect(creds.url, creds.token);
+            } else {
+                showScreen('setup-screen');
+            }
+        });
+
+        document.getElementById('change-db-btn').addEventListener('click', () => {
+            showScreen('setup-screen');
+        });
+
+        // ============ Main Screen ============
+        async function loadMainScreen() {
+            showScreen('main-screen');
+            await refreshChecklist();
+            await refreshStreakCharts();
+        }
+
+        async function refreshChecklist() {
+            goals = await getGoals();
+            completions = await getCompletionsForDate(currentDate);
+
+            document.getElementById('current-date').textContent = formatDateDisplay(currentDate);
+
+            const container = document.getElementById('checklist');
+
+            if (goals.length === 0) {
+                container.innerHTML = '<div class="empty-state">No goals yet. <a href="#goals">Add your first goal</a></div>';
+                return;
+            }
+
+            // Filter goals based on frequency and date
+            const applicableGoals = goals.filter(goal => {
+                // All goals are applicable (user can complete any time)
+                return true;
+            });
+
+            container.innerHTML = applicableGoals.map(goal => {
+                const completion = completions.find(c => c.goal_id === goal.id);
+                const isCompleted = !!completion;
+
+                return `
+                    <div class="checklist-item ${isCompleted ? 'completed' : ''}" data-goal-id="${goal.id}">
+                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})">
+                            ${isCompleted ? '✓' : ''}
+                        </div>
+                        <div class="checklist-content">
+                            <div class="checklist-name">${escapeHtml(goal.name)}</div>
+                            <div class="checklist-frequency">${goal.frequency}</div>
+                            ${isCompleted ? `
+                                <div class="note-display" onclick="editNote(${goal.id})">
+                                    ${completion.note ? renderMarkdown(completion.note) : '<em style="color: var(--ink-light)">Add note...</em>'}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.toggleGoal = async function(goalId) {
+            const isNowCompleted = await toggleCompletion(goalId, currentDate);
+            await refreshChecklist();
+        };
+
+        window.editNote = async function(goalId) {
+            const completion = completions.find(c => c.goal_id === goalId);
+            const note = prompt('Note (markdown supported):', completion?.note || '');
+            if (note !== null) {
+                await updateCompletionNote(goalId, currentDate, note);
+                await refreshChecklist();
+            }
+        };
+
+        // Date navigation
+        document.getElementById('prev-day').addEventListener('click', () => {
+            const date = parseLocalDate(currentDate);
+            date.setDate(date.getDate() - 1);
+            currentDate = getLocalDate(date);
+            refreshChecklist();
+        });
+
+        document.getElementById('next-day').addEventListener('click', () => {
+            const date = parseLocalDate(currentDate);
+            date.setDate(date.getDate() + 1);
+            currentDate = getLocalDate(date);
+            refreshChecklist();
+        });
+
+        // ============ Streak Charts ============
+        async function refreshStreakCharts() {
+            const year = new Date().getFullYear();
+            document.getElementById('current-year-title').textContent = `${year} progress`;
+
+            const yearCompletions = await getCompletionsForYear(year);
+            const container = document.getElementById('streak-charts');
+
+            if (goals.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = goals.map(goal => {
+                const goalCompletions = yearCompletions.filter(c => c.goal_id === goal.id);
+                return renderStreakChart(goal, goalCompletions, year);
+            }).join('');
+
+            // Year links
+            const years = await getYearsWithData();
+            const otherYears = years.filter(y => y !== year);
+            const linksContainer = document.getElementById('year-links');
+
+            if (otherYears.length > 0) {
+                linksContainer.innerHTML = '<strong>Previous years:</strong> ' +
+                    otherYears.map(y => `<a href="#year/${y}">${y}</a>`).join('');
+                linksContainer.style.display = 'block';
+            } else {
+                linksContainer.style.display = 'none';
+            }
+        }
+
+        function renderStreakChart(goal, completions, year) {
+            const completedDates = new Set(completions.map(c => c.date));
+            const today = new Date();
+            const todayStr = getLocalDate();
+
+            let cells = '';
+            let count = 0;
+            let total = 0;
+
+            if (goal.frequency === 'daily') {
+                // 365/366 cells
+                const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+                const daysInYear = isLeapYear ? 366 : 365;
+
+                for (let day = 1; day <= daysInYear; day++) {
+                    const date = new Date(year, 0, day);
+                    const dateStr = getLocalDate(date);
+                    const utcDate = localToUTC(dateStr);
+                    const isFuture = date > today;
+                    const isFilled = completedDates.has(utcDate);
+
+                    if (!isFuture) total++;
+                    if (isFilled) count++;
+
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}" title="${dateStr}"></div>`;
+                }
+            } else if (goal.frequency === 'weekly') {
+                // 52 cells
+                for (let week = 1; week <= 52; week++) {
+                    // Get date for this week
+                    const weekDate = new Date(year, 0, (week - 1) * 7 + 4);
+                    const isFuture = weekDate > today;
+
+                    // Check if any date in this week is completed
+                    let isFilled = false;
+                    for (let d = 0; d < 7; d++) {
+                        const checkDate = new Date(year, 0, (week - 1) * 7 + d + 1);
+                        const utcDate = localToUTC(getLocalDate(checkDate));
+                        if (completedDates.has(utcDate)) {
+                            isFilled = true;
+                            break;
+                        }
+                    }
+
+                    if (!isFuture) total++;
+                    if (isFilled) count++;
+
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}" title="Week ${week}"></div>`;
+                }
+            } else {
+                // Monthly - 12 cells
+                for (let month = 0; month < 12; month++) {
+                    const monthDate = new Date(year, month, 15);
+                    const isFuture = monthDate > today;
+
+                    // Check if any date in this month is completed
+                    let isFilled = false;
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const checkDate = new Date(year, month, d);
+                        const utcDate = localToUTC(getLocalDate(checkDate));
+                        if (completedDates.has(utcDate)) {
+                            isFilled = true;
+                            break;
+                        }
+                    }
+
+                    if (!isFuture) total++;
+                    if (isFilled) count++;
+
+                    const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'short' });
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}" title="${monthName}"></div>`;
+                }
+            }
+
+            return `
+                <div class="streak-chart">
+                    <div class="streak-title">
+                        <h3>${escapeHtml(goal.name)}</h3>
+                        <span class="streak-count">${count}/${total}</span>
+                    </div>
+                    <div class="streak-grid ${goal.frequency}">${cells}</div>
+                </div>
+            `;
+        }
+
+        // ============ Goals Management ============
+        async function loadGoalsScreen() {
+            showScreen('goals-screen');
+            await refreshGoalsList();
+        }
+
+        async function refreshGoalsList() {
+            const allGoals = await getGoals(true);
+            const activeGoals = allGoals.filter(g => !g.archived);
+            const archivedGoals = allGoals.filter(g => g.archived);
+
+            const container = document.getElementById('goals-list');
+
+            if (activeGoals.length === 0) {
+                container.innerHTML = '<div class="empty-state">No goals yet. Add your first goal to get started.</div>';
+            } else {
+                container.innerHTML = activeGoals.map(goal => `
+                    <div class="goal-item" data-goal-id="${goal.id}" draggable="true">
+                        <span class="drag-handle">⋮⋮</span>
+                        <div class="goal-info">
+                            <div class="goal-name">${escapeHtml(goal.name)}</div>
+                            <div class="goal-frequency">${goal.frequency}</div>
+                        </div>
+                        <div class="goal-actions">
+                            <button class="btn btn-secondary btn-small" onclick="editGoal(${goal.id})">Edit</button>
+                            <button class="btn btn-secondary btn-small" onclick="confirmArchive(${goal.id})">Archive</button>
+                        </div>
+                    </div>
+                `).join('');
+
+                setupDragAndDrop();
+            }
+
+            // Archived goals
+            const archivedContainer = document.getElementById('archived-goals');
+            if (archivedGoals.length > 0) {
+                document.getElementById('archive-toggle').style.display = 'inline';
+                archivedContainer.innerHTML = archivedGoals.map(goal => `
+                    <div class="goal-item archived" data-goal-id="${goal.id}">
+                        <div class="goal-info">
+                            <div class="goal-name">${escapeHtml(goal.name)}</div>
+                            <div class="goal-frequency">${goal.frequency}</div>
+                        </div>
+                        <div class="goal-actions">
+                            <button class="btn btn-secondary btn-small" onclick="confirmUnarchive(${goal.id})">Unarchive</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('archive-toggle').style.display = 'none';
+            }
+        }
+
+        document.getElementById('archive-toggle').addEventListener('click', () => {
+            const container = document.getElementById('archived-goals');
+            const toggle = document.getElementById('archive-toggle');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                toggle.textContent = 'Hide archived goals';
+            } else {
+                container.style.display = 'none';
+                toggle.textContent = 'Show archived goals';
+            }
+        });
+
+        // Drag and drop
+        function setupDragAndDrop() {
+            const items = document.querySelectorAll('.goal-item[draggable="true"]');
+
+            items.forEach(item => {
+                // Mouse events
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('drop', handleDrop);
+                item.addEventListener('dragleave', handleDragLeave);
+
+                // Touch events for iOS
+                const handle = item.querySelector('.drag-handle');
+                handle.addEventListener('touchstart', handleTouchStart, { passive: false });
+                handle.addEventListener('touchmove', handleTouchMove, { passive: false });
+                handle.addEventListener('touchend', handleTouchEnd);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd() {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.goal-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            saveGoalOrder();
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (this !== draggedItem) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave() {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            if (this !== draggedItem) {
+                const container = document.getElementById('goals-list');
+                const items = [...container.querySelectorAll('.goal-item')];
+                const fromIndex = items.indexOf(draggedItem);
+                const toIndex = items.indexOf(this);
+
+                if (fromIndex < toIndex) {
+                    this.parentNode.insertBefore(draggedItem, this.nextSibling);
+                } else {
+                    this.parentNode.insertBefore(draggedItem, this);
+                }
+            }
+            this.classList.remove('drag-over');
+        }
+
+        // Touch drag and drop for iOS
+        let touchStartY = 0;
+        let touchCurrentItem = null;
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const item = this.closest('.goal-item');
+            draggedItem = item;
+            touchCurrentItem = item;
+            item.classList.add('dragging');
+            touchStartY = e.touches[0].clientY;
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!draggedItem) return;
+
+            const touch = e.touches[0];
+            const items = [...document.querySelectorAll('.goal-item:not(.dragging)')];
+
+            items.forEach(item => {
+                const rect = item.getBoundingClientRect();
+                if (touch.clientY > rect.top && touch.clientY < rect.bottom) {
+                    item.classList.add('drag-over');
+                } else {
+                    item.classList.remove('drag-over');
+                }
+            });
+        }
+
+        function handleTouchEnd(e) {
+            if (!draggedItem) return;
+
+            const overItem = document.querySelector('.goal-item.drag-over');
+            if (overItem && overItem !== draggedItem) {
+                const container = document.getElementById('goals-list');
+                const items = [...container.querySelectorAll('.goal-item')];
+                const fromIndex = items.indexOf(draggedItem);
+                const toIndex = items.indexOf(overItem);
+
+                if (fromIndex < toIndex) {
+                    overItem.parentNode.insertBefore(draggedItem, overItem.nextSibling);
+                } else {
+                    overItem.parentNode.insertBefore(draggedItem, overItem);
+                }
+            }
+
+            draggedItem.classList.remove('dragging');
+            document.querySelectorAll('.goal-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+
+            saveGoalOrder();
+            draggedItem = null;
+        }
+
+        async function saveGoalOrder() {
+            const items = document.querySelectorAll('#goals-list .goal-item');
+            const orderedIds = [...items].map(item => parseInt(item.dataset.goalId));
+            await reorderGoals(orderedIds);
+        }
+
+        // Goal CRUD UI
+        document.getElementById('add-goal-btn').addEventListener('click', () => {
+            document.getElementById('goal-modal-title').textContent = 'Add goal';
+            document.getElementById('goal-id').value = '';
+            document.getElementById('goal-name').value = '';
+            document.getElementById('goal-frequency').value = 'daily';
+            showModal('goal-modal');
+        });
+
+        window.editGoal = async function(id) {
+            const allGoals = await getGoals(true);
+            const goal = allGoals.find(g => g.id === id);
+            if (!goal) return;
+
+            document.getElementById('goal-modal-title').textContent = 'Edit goal';
+            document.getElementById('goal-id').value = id;
+            document.getElementById('goal-name').value = goal.name;
+            document.getElementById('goal-frequency').value = goal.frequency;
+            showModal('goal-modal');
+        };
+
+        document.getElementById('cancel-goal-btn').addEventListener('click', () => {
+            hideModal('goal-modal');
+        });
+
+        document.getElementById('goal-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('goal-id').value;
+            const name = document.getElementById('goal-name').value.trim();
+            const frequency = document.getElementById('goal-frequency').value;
+
+            if (id) {
+                await updateGoal(parseInt(id), name, frequency);
+            } else {
+                await createGoal(name, frequency);
+            }
+
+            hideModal('goal-modal');
+            await refreshGoalsList();
+            goals = await getGoals(); // Refresh for main screen
+        });
+
+        // Confirm dialogs
+        let confirmCallback = null;
+
+        window.confirmArchive = function(id) {
+            document.getElementById('confirm-title').textContent = 'Archive goal';
+            document.getElementById('confirm-message').textContent = 'Are you sure you want to archive this goal? You can unarchive it later.';
+            confirmCallback = async () => {
+                await archiveGoal(id);
+                await refreshGoalsList();
+                goals = await getGoals();
+            };
+            showModal('confirm-modal');
+        };
+
+        window.confirmUnarchive = function(id) {
+            document.getElementById('confirm-title').textContent = 'Unarchive goal';
+            document.getElementById('confirm-message').textContent = 'This will restore the goal to your active list.';
+            document.getElementById('confirm-ok').textContent = 'Unarchive';
+            document.getElementById('confirm-ok').className = 'btn';
+            confirmCallback = async () => {
+                await unarchiveGoal(id);
+                await refreshGoalsList();
+                goals = await getGoals();
+            };
+            showModal('confirm-modal');
+        };
+
+        document.getElementById('confirm-cancel').addEventListener('click', () => {
+            hideModal('confirm-modal');
+            // Reset button styles
+            document.getElementById('confirm-ok').textContent = 'Confirm';
+            document.getElementById('confirm-ok').className = 'btn btn-danger';
+        });
+
+        document.getElementById('confirm-ok').addEventListener('click', async () => {
+            if (confirmCallback) {
+                await confirmCallback();
+                confirmCallback = null;
+            }
+            hideModal('confirm-modal');
+            // Reset button styles
+            document.getElementById('confirm-ok').textContent = 'Confirm';
+            document.getElementById('confirm-ok').className = 'btn btn-danger';
+        });
+
+        // ============ Year View ============
+        async function loadYearScreen(year) {
+            document.getElementById('year-title').textContent = `${year} progress`;
+            showScreen('year-screen');
+
+            const allGoals = await getGoals(true);
+            const yearCompletions = await getCompletionsForYear(year);
+
+            const container = document.getElementById('year-streak-charts');
+            container.innerHTML = allGoals.map(goal => {
+                const goalCompletions = yearCompletions.filter(c => c.goal_id === goal.id);
+                return renderStreakChart(goal, goalCompletions, year);
+            }).join('');
+        }
+
+        // ============ Routing ============
+        function handleRoute() {
+            const hash = window.location.hash.slice(1) || '';
+            localStorage.setItem(`${APP_NAME}_last_hash`, hash);
+
+            if (hash === 'goals') {
+                loadGoalsScreen();
+            } else if (hash.startsWith('year/')) {
+                const year = parseInt(hash.split('/')[1]);
+                loadYearScreen(year);
+            } else {
+                loadMainScreen();
+            }
+        }
+
+        window.addEventListener('hashchange', handleRoute);
+
+        // ============ Initialize ============
+        async function init() {
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                try {
+                    await navigator.serviceWorker.register('sw.js');
+                } catch (e) {
+                    console.log('Service worker registration failed:', e);
+                }
+            }
+
+            // Check for stored credentials
+            const creds = getStoredCredentials();
+            if (creds) {
+                // Pre-fill form in case connection fails
+                document.getElementById('db-url').value = creds.url;
+                document.getElementById('api-token').value = creds.token;
+
+                // Try to connect
+                await connect(creds.url, creds.token);
+
+                // Restore last hash
+                const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
+                if (lastHash) {
+                    window.location.hash = lastHash;
+                }
+                handleRoute();
+            } else {
+                showScreen('setup-screen');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
