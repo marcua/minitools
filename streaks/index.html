@@ -386,30 +386,28 @@
         }
 
         /* Date navigation */
-        .date-nav {
+        .date-picker {
             display: flex;
-            align-items: center;
             justify-content: center;
-            gap: 16px;
             margin-bottom: 1.5rem;
         }
 
-        .date-nav button {
-            background: none;
-            border: 2px solid var(--ink-faint);
-            border-radius: 8px;
-            padding: 8px 16px;
-            cursor: pointer;
-            font-size: 18px;
-            min-height: 44px;
-            touch-action: manipulation;
-        }
-
-        .date-nav .current-date {
+        .date-picker input[type="date"] {
             font-size: 1.125rem;
             font-weight: 500;
-            min-width: 180px;
+            padding: 12px 16px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            background: white;
+            color: var(--ink);
+            cursor: pointer;
+            min-height: 48px;
             text-align: center;
+        }
+
+        .date-picker input[type="date"]:focus {
+            outline: none;
+            border-color: var(--accent);
         }
 
         /* Links */
@@ -498,10 +496,8 @@
         <div class="container">
             <h1>Streaks</h1>
 
-            <div class="date-nav">
-                <button id="prev-day">←</button>
-                <span class="current-date" id="current-date"></span>
-                <button id="next-day">→</button>
+            <div class="date-picker">
+                <input type="date" id="date-picker">
             </div>
 
             <a href="#goals" class="edit-link">Edit goals</a>
@@ -993,7 +989,7 @@
             goals = await getGoals();
             completions = await getCompletionsForDate(currentDate);
 
-            document.getElementById('current-date').textContent = formatDateDisplay(currentDate);
+            document.getElementById('date-picker').value = currentDate;
 
             const container = document.getElementById('checklist');
 
@@ -1046,18 +1042,9 @@
             }
         };
 
-        // Date navigation
-        document.getElementById('prev-day').addEventListener('click', () => {
-            const date = parseLocalDate(currentDate);
-            date.setDate(date.getDate() - 1);
-            currentDate = getLocalDate(date);
-            refreshChecklist();
-        });
-
-        document.getElementById('next-day').addEventListener('click', () => {
-            const date = parseLocalDate(currentDate);
-            date.setDate(date.getDate() + 1);
-            currentDate = getLocalDate(date);
+        // Date picker
+        document.getElementById('date-picker').addEventListener('change', (e) => {
+            currentDate = e.target.value;
             refreshChecklist();
         });
 
