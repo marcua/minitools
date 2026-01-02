@@ -1,0 +1,32 @@
+{
+    "name": "Todos",
+    "short_name": "Todos",
+    "description": "A minimal todo list app with ayb database sync",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#FAF9F7",
+    "theme_color": "#FAF9F7",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "icon.svg",
+            "sizes": "192x192",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icon.svg",
+            "sizes": "512x512",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "categories": ["productivity", "utilities"]
+}
