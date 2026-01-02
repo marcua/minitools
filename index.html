@@ -12,15 +12,31 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-family: 'Courier New', Courier, monospace;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 40px 20px;
+            position: relative;
+        }
+
+        /* Noise overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.08;
+            pointer-events: none;
+            z-index: 1000;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            position: relative;
         }
 
         header {
@@ -31,14 +47,17 @@
         h1 {
             font-size: 3.5rem;
             color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            text-transform: uppercase;
+            letter-spacing: -2px;
             margin-bottom: 10px;
+            font-weight: 400;
         }
 
         .tagline {
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             color: rgba(255,255,255,0.9);
-            font-weight: 300;
+            font-weight: 400;
+            letter-spacing: 1px;
         }
 
         .grid {
@@ -48,18 +67,23 @@
         }
 
         .card {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
+            background: #f5f5f0;
+            border-radius: 0;
+            padding: 25px;
             text-decoration: none;
             color: inherit;
-            transition: all 0.3s ease;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border: 3px solid #1a1a1a;
             display: flex;
             flex-direction: column;
             position: relative;
-            overflow: hidden;
         }
+
+        /* Slight rotations for that pasted-clipping feel */
+        .card:nth-child(1) { transform: rotate(-0.5deg); }
+        .card:nth-child(2) { transform: rotate(0.7deg); }
+        .card:nth-child(3) { transform: rotate(-0.8deg); }
+        .card:nth-child(4) { transform: rotate(0.4deg); }
+        .card:nth-child(5) { transform: rotate(-0.6deg); }
 
         .card::before {
             content: '';
@@ -67,51 +91,59 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 6px;
+            height: 8px;
             background: var(--accent-color);
         }
 
         .card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+            transform: translate(-3px, -3px) rotate(0deg);
+            box-shadow: 6px 6px 0 #1a1a1a;
         }
 
         .card-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
         }
 
         .card-title {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 700;
-            color: #333;
-            margin-bottom: 12px;
+            color: #1a1a1a;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            border-bottom: 2px solid #1a1a1a;
+            padding-bottom: 8px;
         }
 
         .card-description {
-            font-size: 1rem;
-            color: #666;
-            line-height: 1.6;
+            font-size: 0.9rem;
+            color: #333;
+            line-height: 1.5;
             flex-grow: 1;
         }
 
         .card-arrow {
-            margin-top: 20px;
-            color: var(--accent-color);
-            font-weight: 600;
+            margin-top: 15px;
+            color: #1a1a1a;
+            font-weight: 700;
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 0.95rem;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .card-arrow::after {
-            content: '\2192';
-            transition: transform 0.2s ease;
+            content: '>>>';
+            font-family: 'Courier New', monospace;
         }
 
-        .card:hover .card-arrow::after {
-            transform: translateX(5px);
+        .card:hover .card-arrow {
+            color: var(--accent-color);
         }
 
         /* Individual card colors */
@@ -124,18 +156,20 @@
         footer {
             text-align: center;
             margin-top: 60px;
-            color: rgba(255,255,255,0.8);
-            font-size: 0.9rem;
+            color: rgba(255,255,255,0.9);
+            font-size: 0.85rem;
+            letter-spacing: 1px;
         }
 
         footer a {
             color: white;
             text-decoration: none;
-            border-bottom: 1px dotted rgba(255,255,255,0.5);
+            border-bottom: 2px solid rgba(255,255,255,0.5);
         }
 
         footer a:hover {
             border-bottom-color: white;
+            background: rgba(255,255,255,0.1);
         }
 
         @media (max-width: 600px) {
@@ -144,11 +178,15 @@
             }
 
             .tagline {
-                font-size: 1.1rem;
+                font-size: 1rem;
             }
 
             body {
                 padding: 30px 15px;
+            }
+
+            .card {
+                transform: rotate(0deg) !important;
             }
         }
     </style>
@@ -162,7 +200,7 @@
 
         <div class="grid">
             <a href="checkmate/" class="card card-checkmate">
-                <div class="card-icon">&#9745;</div>
+                <div class="card-icon">[x]</div>
                 <h2 class="card-title">Checkmate</h2>
                 <p class="card-description">
                     Complete a checklist before visiting a website. Combat distractions by making yourself pause and reflect before diving in.
@@ -171,7 +209,7 @@
             </a>
 
             <a href="review/" class="card card-review">
-                <div class="card-icon">&#128172;</div>
+                <div class="card-icon">&lt;!--</div>
                 <h2 class="card-title">Review</h2>
                 <p class="card-description">
                     Extract GitHub PR review comments as markdown. Perfect for pasting into your coding agent or saving for later reference.
@@ -180,7 +218,7 @@
             </a>
 
             <a href="rich/" class="card card-rich">
-                <div class="card-icon">&#128202;</div>
+                <div class="card-icon">|+|</div>
                 <h2 class="card-title">Rich</h2>
                 <p class="card-description">
                     Enrich your CSV files with AI-generated columns using OpenAI. Add insights, classifications, or summaries to your data.
@@ -189,7 +227,7 @@
             </a>
 
             <a href="ducktime/" class="card card-ducktime">
-                <div class="card-icon">&#129414;</div>
+                <div class="card-icon">&gt;:D</div>
                 <h2 class="card-title">Duck Time</h2>
                 <p class="card-description">
                     A fun visual timer with preset options and custom durations. Get a cheerful duck quack when time's up!
@@ -198,10 +236,10 @@
             </a>
 
             <a href="todos/" class="card card-todos">
-                <div class="card-icon">&#128221;</div>
+                <div class="card-icon">[ ]</div>
                 <h2 class="card-title">Todos</h2>
                 <p class="card-description">
-                    A full-featured todo list PWA with recurring tasks, reminders, and drag-and-drop reordering. Syncs to your own database.
+                    A full-featured todo list with recurring tasks, reminders, and drag-and-drop reordering. Syncs to your own database.
                 </p>
                 <span class="card-arrow">Get organized</span>
             </a>
