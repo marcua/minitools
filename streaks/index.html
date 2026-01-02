@@ -804,8 +804,8 @@
                 id: row[0],
                 name: row[1],
                 frequency: row[2],
-                position: row[3],
-                archived: row[4],
+                position: Number(row[3]),
+                archived: Number(row[4]),
                 created_at: row[5],
                 updated_at: row[6]
             })) : [];
