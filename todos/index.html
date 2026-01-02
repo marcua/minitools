@@ -1,0 +1,3360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#FAF9F7">
+    <title>Todos</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --paper: #FAF9F7;
+            --paper-shadow: #F0EEEA;
+            --ink: #1A1918;
+            --ink-light: #6B6966;
+            --ink-faint: #C4C1BC;
+            --accent: #C45C3E;
+            --accent-hover: #A84B30;
+            --success: #4A7C59;
+            --danger: #9E4B4B;
+            --font-display: 'IBM Plex Sans', system-ui, sans-serif;
+            --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-fast: 150ms;
+            --duration-normal: 250ms;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--paper);
+            color: var(--ink);
+            min-height: 100vh;
+            padding-bottom: env(safe-area-inset-bottom);
+            line-height: 1.5;
+        }
+
+        /* SVG Icon Sprite - Hidden */
+        .svg-sprites {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+
+        /* Typography */
+        h1, h2, h3 {
+            font-family: var(--font-display);
+            font-weight: 600;
+        }
+
+        /* Header */
+        .header {
+            padding: 24px 24px 16px;
+            border-bottom: 1px solid var(--ink-faint);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            background: var(--paper);
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            flex: 1;
+            color: var(--ink);
+        }
+
+        .title-editable {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .title-editable h1 {
+            flex: 0 1 auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .title-input {
+            flex: 1;
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--ink);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid var(--accent);
+            padding: 0 0 2px 0;
+            outline: none;
+            min-width: 0;
+        }
+
+        .edit-title-btn {
+            background: none;
+            border: none;
+            color: var(--ink-faint);
+            cursor: pointer;
+            padding: 4px;
+            opacity: 0;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+            flex-shrink: 0;
+        }
+
+        .title-editable:hover .edit-title-btn {
+            opacity: 1;
+        }
+
+        .edit-title-btn:hover {
+            color: var(--accent);
+        }
+
+        .edit-title-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .header-btn {
+            background: none;
+            border: none;
+            color: var(--ink-light);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .header-btn:hover {
+            background: var(--paper-shadow);
+            color: var(--ink);
+        }
+
+        .header-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .header-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* Search Container */
+        .search-container {
+            padding: 16px 24px;
+            background: var(--paper);
+            border-bottom: 1px solid var(--ink-faint);
+        }
+
+        .search-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: white;
+            border: 1px solid var(--ink-faint);
+            border-radius: 8px;
+            padding: 0 12px;
+            transition: border-color var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .search-input-wrapper:focus-within {
+            border-color: var(--accent);
+        }
+
+        .search-input-wrapper .search-icon {
+            width: 18px;
+            height: 18px;
+            color: var(--ink-faint);
+            flex-shrink: 0;
+        }
+
+        .search-input-wrapper input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 0;
+            font-size: 1rem;
+            font-family: var(--font-body);
+            color: var(--ink);
+            outline: none;
+        }
+
+        .search-input-wrapper input::placeholder {
+            color: var(--ink-faint);
+        }
+
+        .search-clear-btn {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            color: var(--ink-faint);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .search-clear-btn:hover {
+            color: var(--ink);
+        }
+
+        .search-clear-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .container {
+            max-width: 560px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Setup Screen */
+        .setup-screen {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px 24px;
+        }
+
+        .setup-screen .setup-content {
+            max-width: 400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .setup-screen h2 {
+            font-family: var(--font-display);
+            font-size: 2rem;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .setup-screen .subtitle {
+            color: var(--ink-light);
+            margin-bottom: 32px;
+            text-align: center;
+            font-size: 0.95rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-light);
+        }
+
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 14px 0;
+            border: none;
+            border-bottom: 1px solid var(--ink-faint);
+            background: transparent;
+            font-size: 1rem;
+            font-family: var(--font-body);
+            color: var(--ink);
+            transition: border-color var(--duration-normal) var(--ease-out-expo);
+        }
+
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-bottom-color: var(--accent);
+        }
+
+        .form-group input::placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            font-family: var(--font-body);
+            cursor: pointer;
+            width: 100%;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+            margin-top: 8px;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--ink-light);
+            border: 1px solid var(--ink-faint);
+        }
+
+        .btn-secondary:hover {
+            background: var(--paper-shadow);
+            color: var(--ink);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background: #8a4040;
+        }
+
+        .form-divider {
+            text-align: center;
+            color: var(--ink-faint);
+            margin: 20px 0;
+            font-size: 0.85rem;
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--ink-faint);
+            margin-top: 4px;
+        }
+
+        /* Lists Screen */
+        .lists-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .list-card {
+            background: white;
+            padding: 20px 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+            transition: all var(--duration-normal) var(--ease-out-expo);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            position: relative;
+        }
+
+        .list-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 32px;
+            background: var(--accent);
+            border-radius: 0 2px 2px 0;
+            opacity: 0.7;
+        }
+
+        .list-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+        }
+
+        .list-card-content {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .list-drag-handle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            color: var(--ink-faint);
+            cursor: grab;
+            touch-action: none;
+            flex-shrink: 0;
+        }
+
+        .list-drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .list-drag-handle svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .list-card.dragging {
+            opacity: 0.5;
+            background: var(--paper-shadow);
+        }
+
+        .list-card.drag-over {
+            border-top: 2px solid var(--accent);
+        }
+
+        .list-card h3 {
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: var(--ink);
+        }
+
+        .list-card .meta {
+            color: var(--ink-light);
+            font-size: 0.8rem;
+        }
+
+        .list-card .arrow {
+            color: var(--ink-faint);
+            transition: transform var(--duration-fast) var(--ease-out-expo);
+            cursor: pointer;
+        }
+
+        .list-card:hover .arrow {
+            transform: translateX(4px);
+            color: var(--ink-light);
+        }
+
+        .add-list-card {
+            background: transparent;
+            border: 1px dashed var(--ink-faint);
+            box-shadow: none;
+            justify-content: center;
+            color: var(--ink-light);
+            cursor: pointer;
+            min-height: 72px;
+            font-size: 0.9rem;
+        }
+
+        .add-list-card::before {
+            display: none;
+        }
+
+        .add-list-card:hover {
+            transform: none;
+            border-color: var(--accent);
+            color: var(--accent);
+            box-shadow: none;
+        }
+
+        .add-list-card svg {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+        }
+
+        /* Todo List View */
+        .todo-input-container {
+            position: relative;
+            margin-bottom: 32px;
+        }
+
+        .todo-input-container input {
+            width: 100%;
+            padding: 16px 0;
+            border: none;
+            border-bottom: 1px solid var(--ink-faint);
+            background: transparent;
+            font-size: 1rem;
+            font-family: var(--font-body);
+            color: var(--ink);
+            transition: border-color var(--duration-normal) var(--ease-out-expo);
+        }
+
+        .todo-input-container input:focus {
+            outline: none;
+            border-bottom-color: var(--accent);
+        }
+
+        .todo-input-container input::placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        .todo-input-container .add-btn {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--ink-faint);
+            cursor: pointer;
+            padding: 8px;
+            opacity: 0;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .todo-input-container input:focus + .add-btn,
+        .todo-input-container .add-btn:hover {
+            opacity: 1;
+            color: var(--accent);
+        }
+
+        /* Todo Items */
+        .todo-section {
+            margin-bottom: 32px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 0;
+            color: var(--ink-light);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header .arrow {
+            transition: transform var(--duration-fast) var(--ease-out-expo);
+            width: 12px;
+            height: 12px;
+        }
+
+        .section-header.collapsed .arrow {
+            transform: rotate(-90deg);
+        }
+
+        .todo-list {
+            list-style: none;
+        }
+
+        .todo-item {
+            border-bottom: 1px solid var(--paper-shadow);
+            transition: all var(--duration-fast) var(--ease-out-expo);
+            animation: slideIn var(--duration-normal) var(--ease-out-expo);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .todo-item.dragging {
+            opacity: 0.5;
+        }
+
+        .todo-item.drag-over {
+            border-top: 2px solid var(--accent);
+        }
+
+        .todo-main {
+            display: flex;
+            align-items: center;
+            padding: 16px 0;
+            gap: 16px;
+        }
+
+        .drag-handle {
+            color: var(--ink-faint);
+            cursor: grab;
+            opacity: 0;
+            transition: opacity var(--duration-fast);
+            padding: 4px;
+        }
+
+        .todo-item:hover .drag-handle {
+            opacity: 1;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .drag-handle svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .todo-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 1.5px solid var(--ink-faint);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+            background: white;
+        }
+
+        .todo-checkbox:hover {
+            border-color: var(--success);
+        }
+
+        .todo-checkbox.checked {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .todo-checkbox svg {
+            width: 12px;
+            height: 12px;
+            color: white;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .todo-checkbox.checked svg {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .todo-checkbox.saving {
+            background: var(--ink-faint);
+            border-color: var(--ink-faint);
+            pointer-events: none;
+        }
+
+        .todo-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .todo-title {
+            font-size: 1rem;
+            word-break: break-word;
+            color: var(--ink);
+            transition: all var(--duration-normal);
+            user-select: text;
+            cursor: text;
+        }
+
+        .drag-handle {
+            user-select: none;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            padding: 8px;
+            margin: -8px;
+        }
+
+        .todo-indicators {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            cursor: pointer;
+        }
+
+        .todo-indicators:hover .todo-indicator {
+            color: var(--ink-light);
+        }
+
+        .todo-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            color: var(--ink-faint);
+        }
+
+        .todo-indicator svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .checklist-progress {
+            color: var(--ink-light);
+        }
+
+        .checklist-progress.all-done {
+            color: var(--success);
+        }
+
+        .upcoming-badge {
+            background: #E8F4FD;
+            color: #2B6CB0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .recurring-badge {
+            background: #F0E6FA;
+            color: #6B46C1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .todo-item.completed .todo-title {
+            text-decoration: line-through;
+            color: var(--ink-light);
+        }
+
+        .todo-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity var(--duration-fast);
+        }
+
+        .todo-item:hover .todo-actions {
+            opacity: 1;
+        }
+
+        .todo-action-btn {
+            background: none;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--ink-faint);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration-fast);
+        }
+
+        .todo-action-btn:hover {
+            background: var(--paper-shadow);
+            color: var(--ink-light);
+        }
+
+        .todo-action-btn.delete:hover {
+            color: var(--danger);
+        }
+
+        .todo-action-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Notes Section */
+        .todo-notes {
+            padding: 0 0 16px 38px;
+            display: none;
+        }
+
+        .todo-notes.expanded {
+            display: block;
+        }
+
+        .notes-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border: 1px solid var(--ink-faint);
+            background: white;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            color: var(--ink);
+            resize: vertical;
+            transition: border-color var(--duration-fast);
+        }
+
+        .notes-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .notes-preview {
+            padding: 12px;
+            background: var(--paper-shadow);
+            font-size: 0.9rem;
+            cursor: text;
+        }
+
+        .notes-preview.empty {
+            color: var(--ink-light);
+            font-style: italic;
+        }
+
+        .notes-preview ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .notes-preview li {
+            padding: 4px 0;
+            color: var(--ink-light);
+        }
+
+        .notes-preview li.checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 6px 8px;
+            margin: 2px -8px;
+            border-radius: 4px;
+            transition: background var(--duration-fast);
+        }
+
+        .notes-preview li.checklist-item:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .notes-preview .check-box {
+            width: 16px;
+            height: 16px;
+            border: 1.5px solid var(--ink-faint);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all var(--duration-fast);
+        }
+
+        .notes-preview li.checklist-item.checked .check-box {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .notes-preview .check-box svg {
+            width: 10px;
+            height: 10px;
+            color: white;
+            opacity: 0;
+        }
+
+        .notes-preview li.checklist-item.checked .check-box svg {
+            opacity: 1;
+        }
+
+        .notes-preview li.checklist-item.checked .check-text {
+            text-decoration: line-through;
+            color: var(--ink-faint);
+        }
+
+        /* Edit mode */
+        .todo-edit-header {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .todo-edit-btn, .todo-save-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border: 1px solid var(--ink-faint);
+            background: transparent;
+            color: var(--ink-light);
+            cursor: pointer;
+            transition: all var(--duration-fast);
+        }
+
+        .todo-edit-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .todo-save-btn {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .todo-save-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .todo-cancel-btn {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border: 1px solid var(--ink-faint);
+            background: transparent;
+            color: var(--ink-light);
+            cursor: pointer;
+            transition: all var(--duration-fast);
+        }
+
+        .todo-cancel-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .todo-edit-btn svg, .todo-save-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .todo-edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .todo-edit-form .form-group {
+            margin-bottom: 0;
+        }
+
+        .todo-edit-form .title-edit-input {
+            width: 100%;
+            padding: 8px 12px;
+            font-size: 1rem;
+            border: 1px solid var(--ink-faint);
+            background: white;
+        }
+
+        .todo-edit-form .title-edit-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .todo-edit-form .notes-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            font-size: 0.9rem;
+            font-family: var(--font-body);
+            border: 1px solid var(--ink-faint);
+            background: white;
+            resize: vertical;
+        }
+
+        .todo-edit-form .notes-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .todo-view-mode:empty {
+            display: none;
+        }
+
+        /* Timestamps */
+        .todo-timestamps {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--paper-shadow);
+            font-size: 0.75rem;
+            color: var(--ink-faint);
+        }
+
+        .todo-timestamps .timestamp {
+            padding: 2px 0;
+        }
+
+        .todo-timestamps .timestamp-label {
+            color: var(--ink-light);
+            margin-right: 4px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 24px;
+            color: var(--ink-light);
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 16px;
+            color: var(--ink-faint);
+        }
+
+        .empty-state p {
+            font-style: italic;
+            font-size: 0.95rem;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(26, 25, 24, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            padding: 24px;
+            backdrop-filter: blur(2px);
+        }
+
+        .modal {
+            background: white;
+            width: calc(100% - 32px);
+            max-width: 400px;
+            padding: 24px;
+            max-height: calc(100vh - 48px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            animation: modalIn var(--duration-normal) var(--ease-out-expo);
+        }
+
+        @media (max-width: 400px) {
+            .modal {
+                width: calc(100% - 16px);
+                padding: 16px;
+            }
+        }
+
+        @keyframes modalIn {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal h2 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            margin-bottom: 24px;
+        }
+
+        .modal input[type="datetime-local"],
+        .modal input[type="date"],
+        .modal input[type="time"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--ink-faint);
+            background: white;
+            color: var(--ink);
+            min-height: 48px;
+            box-sizing: border-box;
+        }
+
+        /* Wrapper to clip oversized iOS date picker */
+        .date-input-wrapper {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+            border: 1px solid var(--ink-faint);
+            border-radius: 4px;
+            background: white;
+        }
+
+        .date-input-wrapper input[type="date"] {
+            border: none;
+            width: 100%;
+            min-width: 0;
+        }
+
+        .modal select {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--ink-faint);
+            background: white;
+            color: var(--ink);
+        }
+
+        .modal-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+            min-width: 70px;
+            padding: 12px 16px;
+        }
+
+        .days-checklist {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .day-check {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 12px;
+            border: 1px solid var(--ink-faint);
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            user-select: none;
+        }
+
+        .day-check:has(input:checked) {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .day-check input {
+            display: none;
+        }
+
+        .day-check span {
+            font-size: 0.9rem;
+        }
+
+        /* Loading & Error */
+        .loading {
+            text-align: center;
+            padding: 60px 24px;
+            color: var(--ink-light);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 2px solid var(--paper-shadow);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-msg {
+            background: #fef6f5;
+            color: var(--danger);
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            border-left: 3px solid var(--danger);
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Completed section styling */
+        #completed-section .todo-item {
+            opacity: 0.7;
+        }
+
+        #completed-section .todo-item:hover {
+            opacity: 1;
+        }
+
+        /* Load more button */
+        .load-more-item {
+            list-style: none;
+        }
+
+        .load-more-btn {
+            width: 100%;
+            padding: 16px;
+            background: transparent;
+            border: 1px dashed var(--ink-faint);
+            color: var(--ink-light);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .load-more-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* Install button - mobile only */
+        .install-btn {
+            display: none;
+            width: 100%;
+            padding: 16px 24px;
+            margin-top: 24px;
+            background: transparent;
+            border: 1px dashed var(--ink-faint);
+            color: var(--ink-light);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .install-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .install-btn.visible {
+            display: block;
+        }
+
+        /* iOS instructions modal */
+        .ios-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(26, 25, 24, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+            padding: 24px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration-normal);
+            backdrop-filter: blur(2px);
+        }
+
+        .ios-modal.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .ios-modal-content {
+            background: white;
+            padding: 32px;
+            max-width: 340px;
+            width: 100%;
+        }
+
+        .ios-modal-content h2 {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            margin-bottom: 8px;
+        }
+
+        .ios-modal-content > p {
+            color: var(--ink-light);
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .ios-modal .step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--paper-shadow);
+            font-size: 0.9rem;
+        }
+
+        .ios-modal .step:last-of-type {
+            border-bottom: none;
+        }
+
+        .ios-modal .step-icon {
+            font-size: 1.25rem;
+            width: 32px;
+            text-align: center;
+        }
+
+        .ios-modal .close-btn {
+            width: 100%;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- SVG Sprite -->
+    <svg class="svg-sprites" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </symbol>
+        <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </symbol>
+        <symbol id="icon-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+        </symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </symbol>
+        <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </symbol>
+        <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </symbol>
+        <symbol id="icon-drag" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6" r="1.5"></circle>
+            <circle cx="15" cy="6" r="1.5"></circle>
+            <circle cx="9" cy="12" r="1.5"></circle>
+            <circle cx="15" cy="12" r="1.5"></circle>
+            <circle cx="9" cy="18" r="1.5"></circle>
+            <circle cx="15" cy="18" r="1.5"></circle>
+        </symbol>
+        <symbol id="icon-notes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+        </symbol>
+        <symbol id="icon-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+        </symbol>
+        <symbol id="icon-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+        </symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </symbol>
+        <symbol id="icon-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </symbol>
+        <symbol id="icon-notebook" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="16" y="8" width="48" height="64" rx="2"></rect>
+            <line x1="28" y1="8" x2="28" y2="72"></line>
+            <line x1="36" y1="24" x2="56" y2="24"></line>
+            <line x1="36" y1="32" x2="52" y2="32"></line>
+            <line x1="36" y1="40" x2="48" y2="40"></line>
+            <path d="M60 56l8-8v16l-8-8z" fill="currentColor" opacity="0.3"></path>
+        </symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </symbol>
+    </svg>
+
+    <div id="app">
+        <!-- Setup Screen -->
+        <div id="setup-screen" class="setup-screen hidden">
+            <div class="setup-content">
+                <h2>Todos</h2>
+                <p class="subtitle">Connect to your ayb database to get started</p>
+                <div class="form-group">
+                    <label for="ayb-url">Database URL</label>
+                    <input type="url" id="ayb-url" placeholder="https://example.com/user/database">
+                </div>
+                <div class="form-group">
+                    <label for="ayb-token">API Token</label>
+                    <input type="password" id="ayb-token" placeholder="Your API token">
+                </div>
+                <div id="setup-error" class="error-msg hidden"></div>
+                <button class="btn" id="setup-btn">Connect</button>
+            </div>
+        </div>
+
+        <!-- Connection Error Screen -->
+        <div id="error-screen" class="setup-screen hidden">
+            <div class="setup-content">
+                <h2>Connection failed</h2>
+                <p class="subtitle">Could not connect to the database. Check your internet connection and try again.</p>
+                <p id="error-details" class="error-msg"></p>
+                <button class="btn" id="retry-btn">Try again</button>
+                <button class="btn btn-secondary" id="reconnect-btn" style="margin-top: 12px;">Use different database</button>
+            </div>
+        </div>
+
+        <!-- Lists Screen -->
+        <div id="lists-screen" class="hidden">
+            <header class="header">
+                <h1>Todos</h1>
+                <button class="header-btn" id="settings-btn" title="Settings">
+                    <svg><use href="#icon-settings"/></svg>
+                </button>
+            </header>
+            <div class="container">
+                <div id="lists-container" class="lists-grid"></div>
+                <button class="install-btn" id="install-btn">Add to Home Screen</button>
+            </div>
+        </div>
+
+        <!-- iOS Install Instructions Modal -->
+        <div class="ios-modal" id="ios-modal">
+            <div class="ios-modal-content">
+                <h2>Add to Home Screen</h2>
+                <p>Install this app on your device:</p>
+                <div class="step">
+                    <span class="step-icon">📤</span>
+                    <span>Tap the <strong>Share</strong> button in Safari</span>
+                </div>
+                <div class="step">
+                    <span class="step-icon">➕</span>
+                    <span>Tap <strong>Add to Home Screen</strong></span>
+                </div>
+                <div class="step">
+                    <span class="step-icon">✓</span>
+                    <span>Tap <strong>Add</strong> to confirm</span>
+                </div>
+                <button class="btn close-btn" onclick="App.closeIosModal()">Got it</button>
+            </div>
+        </div>
+
+        <!-- Todo List Screen -->
+        <div id="todo-screen" class="hidden">
+            <header class="header">
+                <button class="header-btn" id="back-btn">
+                    <svg><use href="#icon-back"/></svg>
+                </button>
+                <div class="title-editable">
+                    <h1 id="list-title">List</h1>
+                    <input type="text" id="list-title-input" class="title-input hidden">
+                    <button class="edit-title-btn" id="edit-list-btn" title="Edit List">
+                        <svg><use href="#icon-edit"/></svg>
+                    </button>
+                </div>
+                <button class="header-btn" id="search-btn" title="Search">
+                    <svg><use href="#icon-search"/></svg>
+                </button>
+                <button class="header-btn" id="delete-list-btn" title="Delete List">
+                    <svg><use href="#icon-trash"/></svg>
+                </button>
+            </header>
+            <div id="search-container" class="search-container hidden">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon"><use href="#icon-search"/></svg>
+                    <input type="text" id="search-input" placeholder="Search todos...">
+                    <button class="search-clear-btn hidden" id="search-clear-btn">
+                        <svg><use href="#icon-x"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="container">
+                <div class="todo-input-container">
+                    <input type="text" id="new-todo-input" placeholder="Add a new item...">
+                    <button class="add-btn" id="add-todo-btn">
+                        <svg width="20" height="20"><use href="#icon-plus"/></svg>
+                    </button>
+                </div>
+
+                <div class="todo-section" id="active-section">
+                    <ul class="todo-list" id="active-todos"></ul>
+                </div>
+
+                <div class="todo-section hidden" id="scheduled-section">
+                    <div class="section-header collapsed" id="scheduled-header">
+                        <svg class="arrow"><use href="#icon-chevron"/></svg>
+                        <span>Upcoming / Recurring (<span id="scheduled-count">0</span>)</span>
+                    </div>
+                    <ul class="todo-list hidden" id="scheduled-todos"></ul>
+                </div>
+
+                <div class="todo-section" id="completed-section">
+                    <div class="section-header collapsed" id="completed-header">
+                        <svg class="arrow"><use href="#icon-chevron"/></svg>
+                        <span>Completed (<span id="completed-count">0</span>)</span>
+                    </div>
+                    <ul class="todo-list hidden" id="completed-todos"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="loading">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+    <script>
+        // ============================================
+        // Database Layer
+        // ============================================
+        const DB = {
+            config: null,
+
+            init() {
+                const saved = localStorage.getItem('ayb_config');
+                if (saved) {
+                    this.config = JSON.parse(saved);
+                    return true;
+                }
+                return false;
+            },
+
+            saveConfig(url, token) {
+                const urlObj = new URL(url);
+                const pathParts = urlObj.pathname.split('/').filter(p => p);
+
+                let baseUrl, entity, database;
+
+                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
+                    entity = pathParts[1];
+                    database = pathParts[2];
+                    baseUrl = urlObj.origin;
+                } else if (pathParts.length >= 2) {
+                    entity = pathParts[0];
+                    database = pathParts[1];
+                    baseUrl = urlObj.origin;
+                } else {
+                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
+                }
+
+                this.config = { baseUrl, entity, database, token };
+                localStorage.setItem('ayb_config', JSON.stringify(this.config));
+            },
+
+            clearConfig() {
+                this.config = null;
+                localStorage.removeItem('ayb_config');
+            },
+
+            async query(sql) {
+                if (!this.config) throw new Error('Database not configured');
+
+                const { baseUrl, entity, database, token } = this.config;
+                const url = `${baseUrl}/v1/${entity}/${database}/query`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'text/plain'
+                    },
+                    body: sql
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Query failed: ${text}`);
+                }
+
+                return response.json();
+            },
+
+            async runMigrations() {
+                await this.query(`
+                    CREATE TABLE IF NOT EXISTS _migrations (
+                        version INTEGER PRIMARY KEY,
+                        applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+
+                const result = await this.query('SELECT MAX(version) as version FROM _migrations');
+                let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
+
+                const migrations = [
+                    `CREATE TABLE IF NOT EXISTS todo_list (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )`,
+                    `CREATE TABLE IF NOT EXISTS todo_list_item (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        list_id INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        notes TEXT DEFAULT '',
+                        completed INTEGER DEFAULT 0,
+                        position INTEGER DEFAULT 0,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (list_id) REFERENCES todo_list(id) ON DELETE CASCADE
+                    )`,
+                    // Migration 3: Add completed_at timestamp
+                    `ALTER TABLE todo_list_item ADD COLUMN completed_at TEXT DEFAULT NULL`,
+                    // Migration 4: Add remind_at for "remind me on" feature
+                    `ALTER TABLE todo_list_item ADD COLUMN remind_at TEXT DEFAULT NULL`,
+                    // Migration 5: Add recurrence fields
+                    `ALTER TABLE todo_list_item ADD COLUMN recurrence_type TEXT DEFAULT NULL`,
+                    // Migration 6: Add recurrence_value (e.g., "monday,wednesday" or "15" for day of month)
+                    `ALTER TABLE todo_list_item ADD COLUMN recurrence_value TEXT DEFAULT NULL`,
+                    // Migration 7: Add parent_id for tracking which recurring item spawned this
+                    `ALTER TABLE todo_list_item ADD COLUMN parent_id INTEGER DEFAULT NULL`,
+                    // Migration 8: Add position column to todo_list for drag-and-drop ordering
+                    `ALTER TABLE todo_list ADD COLUMN position INTEGER DEFAULT 0`
+                ];
+
+                // Fix corrupted migration state (version higher than actual migrations)
+                if (currentVersion > migrations.length) {
+                    // Reset and re-run all migrations (they're idempotent or will be caught)
+                    await this.query(`DELETE FROM _migrations`);
+                    currentVersion = 0;
+                }
+
+                for (let i = currentVersion; i < migrations.length; i++) {
+                    try {
+                        await this.query(migrations[i]);
+                    } catch (e) {
+                        // Ignore "duplicate column" or "table already exists" errors
+                        const msg = e.message.toLowerCase();
+                        if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
+                            throw e;
+                        }
+                    }
+                    // Use INSERT OR REPLACE to handle re-running migrations
+                    await this.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
+                }
+            }
+        };
+
+        // ============================================
+        // App State & UI
+        // ============================================
+        const App = {
+            currentListId: null,
+            completedCollapsed: true,
+            draggedItem: null,
+            deferredPrompt: null,
+            allTodos: [],
+            searchTerm: '',
+            searchTimeout: null,
+            searchOpen: false,
+            // Pagination for completed items
+            completedOffset: 0,
+            completedPageSize: 100,
+            completedHasMore: false,
+            loadingMoreCompleted: false,
+            // For list drag-and-drop
+            draggedList: null,
+
+            async init() {
+                this.bindEvents();
+                this.initInstallPrompt();
+
+                if (DB.init()) {
+                    await this.tryConnect();
+                } else {
+                    this.showScreen('setup');
+                }
+            },
+
+            async tryConnect() {
+                try {
+                    await DB.runMigrations();
+                    await this.handleRoute();
+                } catch (e) {
+                    console.error('Connection error:', e);
+                    // Don't clear config - show error screen with retry option
+                    this.showConnectionError(e.message);
+                }
+            },
+
+            showConnectionError(message) {
+                const details = document.getElementById('error-details');
+                if (details) {
+                    details.textContent = message || 'Unable to reach the server';
+                    details.classList.toggle('hidden', !message);
+                }
+                this.showScreen('error');
+            },
+
+            async retryConnection() {
+                const retryBtn = document.getElementById('retry-btn');
+                retryBtn.disabled = true;
+                retryBtn.textContent = 'Connecting...';
+
+                try {
+                    await this.tryConnect();
+                } finally {
+                    retryBtn.disabled = false;
+                    retryBtn.textContent = 'Try again';
+                }
+            },
+
+            reconnectWithNewDatabase() {
+                // Don't clear config yet - only clear on successful new connection
+                // Clear form fields so user can enter new credentials
+                document.getElementById('ayb-url').value = '';
+                document.getElementById('ayb-token').value = '';
+                this.showScreen('setup');
+            },
+
+            // PWA Install handling
+            isIOS() {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            },
+
+            isAndroid() {
+                return /Android/.test(navigator.userAgent);
+            },
+
+            isInstalled() {
+                return window.matchMedia('(display-mode: standalone)').matches ||
+                       window.navigator.standalone === true;
+            },
+
+            initInstallPrompt() {
+                const installBtn = document.getElementById('install-btn');
+
+                // Don't show if already installed
+                if (this.isInstalled()) return;
+
+                // Show for iOS
+                if (this.isIOS()) {
+                    installBtn.classList.add('visible');
+                }
+
+                // Listen for Android/Chrome install prompt
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    this.deferredPrompt = e;
+                    installBtn.classList.add('visible');
+                });
+
+                // Hide button after successful install
+                window.addEventListener('appinstalled', () => {
+                    installBtn.classList.remove('visible');
+                    this.deferredPrompt = null;
+                });
+            },
+
+            handleInstallClick() {
+                if (this.isIOS()) {
+                    document.getElementById('ios-modal').classList.add('visible');
+                } else if (this.deferredPrompt) {
+                    this.deferredPrompt.prompt();
+                    this.deferredPrompt.userChoice.then((result) => {
+                        if (result.outcome === 'accepted') {
+                            document.getElementById('install-btn').classList.remove('visible');
+                        }
+                        this.deferredPrompt = null;
+                    });
+                }
+            },
+
+            closeIosModal() {
+                document.getElementById('ios-modal').classList.remove('visible');
+            },
+
+            async handleRoute() {
+                let hash = window.location.hash;
+
+                // Restore from localStorage if no hash in URL
+                if (!hash) {
+                    const savedHash = localStorage.getItem('todos_last_hash');
+                    if (savedHash) {
+                        hash = savedHash;
+                        window.location.hash = savedHash;
+                    }
+                }
+
+                // Save current hash to localStorage
+                localStorage.setItem('todos_last_hash', hash);
+
+                const match = hash.match(/^#list\/(\d+)$/);
+
+                if (match) {
+                    const listId = parseInt(match[1]);
+                    await this.openList(listId, false);
+                } else {
+                    this.showScreen('lists');
+                    await this.loadLists();
+                }
+            },
+
+            showScreen(screen) {
+                document.querySelectorAll('#app > div').forEach(el => el.classList.add('hidden'));
+                document.getElementById(`${screen}-screen`).classList.remove('hidden');
+            },
+
+            bindEvents() {
+                document.getElementById('setup-btn').addEventListener('click', () => this.handleSetup());
+                document.getElementById('ayb-token').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.handleSetup();
+                });
+
+                // Connection error screen buttons
+                document.getElementById('retry-btn').addEventListener('click', () => this.retryConnection());
+                document.getElementById('reconnect-btn').addEventListener('click', () => this.reconnectWithNewDatabase());
+
+                document.getElementById('settings-btn').addEventListener('click', () => this.showSettings());
+                document.getElementById('install-btn').addEventListener('click', () => this.handleInstallClick());
+                document.getElementById('ios-modal').addEventListener('click', (e) => {
+                    if (e.target.id === 'ios-modal') this.closeIosModal();
+                });
+
+                document.getElementById('back-btn').addEventListener('click', () => this.goBack());
+                document.getElementById('add-todo-btn').addEventListener('click', () => this.addTodo());
+                document.getElementById('new-todo-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.addTodo();
+                });
+                document.getElementById('scheduled-header').addEventListener('click', () => this.toggleSection('scheduled'));
+                document.getElementById('completed-header').addEventListener('click', () => this.toggleCompleted());
+                document.getElementById('edit-list-btn').addEventListener('click', () => this.startTitleEdit());
+                document.getElementById('list-title-input').addEventListener('blur', () => this.saveTitleEdit());
+                document.getElementById('list-title-input').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') this.saveTitleEdit();
+                    if (e.key === 'Escape') this.cancelTitleEdit();
+                });
+                document.getElementById('delete-list-btn').addEventListener('click', () => this.deleteCurrentList());
+
+                // Search
+                document.getElementById('search-btn').addEventListener('click', () => this.toggleSearch());
+                document.getElementById('search-input').addEventListener('input', (e) => this.handleSearchInput(e.target.value));
+                document.getElementById('search-clear-btn').addEventListener('click', () => this.clearSearch());
+
+                document.getElementById('modal-overlay').addEventListener('click', (e) => {
+                    if (e.target.id === 'modal-overlay') this.closeModal();
+                });
+
+                window.addEventListener('hashchange', () => this.handleRoute());
+            },
+
+            async handleSetup() {
+                const url = document.getElementById('ayb-url').value.trim();
+                const token = document.getElementById('ayb-token').value.trim();
+                const errorEl = document.getElementById('setup-error');
+
+                if (!url || !token) {
+                    errorEl.textContent = 'Please enter both URL and token';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                // Save old config in case new connection fails
+                const oldConfig = DB.config ? { ...DB.config } : null;
+
+                try {
+                    errorEl.classList.add('hidden');
+                    document.getElementById('setup-btn').disabled = true;
+                    document.getElementById('setup-btn').textContent = 'Connecting...';
+
+                    DB.saveConfig(url, token);
+                    await DB.runMigrations();
+
+                    // Success - new config is already saved
+                    this.showScreen('lists');
+                    await this.loadLists();
+                } catch (e) {
+                    console.error('Setup error:', e);
+                    errorEl.textContent = e.message;
+                    errorEl.classList.remove('hidden');
+                    // Restore old config so user doesn't lose their credentials
+                    if (oldConfig) {
+                        DB.config = oldConfig;
+                        localStorage.setItem('ayb_config', JSON.stringify(oldConfig));
+                    } else {
+                        DB.clearConfig();
+                    }
+                } finally {
+                    document.getElementById('setup-btn').disabled = false;
+                    document.getElementById('setup-btn').textContent = 'Connect';
+                }
+            },
+
+            async loadLists() {
+                const container = document.getElementById('lists-container');
+                container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+                try {
+                    // Try query with position column (after migration 8)
+                    let result;
+                    try {
+                        result = await DB.query(`
+                            SELECT l.id, l.name, l.position,
+                                   COUNT(i.id) as total,
+                                   SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
+                            FROM todo_list l
+                            LEFT JOIN todo_list_item i ON i.list_id = l.id
+                            GROUP BY l.id
+                            ORDER BY l.position ASC, l.id ASC
+                        `);
+                    } catch (posErr) {
+                        // Fallback for databases without position column yet
+                        result = await DB.query(`
+                            SELECT l.id, l.name, 0 as position,
+                                   COUNT(i.id) as total,
+                                   SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
+                            FROM todo_list l
+                            LEFT JOIN todo_list_item i ON i.list_id = l.id
+                            GROUP BY l.id
+                            ORDER BY l.id ASC
+                        `);
+                    }
+
+                    const lists = (result.rows || []).map(row => ({
+                        id: row[0],
+                        name: row[1],
+                        position: row[2] || 0,
+                        total: row[3] || 0,
+                        pending: row[4] || 0
+                    }));
+
+                    this.renderLists(lists);
+                } catch (e) {
+                    console.error('Load lists error:', e);
+                    container.innerHTML = `<div class="error-msg">${e.message}</div>`;
+                }
+            },
+
+            renderLists(lists) {
+                const container = document.getElementById('lists-container');
+
+                let html = lists.map((list, idx) => `
+                    <div class="list-card" data-id="${list.id}" data-position="${idx}" style="animation-delay: ${idx * 50}ms">
+                        <div class="list-drag-handle" draggable="true">
+                            <svg><use href="#icon-drag"/></svg>
+                        </div>
+                        <div class="list-card-content">
+                            <h3>${this.escapeHtml(list.name)}</h3>
+                            <div class="meta">${list.pending} of ${list.total} remaining</div>
+                        </div>
+                        <svg class="arrow" width="20" height="20"><use href="#icon-arrow-right"/></svg>
+                    </div>
+                `).join('');
+
+                html += `
+                    <div class="list-card add-list-card" id="add-list-btn">
+                        <svg><use href="#icon-plus"/></svg>
+                        <span>Add New List</span>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+
+                container.querySelectorAll('.list-card[data-id]').forEach(card => {
+                    // Click on content opens the list
+                    card.querySelector('.list-card-content').addEventListener('click', () => {
+                        this.openList(parseInt(card.dataset.id));
+                    });
+                    card.querySelector('.arrow').addEventListener('click', () => {
+                        this.openList(parseInt(card.dataset.id));
+                    });
+                });
+
+                document.getElementById('add-list-btn').addEventListener('click', () => this.showAddListModal());
+                this.bindListDragEvents();
+            },
+
+            bindListDragEvents() {
+                const container = document.getElementById('lists-container');
+                const cards = container.querySelectorAll('.list-card[data-id]');
+
+                cards.forEach(card => {
+                    const handle = card.querySelector('.list-drag-handle');
+
+                    // Desktop drag events
+                    handle.addEventListener('dragstart', (e) => {
+                        this.draggedList = card;
+                        card.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', card.dataset.id);
+                    });
+
+                    handle.addEventListener('dragend', () => {
+                        this.draggedList = null;
+                        card.classList.remove('dragging');
+                        container.querySelectorAll('.list-card').forEach(c => c.classList.remove('drag-over'));
+                    });
+
+                    card.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        if (!this.draggedList || this.draggedList === card) return;
+                        e.dataTransfer.dropEffect = 'move';
+                        card.classList.add('drag-over');
+                    });
+
+                    card.addEventListener('dragleave', () => {
+                        card.classList.remove('drag-over');
+                    });
+
+                    card.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        card.classList.remove('drag-over');
+                        if (!this.draggedList || this.draggedList === card) return;
+                        this.handleListDrop(this.draggedList, card);
+                    });
+
+                    // Touch events for mobile
+                    handle.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.draggedList = card;
+                        card.classList.add('dragging');
+                        this.listTouchStartY = e.touches[0].clientY;
+                        this.listTouchCurrentY = this.listTouchStartY;
+                    }, { passive: false });
+
+                    handle.addEventListener('touchmove', (e) => {
+                        if (!this.draggedList) return;
+                        e.preventDefault();
+                        this.listTouchCurrentY = e.touches[0].clientY;
+                        const deltaY = this.listTouchCurrentY - this.listTouchStartY;
+                        card.style.transform = `translateY(${deltaY}px)`;
+                        card.style.zIndex = '100';
+
+                        // Find potential drop target
+                        const allCards = Array.from(container.querySelectorAll('.list-card[data-id]'));
+                        allCards.forEach(c => c.classList.remove('drag-over'));
+
+                        const targetCard = allCards.find(c => {
+                            if (c === card) return false;
+                            const rect = c.getBoundingClientRect();
+                            return this.listTouchCurrentY > rect.top && this.listTouchCurrentY < rect.bottom;
+                        });
+
+                        if (targetCard) targetCard.classList.add('drag-over');
+                    }, { passive: false });
+
+                    handle.addEventListener('touchend', () => {
+                        if (!this.draggedList) return;
+                        card.style.transform = '';
+                        card.style.zIndex = '';
+                        card.classList.remove('dragging');
+
+                        const targetCard = container.querySelector('.list-card.drag-over');
+                        if (targetCard) {
+                            targetCard.classList.remove('drag-over');
+                            this.handleListDrop(this.draggedList, targetCard);
+                        }
+
+                        this.draggedList = null;
+                    });
+                });
+            },
+
+            async handleListDrop(draggedCard, targetCard) {
+                const container = document.getElementById('lists-container');
+                const cards = Array.from(container.querySelectorAll('.list-card[data-id]'));
+                const draggedIdx = cards.indexOf(draggedCard);
+                const targetIdx = cards.indexOf(targetCard);
+
+                if (draggedIdx === targetIdx) return;
+
+                // Reorder in DOM
+                if (draggedIdx < targetIdx) {
+                    targetCard.after(draggedCard);
+                } else {
+                    targetCard.before(draggedCard);
+                }
+
+                // Get new order and update positions
+                const newOrder = Array.from(container.querySelectorAll('.list-card[data-id]'))
+                    .map((card, idx) => ({ id: parseInt(card.dataset.id), position: idx }));
+
+                await this.updateListPositions(newOrder);
+            },
+
+            async updateListPositions(order) {
+                try {
+                    for (const item of order) {
+                        await DB.query(`UPDATE todo_list SET position = ${item.position}, updated_at = CURRENT_TIMESTAMP WHERE id = ${item.id}`);
+                    }
+                } catch (e) {
+                    console.error('Update list positions error:', e);
+                    this.loadLists(); // Reload on error
+                }
+            },
+
+            showAddListModal() {
+                this.showModal(`
+                    <h2>New List</h2>
+                    <div class="form-group">
+                        <label for="list-name-input">List Name</label>
+                        <input type="text" id="list-name-input" placeholder="My List">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn" onclick="App.createList()">Create</button>
+                    </div>
+                `);
+
+                setTimeout(() => document.getElementById('list-name-input').focus(), 100);
+                document.getElementById('list-name-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.createList();
+                });
+            },
+
+            async createList() {
+                const name = document.getElementById('list-name-input').value.trim();
+                if (!name) return;
+
+                try {
+                    await DB.query(`INSERT INTO todo_list (name) VALUES ('${this.escapeSQL(name)}')`);
+                    this.closeModal();
+                    await this.loadLists();
+                } catch (e) {
+                    console.error('Create list error:', e);
+                    alert('Failed to create list: ' + e.message);
+                }
+            },
+
+            async openList(id, updateHash = true) {
+                // Prevent double-loading from hashchange event
+                if (this.currentListId === id && !updateHash) return;
+
+                this.currentListId = id;
+                const hash = `#list/${id}`;
+                if (updateHash) {
+                    window.location.hash = hash;
+                }
+                localStorage.setItem('todos_last_hash', hash);
+                this.resetSearch();
+                this.showScreen('todo');
+                await this.loadTodos();
+                document.getElementById('new-todo-input').focus();
+            },
+
+            async processRecurrences() {
+                if (!this.currentListId) return;
+
+                try {
+                    // Get active recurring templates (not completed, has recurrence_type, no parent_id)
+                    const result = await DB.query(`
+                        SELECT id, title, notes, recurrence_type, recurrence_value
+                        FROM todo_list_item
+                        WHERE list_id = ${this.currentListId}
+                          AND recurrence_type IS NOT NULL
+                          AND parent_id IS NULL
+                          AND completed = 0
+                    `);
+
+                    if (!result.rows?.length) return;
+
+                    const today = new Date();
+                    // Get start of today in local time, formatted for SQL comparison
+                    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 19).replace('T', ' ');
+
+                    for (const row of result.rows) {
+                        const [id, title, notes, recType, recValue] = row;
+
+                        // Check if we should spawn today
+                        if (!this.shouldSpawnToday(recType, recValue, today)) continue;
+
+                        // Check if there's already a spawned copy that's either:
+                        // 1. Incomplete (not yet done), OR
+                        // 2. Created today (already done today, don't spawn again)
+                        const existsResult = await DB.query(`
+                            SELECT id FROM todo_list_item
+                            WHERE parent_id = ${id}
+                              AND (completed = 0 OR created_at >= '${todayStart}')
+                        `);
+
+                        if (existsResult.rows?.length > 0) continue;
+
+                        // Spawn new item at position 0
+                        await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
+                        await DB.query(`
+                            INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
+                            VALUES (${this.currentListId}, '${this.escapeSQL(title)}', '${this.escapeSQL(notes || '')}', 0, 0, ${id})
+                        `);
+                    }
+                } catch (e) {
+                    console.error('Process recurrences error:', e);
+                }
+            },
+
+            shouldSpawnToday(recType, recValue, today) {
+                const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+                const dayOfMonth = today.getDate();
+                const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                const monthDay = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase();
+
+                if (recType === 'daily') return true;
+
+                if (recType === 'weekly' && recValue) {
+                    const days = recValue.toLowerCase().split(',').map(d => d.trim());
+                    return days.some(d => dayOfWeek.startsWith(d) || d.startsWith(dayOfWeek.slice(0, 3)));
+                }
+
+                if (recType === 'monthly' && recValue) {
+                    // Split by comma or space to support multiple days (e.g., "1, 15" or "1 15")
+                    const values = recValue.toLowerCase().split(/[,\s]+/).map(v => v.trim()).filter(Boolean);
+                    return values.some(val => {
+                        if (val === 'first' || val === '1') return dayOfMonth === 1;
+                        if (val === 'last') return dayOfMonth === lastDayOfMonth;
+                        const num = parseInt(val);
+                        if (!isNaN(num)) return dayOfMonth === num;
+                        return false;
+                    });
+                }
+
+                if (recType === 'yearly' && recValue) {
+                    // Split by comma to support multiple dates (e.g., "Jan 1, Jul 4")
+                    const values = recValue.toLowerCase().split(',').map(v => v.trim()).filter(Boolean);
+                    return values.some(val => monthDay.includes(val));
+                }
+
+                return false;
+            },
+
+            async loadTodos(loadMoreCompleted = false) {
+                if (!this.currentListId) return;
+
+                try {
+                    const listResult = await DB.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
+                    if (listResult.rows?.length) {
+                        document.getElementById('list-title').textContent = listResult.rows[0][0];
+                    }
+
+                    // Process recurring items first (only on initial load)
+                    if (!loadMoreCompleted) {
+                        await this.processRecurrences();
+                        this.completedOffset = 0;
+                    }
+
+                    // Build search clause if searching
+                    const searchClause = this.searchTerm
+                        ? ` AND (LOWER(title) LIKE '%${this.escapeSQL(this.searchTerm)}%' OR LOWER(notes) LIKE '%${this.escapeSQL(this.searchTerm)}%')`
+                        : '';
+
+                    // Load active items (not completed) - no pagination needed
+                    if (!loadMoreCompleted) {
+                        const activeResult = await DB.query(`
+                            SELECT id, title, notes, completed, position,
+                                   created_at, updated_at, completed_at,
+                                   remind_at, recurrence_type, recurrence_value, parent_id
+                            FROM todo_list_item
+                            WHERE list_id = ${this.currentListId} AND completed = 0${searchClause}
+                            ORDER BY position ASC, id ASC
+                        `);
+
+                        this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
+                    }
+
+                    // Load completed items with pagination
+                    const completedResult = await DB.query(`
+                        SELECT id, title, notes, completed, position,
+                               created_at, updated_at, completed_at,
+                               remind_at, recurrence_type, recurrence_value, parent_id
+                        FROM todo_list_item
+                        WHERE list_id = ${this.currentListId} AND completed = 1${searchClause}
+                        ORDER BY completed_at DESC, id DESC
+                        LIMIT ${this.completedPageSize + 1} OFFSET ${this.completedOffset}
+                    `);
+
+                    const completedRows = completedResult.rows || [];
+                    // Check if there are more items
+                    this.completedHasMore = completedRows.length > this.completedPageSize;
+                    const completedTodos = completedRows.slice(0, this.completedPageSize).map(row => this.mapTodoRow(row));
+
+                    if (loadMoreCompleted) {
+                        // Append to existing completed todos
+                        this.allTodos = [...this.allTodos.filter(t => !t.completed), ...this.allTodos.filter(t => t.completed), ...completedTodos];
+                    } else {
+                        // Initial load - combine active and completed
+                        this.allTodos = [...this.allTodos, ...completedTodos];
+                    }
+
+                    this.completedOffset += completedTodos.length;
+                    this.renderTodos(this.allTodos);
+                } catch (e) {
+                    console.error('Load todos error:', e);
+                }
+            },
+
+            mapTodoRow(row) {
+                return {
+                    id: row[0],
+                    title: row[1],
+                    notes: row[2] || '',
+                    completed: row[3] == 1,
+                    position: row[4],
+                    created_at: row[5],
+                    updated_at: row[6],
+                    completed_at: row[7],
+                    remind_at: row[8],
+                    recurrence_type: row[9],
+                    recurrence_value: row[10],
+                    parent_id: row[11]
+                };
+            },
+
+            escapeSQL(str) {
+                return str.replace(/'/g, "''").toLowerCase();
+            },
+
+            renderTodos(todos) {
+                const now = new Date();
+
+                // Categorize todos
+                const scheduledTodos = []; // upcoming + recurring
+                const activeTodos = [];
+                const completedTodos = [];
+
+                todos.forEach(t => {
+                    if (t.completed) {
+                        completedTodos.push(t);
+                    } else if (t.recurrence_type && !t.parent_id) {
+                        // Recurring template (not a spawned copy)
+                        scheduledTodos.push({ ...t, scheduleType: 'recurring' });
+                    } else if (t.remind_at) {
+                        const remindDate = new Date(t.remind_at + 'Z');
+                        if (remindDate > now) {
+                            scheduledTodos.push({ ...t, scheduleType: 'upcoming' });
+                        } else {
+                            activeTodos.push(t);
+                        }
+                    } else {
+                        activeTodos.push(t);
+                    }
+                });
+
+                // Sort scheduled: upcoming first (by date), then recurring
+                scheduledTodos.sort((a, b) => {
+                    if (a.scheduleType === 'upcoming' && b.scheduleType === 'recurring') return -1;
+                    if (a.scheduleType === 'recurring' && b.scheduleType === 'upcoming') return 1;
+                    if (a.scheduleType === 'upcoming' && b.scheduleType === 'upcoming') {
+                        return new Date(a.remind_at) - new Date(b.remind_at);
+                    }
+                    return 0;
+                });
+
+                const activeHtml = activeTodos.length > 0
+                    ? activeTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('')
+                    : (completedTodos.length === 0 && scheduledTodos.length === 0 ? `
+                        <div class="empty-state">
+                            <svg><use href="#icon-notebook"/></svg>
+                            <p>Nothing here yet</p>
+                        </div>
+                    ` : '');
+
+                // Render active
+                document.getElementById('active-todos').innerHTML = activeHtml;
+
+                // Render scheduled section (upcoming + recurring)
+                document.getElementById('scheduled-todos').innerHTML = scheduledTodos.map((t, idx) => this.renderTodoItem(t, idx, t.scheduleType)).join('');
+                document.getElementById('scheduled-count').textContent = scheduledTodos.length;
+                document.getElementById('scheduled-section').classList.toggle('hidden', scheduledTodos.length === 0);
+
+                // Render completed section with load more button
+                let completedHtml = completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('');
+                if (this.completedHasMore) {
+                    completedHtml += `
+                        <li class="load-more-item">
+                            <button class="load-more-btn" id="load-more-completed">
+                                Load more completed items...
+                            </button>
+                        </li>
+                    `;
+                }
+                document.getElementById('completed-todos').innerHTML = completedHtml;
+                document.getElementById('completed-count').textContent = completedTodos.length + (this.completedHasMore ? '+' : '');
+                document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
+
+                this.bindTodoEvents();
+
+                // Bind load more button
+                const loadMoreBtn = document.getElementById('load-more-completed');
+                if (loadMoreBtn) {
+                    loadMoreBtn.addEventListener('click', () => this.loadMoreCompleted());
+                }
+            },
+
+            async loadMoreCompleted() {
+                if (this.loadingMoreCompleted || !this.completedHasMore) return;
+
+                this.loadingMoreCompleted = true;
+                const btn = document.getElementById('load-more-completed');
+                if (btn) btn.textContent = 'Loading...';
+
+                await this.loadTodos(true);
+                this.loadingMoreCompleted = false;
+            },
+
+            // Search functionality
+            toggleSearch() {
+                this.searchOpen = !this.searchOpen;
+                const container = document.getElementById('search-container');
+                const btn = document.getElementById('search-btn');
+                const input = document.getElementById('search-input');
+
+                container.classList.toggle('hidden', !this.searchOpen);
+                btn.classList.toggle('active', this.searchOpen);
+
+                if (this.searchOpen) {
+                    input.focus();
+                } else {
+                    this.clearSearch();
+                }
+            },
+
+            handleSearchInput(value) {
+                // Clear existing timeout
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+
+                // Update clear button visibility
+                const clearBtn = document.getElementById('search-clear-btn');
+                clearBtn.classList.toggle('hidden', !value);
+
+                // Debounce: wait 300ms after typing stops
+                this.searchTimeout = setTimeout(() => {
+                    this.searchTerm = value.toLowerCase().trim();
+                    this.loadTodos(); // Backend search
+                }, 300);
+            },
+
+            clearSearch() {
+                const input = document.getElementById('search-input');
+                const clearBtn = document.getElementById('search-clear-btn');
+
+                input.value = '';
+                clearBtn.classList.add('hidden');
+                this.searchTerm = '';
+
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+
+                this.loadTodos(); // Reload without search filter
+            },
+
+            resetSearch() {
+                // Reset search state when switching lists
+                this.searchOpen = false;
+                this.searchTerm = '';
+                this.allTodos = [];
+
+                if (this.searchTimeout) {
+                    clearTimeout(this.searchTimeout);
+                }
+
+                const container = document.getElementById('search-container');
+                const btn = document.getElementById('search-btn');
+                const input = document.getElementById('search-input');
+                const clearBtn = document.getElementById('search-clear-btn');
+
+                if (container) container.classList.add('hidden');
+                if (btn) btn.classList.remove('active');
+                if (input) input.value = '';
+                if (clearBtn) clearBtn.classList.add('hidden');
+            },
+
+            getChecklistStats(notes) {
+                if (!notes) return null;
+                const lines = notes.split('\n');
+                let total = 0, checked = 0;
+                lines.forEach(line => {
+                    const match = line.match(/^-\s*\[([ xX])\]/);
+                    if (match) {
+                        total++;
+                        if (match[1].toLowerCase() === 'x') checked++;
+                    }
+                });
+                return total > 0 ? { total, checked } : null;
+            },
+
+            renderTodoItem(todo, index, type = 'active') {
+                const hasNotes = todo.notes && todo.notes.trim();
+                const checklistStats = this.getChecklistStats(todo.notes);
+                const hasPlainNotes = hasNotes && !checklistStats;
+
+                let indicatorsHtml = '';
+                const indicators = [];
+
+                // Add type-specific badges
+                if (type === 'upcoming' && todo.remind_at) {
+                    const remindDate = new Date(todo.remind_at + 'Z');
+                    indicators.push(`<span class="todo-indicator upcoming-badge">${this.formatShortDate(remindDate)}</span>`);
+                }
+                if (type === 'recurring' && todo.recurrence_type) {
+                    indicators.push(`<span class="todo-indicator recurring-badge">${this.formatRecurrence(todo)}</span>`);
+                }
+
+                if (hasPlainNotes) {
+                    indicators.push(`<span class="todo-indicator"><svg><use href="#icon-notes"/></svg></span>`);
+                }
+                if (checklistStats) {
+                    const allDone = checklistStats.checked === checklistStats.total;
+                    indicators.push(`<span class="todo-indicator checklist-progress ${allDone ? 'all-done' : ''}">
+                        <svg><use href="#icon-check"/></svg>
+                        ${checklistStats.checked}/${checklistStats.total}
+                    </span>`);
+                }
+
+                if (indicators.length > 0) {
+                    indicatorsHtml = `<div class="todo-indicators" data-action="notes">${indicators.join('')}</div>`;
+                }
+
+                return `
+                    <li class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}" style="animation-delay: ${index * 30}ms">
+                        <div class="todo-main">
+                            <span class="drag-handle" data-action="drag">
+                                <svg><use href="#icon-drag"/></svg>
+                            </span>
+                            <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" data-action="toggle">
+                                <svg><use href="#icon-check"/></svg>
+                            </div>
+                            <div class="todo-content">
+                                <div class="todo-title">${this.escapeHtml(todo.title)}</div>
+                                ${indicatorsHtml}
+                            </div>
+                            <div class="todo-actions">
+                                <button class="todo-action-btn" data-action="schedule" title="Schedule">
+                                    <svg><use href="#icon-clock"/></svg>
+                                </button>
+                                <button class="todo-action-btn" data-action="notes" title="Notes">
+                                    <svg><use href="#icon-notes"/></svg>
+                                </button>
+                                <button class="todo-action-btn delete" data-action="delete" title="Delete">
+                                    <svg><use href="#icon-trash"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="todo-notes" data-todo-id="${todo.id}" data-title="${this.escapeHtml(todo.title)}">
+                            <div class="todo-edit-header">
+                                <button class="todo-edit-btn" data-action="toggle-edit">
+                                    <svg class="edit-icon"><use href="#icon-edit"/></svg>
+                                    <span class="edit-label">Edit</span>
+                                </button>
+                                <button class="todo-cancel-btn hidden" data-action="toggle-edit">
+                                    Cancel
+                                </button>
+                                <button class="todo-save-btn hidden" data-action="save-edit">
+                                    <svg><use href="#icon-check"/></svg>
+                                    <span>Save</span>
+                                </button>
+                            </div>
+                            <div class="todo-edit-form hidden">
+                                <div class="form-group">
+                                    <label>Title</label>
+                                    <input type="text" class="title-edit-input" value="${this.escapeHtml(todo.title)}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Notes</label>
+                                    <textarea class="notes-textarea" placeholder="Add notes... Use - [ ] for checklists">${this.escapeHtml(todo.notes)}</textarea>
+                                </div>
+                            </div>
+                            <div class="todo-view-mode">
+                                ${this.renderNotesPreview(todo.notes, todo.id)}
+                            </div>
+                            ${this.renderTimestamps(todo)}
+                        </div>
+                    </li>
+                `;
+            },
+
+            renderTimestamps(todo) {
+                const created = this.formatTimestamp(todo.created_at);
+                const updated = this.formatTimestamp(todo.updated_at);
+                const completed = this.formatTimestamp(todo.completed_at);
+
+                let html = '<div class="todo-timestamps">';
+                if (created) {
+                    html += `<div class="timestamp"><span class="timestamp-label">Created</span> ${created}</div>`;
+                }
+                if (updated && updated !== created) {
+                    html += `<div class="timestamp"><span class="timestamp-label">Updated</span> ${updated}</div>`;
+                }
+                if (completed) {
+                    html += `<div class="timestamp"><span class="timestamp-label">Completed</span> ${completed}</div>`;
+                }
+                html += '</div>';
+                return html;
+            },
+
+            renderNotesPreview(notes, todoId) {
+                if (!notes || !notes.trim()) {
+                    return '<div class="notes-preview empty">No notes yet</div>';
+                }
+
+                const lines = notes.split('\n');
+                let html = '<div class="notes-preview" data-action="edit-notes"><ul>';
+
+                lines.forEach((line, idx) => {
+                    const checkMatch = line.match(/^-\s*\[([ xX])\]\s*(.*)$/);
+                    if (checkMatch) {
+                        const checked = checkMatch[1].toLowerCase() === 'x';
+                        html += `<li class="checklist-item ${checked ? 'checked' : ''}" data-line="${idx}" data-action="toggle-check">
+                            <span class="check-box"><svg><use href="#icon-check"/></svg></span>
+                            <span class="check-text">${this.escapeHtml(checkMatch[2])}</span>
+                        </li>`;
+                    } else if (line.trim()) {
+                        html += `<li>${this.escapeHtml(line)}</li>`;
+                    }
+                });
+
+                html += '</ul></div>';
+                return html;
+            },
+
+            bindTodoEvents() {
+                document.querySelectorAll('.todo-item').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        const actionEl = e.target.closest('[data-action]');
+                        const action = actionEl?.dataset.action;
+                        const id = parseInt(item.dataset.id);
+
+                        if (action === 'toggle') this.toggleTodo(id, actionEl);
+                        else if (action === 'delete') this.deleteTodo(id);
+                        else if (action === 'schedule') this.showScheduleModal(id, item);
+                        else if (action === 'notes') this.toggleNotes(item);
+                        else if (action === 'toggle-check') {
+                            e.stopPropagation();
+                            const lineIdx = parseInt(actionEl.dataset.line);
+                            this.toggleChecklistItem(item, lineIdx);
+                        } else if (action === 'toggle-edit') {
+                            this.toggleEditMode(item);
+                        } else if (action === 'save-edit') {
+                            this.saveEditMode(item);
+                        }
+                    });
+
+                    // Only allow dragging when initiated from drag handle
+                    const dragHandle = item.querySelector('.drag-handle');
+                    dragHandle.addEventListener('mousedown', () => {
+                        item.setAttribute('draggable', 'true');
+                    });
+
+                    // Touch drag support for mobile
+                    dragHandle.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.startTouchDrag(e, item);
+                    });
+
+                    item.addEventListener('dragstart', (e) => this.handleDragStart(e, item));
+                    item.addEventListener('dragend', (e) => {
+                        this.handleDragEnd(e, item);
+                        item.removeAttribute('draggable');
+                    });
+                    item.addEventListener('dragover', (e) => this.handleDragOver(e, item));
+                    item.addEventListener('dragleave', (e) => this.handleDragLeave(e, item));
+                    item.addEventListener('drop', (e) => this.handleDrop(e, item));
+                });
+
+                document.querySelectorAll('.notes-textarea').forEach(textarea => {
+                    textarea.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            const pos = textarea.selectionStart;
+                            const text = textarea.value;
+                            const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+                            const line = text.slice(lineStart, pos);
+
+                            // Check if line starts with checklist pattern
+                            const match = line.match(/^([-*]\s*\[[ xX]\]\s*)/);
+                            if (match) {
+                                e.preventDefault();
+                                // Insert newline + unchecked checkbox prefix
+                                const prefix = match[1].replace(/\[[xX]\]/, '[ ]');
+                                const before = text.slice(0, pos);
+                                const after = text.slice(pos);
+                                textarea.value = before + '\n' + prefix + after;
+                                textarea.selectionStart = textarea.selectionEnd = pos + 1 + prefix.length;
+                            }
+                        }
+                    });
+                });
+            },
+
+            handleDragStart(e, item) {
+                this.draggedItem = item;
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            },
+
+            handleDragEnd(e, item) {
+                item.classList.remove('dragging');
+                document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                this.draggedItem = null;
+            },
+
+            handleDragOver(e, item) {
+                e.preventDefault();
+                if (item !== this.draggedItem) {
+                    item.classList.add('drag-over');
+                }
+            },
+
+            handleDragLeave(e, item) {
+                item.classList.remove('drag-over');
+            },
+
+            // Touch drag implementation for mobile
+            startTouchDrag(e, item) {
+                this.draggedItem = item;
+                item.classList.add('dragging');
+
+                const touch = e.touches[0];
+                this.touchStartY = touch.clientY;
+                this.touchCurrentY = touch.clientY;
+
+                const onTouchMove = (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    this.touchCurrentY = touch.clientY;
+
+                    // Find item under touch point
+                    const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const targetItem = elemBelow?.closest('.todo-item');
+
+                    // Clear previous drag-over states
+                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+
+                    if (targetItem && targetItem !== this.draggedItem) {
+                        targetItem.classList.add('drag-over');
+                    }
+                };
+
+                const onTouchEnd = async (e) => {
+                    document.removeEventListener('touchmove', onTouchMove);
+                    document.removeEventListener('touchend', onTouchEnd);
+
+                    item.classList.remove('dragging');
+
+                    const targetItem = document.querySelector('.todo-item.drag-over');
+                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+
+                    if (targetItem && targetItem !== this.draggedItem) {
+                        const list = targetItem.parentNode;
+                        const items = Array.from(list.querySelectorAll('.todo-item'));
+                        const draggedIndex = items.indexOf(this.draggedItem);
+                        const targetIndex = items.indexOf(targetItem);
+
+                        if (draggedIndex < targetIndex) {
+                            targetItem.after(this.draggedItem);
+                        } else {
+                            targetItem.before(this.draggedItem);
+                        }
+
+                        await this.updatePositions(list);
+                    }
+
+                    this.draggedItem = null;
+                };
+
+                document.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.addEventListener('touchend', onTouchEnd);
+            },
+
+            async handleDrop(e, item) {
+                e.preventDefault();
+                item.classList.remove('drag-over');
+
+                if (!this.draggedItem || item === this.draggedItem) return;
+
+                const list = item.parentNode;
+                const items = Array.from(list.querySelectorAll('.todo-item'));
+                const draggedIndex = items.indexOf(this.draggedItem);
+                const targetIndex = items.indexOf(item);
+
+                if (draggedIndex < targetIndex) {
+                    item.after(this.draggedItem);
+                } else {
+                    item.before(this.draggedItem);
+                }
+
+                await this.updatePositions(list);
+            },
+
+            async updatePositions(list) {
+                const items = Array.from(list.querySelectorAll('.todo-item'));
+
+                for (let i = 0; i < items.length; i++) {
+                    const id = parseInt(items[i].dataset.id);
+                    await DB.query(`UPDATE todo_list_item SET position = ${i} WHERE id = ${id}`);
+                }
+            },
+
+            toggleNotes(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                notesEl.classList.toggle('expanded');
+            },
+
+            toggleEditMode(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                const editForm = notesEl.querySelector('.todo-edit-form');
+                const viewMode = notesEl.querySelector('.todo-view-mode');
+                const editBtn = notesEl.querySelector('.todo-edit-btn');
+                const cancelBtn = notesEl.querySelector('.todo-cancel-btn');
+                const saveBtn = notesEl.querySelector('.todo-save-btn');
+
+                const isEditing = !editForm.classList.contains('hidden');
+
+                if (isEditing) {
+                    // Cancel edit, restore original values
+                    const titleInput = editForm.querySelector('.title-edit-input');
+                    titleInput.value = notesEl.dataset.title;
+                    editForm.classList.add('hidden');
+                    viewMode.classList.remove('hidden');
+                    editBtn.classList.remove('hidden');
+                    cancelBtn.classList.add('hidden');
+                    saveBtn.classList.add('hidden');
+                } else {
+                    // Enter edit mode
+                    editForm.classList.remove('hidden');
+                    viewMode.classList.add('hidden');
+                    editBtn.classList.add('hidden');
+                    cancelBtn.classList.remove('hidden');
+                    saveBtn.classList.remove('hidden');
+                    editForm.querySelector('.title-edit-input').focus();
+                }
+            },
+
+            async saveEditMode(item) {
+                const todoId = parseInt(item.dataset.id);
+                const notesEl = item.querySelector('.todo-notes');
+                const editForm = notesEl.querySelector('.todo-edit-form');
+                const titleInput = editForm.querySelector('.title-edit-input');
+                const textarea = editForm.querySelector('.notes-textarea');
+
+                const newTitle = titleInput.value.trim();
+                const newNotes = textarea.value;
+
+                if (!newTitle) {
+                    alert('Title cannot be empty');
+                    return;
+                }
+
+                try {
+                    await DB.query(`UPDATE todo_list_item SET
+                        title = '${this.escapeSQL(newTitle)}',
+                        notes = '${this.escapeSQL(newNotes)}',
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${todoId}`);
+
+                    // Update the displayed title
+                    item.querySelector('.todo-title').textContent = newTitle;
+                    notesEl.dataset.title = newTitle;
+
+                    // Update view mode with new notes preview
+                    const viewMode = notesEl.querySelector('.todo-view-mode');
+                    viewMode.innerHTML = this.renderNotesPreview(newNotes, todoId);
+
+                    // Update indicators
+                    this.updateChecklistIndicator(item, newNotes);
+
+                    // Exit edit mode
+                    editForm.classList.add('hidden');
+                    viewMode.classList.remove('hidden');
+                    notesEl.querySelector('.todo-edit-btn').classList.remove('hidden');
+                    notesEl.querySelector('.todo-cancel-btn').classList.add('hidden');
+                    notesEl.querySelector('.todo-save-btn').classList.add('hidden');
+                } catch (e) {
+                    console.error('Save edit error:', e);
+                    alert('Failed to save: ' + e.message);
+                }
+            },
+
+            showNotesEditor(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                const textarea = notesEl.querySelector('.notes-textarea');
+                const preview = notesEl.querySelector('.notes-preview');
+
+                notesEl.classList.add('expanded');
+                textarea.classList.remove('hidden');
+                if (preview) preview.classList.add('hidden');
+                textarea.focus();
+            },
+
+            hideNotesEditor(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                const textarea = notesEl.querySelector('.notes-textarea');
+                const preview = notesEl.querySelector('.notes-preview');
+                const todoId = parseInt(notesEl.dataset.todoId);
+
+                textarea.classList.add('hidden');
+
+                const newPreview = this.renderNotesPreview(textarea.value, todoId);
+                if (preview) {
+                    preview.outerHTML = newPreview;
+                } else {
+                    textarea.insertAdjacentHTML('afterend', newPreview);
+                }
+
+                const newPreviewEl = notesEl.querySelector('.notes-preview');
+                if (newPreviewEl) newPreviewEl.classList.remove('hidden');
+
+                if (!textarea.value.trim()) {
+                    notesEl.classList.remove('expanded');
+                }
+            },
+
+            async toggleChecklistItem(item, lineIdx) {
+                const notesEl = item.querySelector('.todo-notes');
+                const textarea = notesEl.querySelector('.notes-textarea');
+                const todoId = parseInt(notesEl.dataset.todoId);
+
+                const lines = textarea.value.split('\n');
+                if (lineIdx < lines.length) {
+                    const line = lines[lineIdx];
+                    if (line.match(/^-\s*\[ \]/)) {
+                        lines[lineIdx] = line.replace(/^(-\s*)\[ \]/, '$1[x]');
+                    } else if (line.match(/^-\s*\[[xX]\]/)) {
+                        lines[lineIdx] = line.replace(/^(-\s*)\[[xX]\]/, '$1[ ]');
+                    }
+
+                    textarea.value = lines.join('\n');
+                    await this.saveNotes(todoId, textarea.value);
+
+                    const preview = notesEl.querySelector('.notes-preview');
+                    if (preview) {
+                        preview.outerHTML = this.renderNotesPreview(textarea.value, todoId);
+                    }
+
+                    // Update the checklist indicator
+                    this.updateChecklistIndicator(item, textarea.value);
+                }
+            },
+
+            updateChecklistIndicator(item, notes) {
+                const stats = this.getChecklistStats(notes);
+                const indicatorsEl = item.querySelector('.todo-indicators');
+                const contentEl = item.querySelector('.todo-content');
+
+                if (stats) {
+                    const allDone = stats.checked === stats.total;
+                    const indicatorHtml = `<span class="todo-indicator checklist-progress ${allDone ? 'all-done' : ''}">
+                        <svg><use href="#icon-check"/></svg>
+                        ${stats.checked}/${stats.total}
+                    </span>`;
+
+                    if (indicatorsEl) {
+                        const existing = indicatorsEl.querySelector('.checklist-progress');
+                        if (existing) {
+                            existing.outerHTML = indicatorHtml;
+                        } else {
+                            indicatorsEl.insertAdjacentHTML('beforeend', indicatorHtml);
+                        }
+                    } else {
+                        contentEl.insertAdjacentHTML('beforeend', `<div class="todo-indicators">${indicatorHtml}</div>`);
+                    }
+                }
+            },
+
+            async saveNotes(todoId, notes) {
+                try {
+                    await DB.query(`UPDATE todo_list_item SET notes = '${this.escapeSQL(notes)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${todoId}`);
+                } catch (e) {
+                    console.error('Save notes error:', e);
+                }
+            },
+
+            async addTodo() {
+                const input = document.getElementById('new-todo-input');
+                const title = input.value.trim();
+                if (!title || !this.currentListId) return;
+
+                try {
+                    // Shift existing items down to make room at position 0
+                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
+
+                    await DB.query(`
+                        INSERT INTO todo_list_item (list_id, title, position, completed)
+                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', 0, 0)
+                    `);
+
+                    input.value = '';
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Add todo error:', e);
+                    alert('Failed to add item: ' + e.message);
+                }
+            },
+
+            async toggleTodo(id, checkboxEl) {
+                // Immediate visual feedback
+                if (checkboxEl) {
+                    checkboxEl.classList.add('saving');
+                }
+
+                try {
+                    await DB.query(`UPDATE todo_list_item SET
+                        completed = CASE WHEN completed = 1 THEN 0 ELSE 1 END,
+                        completed_at = CASE WHEN completed = 1 THEN NULL ELSE CURRENT_TIMESTAMP END,
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${id}`);
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Toggle todo error:', e);
+                    // Remove saving state on error
+                    if (checkboxEl) {
+                        checkboxEl.classList.remove('saving');
+                    }
+                }
+            },
+
+            async showScheduleModal(id, item) {
+                // Get current values from the item data
+                const result = await DB.query(`SELECT remind_at, recurrence_type, recurrence_value FROM todo_list_item WHERE id = ${id}`);
+                const row = result.rows?.[0] || [];
+                const currentRemindAt = row[0] || '';
+                const currentRecurrenceType = row[1] || '';
+                const currentRecurrenceValue = row[2] || '';
+
+                // Format remind_at for date input (just the date part)
+                let remindAtValue = '';
+                if (currentRemindAt) {
+                    const d = new Date(currentRemindAt + 'Z');
+                    if (!isNaN(d.getTime())) {
+                        // Get local date in YYYY-MM-DD format
+                        const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+                        remindAtValue = localDate.toISOString().slice(0, 10);
+                    }
+                }
+
+                this.showModal(`
+                    <h2>Schedule</h2>
+                    <div class="form-group">
+                        <label>Remind me on</label>
+                        <div class="date-input-wrapper">
+                            <input type="date" id="schedule-remind-at" value="${remindAtValue}">
+                        </div>
+                        <p class="form-hint">Item will appear in your list on this date</p>
+                    </div>
+                    <div class="form-divider">— or —</div>
+                    <div class="form-group">
+                        <label>Repeat</label>
+                        <select id="schedule-recurrence">
+                            <option value="">No repeat</option>
+                            <option value="daily" ${currentRecurrenceType === 'daily' ? 'selected' : ''}>Daily</option>
+                            <option value="weekly" ${currentRecurrenceType === 'weekly' ? 'selected' : ''}>Weekly</option>
+                            <option value="monthly" ${currentRecurrenceType === 'monthly' ? 'selected' : ''}>Monthly</option>
+                            <option value="yearly" ${currentRecurrenceType === 'yearly' ? 'selected' : ''}>Yearly</option>
+                        </select>
+                    </div>
+                    <div class="form-group hidden" id="weekly-days-group">
+                        <label>Days</label>
+                        <div class="days-checklist">
+                            ${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                                const isChecked = currentRecurrenceValue?.toLowerCase().includes(day.toLowerCase().slice(0, 3)) ? 'checked' : '';
+                                return `<label class="day-check"><input type="checkbox" value="${day}" ${isChecked}><span>${day.slice(0, 3)}</span></label>`;
+                            }).join('')}
+                        </div>
+                    </div>
+                    <div class="form-group hidden" id="recurrence-value-group">
+                        <label id="recurrence-value-label">Details</label>
+                        <input type="text" id="schedule-recurrence-value" value="${this.escapeHtml(currentRecurrenceValue)}" placeholder="">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn btn-danger" onclick="App.clearSchedule(${id})" style="margin-left: auto;">Clear</button>
+                        <button class="btn" onclick="App.saveSchedule(${id})">Save</button>
+                    </div>
+                `);
+
+                // Setup recurrence value field toggling
+                const recurrenceSelect = document.getElementById('schedule-recurrence');
+                const weeklyDaysGroup = document.getElementById('weekly-days-group');
+                const recurrenceValueGroup = document.getElementById('recurrence-value-group');
+                const recurrenceValueLabel = document.getElementById('recurrence-value-label');
+                const recurrenceValueInput = document.getElementById('schedule-recurrence-value');
+
+                const updateRecurrenceFields = () => {
+                    const type = recurrenceSelect.value;
+                    weeklyDaysGroup.classList.add('hidden');
+                    recurrenceValueGroup.classList.add('hidden');
+
+                    if (type === 'weekly') {
+                        weeklyDaysGroup.classList.remove('hidden');
+                    } else if (type === 'monthly') {
+                        recurrenceValueGroup.classList.remove('hidden');
+                        recurrenceValueLabel.textContent = 'Day(s) of month';
+                        recurrenceValueInput.placeholder = '1, 15 or first, last';
+                    } else if (type === 'yearly') {
+                        recurrenceValueGroup.classList.remove('hidden');
+                        recurrenceValueLabel.textContent = 'Date(s)';
+                        recurrenceValueInput.placeholder = 'Jan 1, Jul 4';
+                    }
+                };
+
+                recurrenceSelect.addEventListener('change', updateRecurrenceFields);
+                updateRecurrenceFields();
+            },
+
+            async clearSchedule(id) {
+                try {
+                    await DB.query(`UPDATE todo_list_item SET remind_at = NULL, recurrence_type = NULL, recurrence_value = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    this.closeModal();
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Clear schedule error:', e);
+                    alert('Failed to clear schedule: ' + e.message);
+                }
+            },
+
+            async saveSchedule(id) {
+                const remindAt = document.getElementById('schedule-remind-at').value;
+                const recurrenceType = document.getElementById('schedule-recurrence').value;
+                let recurrenceValue = '';
+
+                if (recurrenceType === 'weekly') {
+                    // Get checked days from checkboxes
+                    const checkedDays = Array.from(document.querySelectorAll('#weekly-days-group input:checked'))
+                        .map(cb => cb.value);
+                    recurrenceValue = checkedDays.join(',');
+                } else {
+                    recurrenceValue = document.getElementById('schedule-recurrence-value').value.trim();
+                }
+
+                try {
+                    let remindAtUTC = 'NULL';
+                    if (remindAt) {
+                        // Date input gives YYYY-MM-DD, store as start of that day in UTC
+                        // Parse as local date at midnight, then convert to UTC
+                        const [year, month, day] = remindAt.split('-').map(Number);
+                        const localDate = new Date(year, month - 1, day, 0, 0, 0);
+                        remindAtUTC = `'${localDate.toISOString().slice(0, 19)}'`;
+                    }
+
+                    const recTypeSQL = recurrenceType ? `'${this.escapeSQL(recurrenceType)}'` : 'NULL';
+                    const recValueSQL = recurrenceValue ? `'${this.escapeSQL(recurrenceValue)}'` : 'NULL';
+
+                    await DB.query(`UPDATE todo_list_item SET
+                        remind_at = ${remindAtUTC},
+                        recurrence_type = ${recTypeSQL},
+                        recurrence_value = ${recValueSQL},
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${id}`);
+
+                    this.closeModal();
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Save schedule error:', e);
+                    alert('Failed to save schedule: ' + e.message);
+                }
+            },
+
+            async deleteTodo(id) {
+                if (!confirm('Delete this item?')) return;
+
+                try {
+                    await DB.query(`DELETE FROM todo_list_item WHERE id = ${id}`);
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Delete todo error:', e);
+                }
+            },
+
+            toggleSection(section) {
+                const header = document.getElementById(`${section}-header`);
+                const list = document.getElementById(`${section}-todos`);
+                const isCollapsed = header.classList.contains('collapsed');
+
+                header.classList.toggle('collapsed', !isCollapsed);
+                list.classList.toggle('hidden', !isCollapsed);
+            },
+
+            toggleCompleted() {
+                this.completedCollapsed = !this.completedCollapsed;
+                document.getElementById('completed-header').classList.toggle('collapsed', this.completedCollapsed);
+                document.getElementById('completed-todos').classList.toggle('hidden', this.completedCollapsed);
+            },
+
+            goBack() {
+                this.currentListId = null;
+                window.location.hash = '';
+                localStorage.setItem('todos_last_hash', '');
+                this.showScreen('lists');
+                this.loadLists();
+            },
+
+            startTitleEdit() {
+                const title = document.getElementById('list-title');
+                const input = document.getElementById('list-title-input');
+                const editBtn = document.getElementById('edit-list-btn');
+
+                input.value = title.textContent;
+                title.classList.add('hidden');
+                editBtn.classList.add('hidden');
+                input.classList.remove('hidden');
+                input.focus();
+                input.select();
+            },
+
+            cancelTitleEdit() {
+                const title = document.getElementById('list-title');
+                const input = document.getElementById('list-title-input');
+                const editBtn = document.getElementById('edit-list-btn');
+
+                input.classList.add('hidden');
+                title.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
+            },
+
+            async saveTitleEdit() {
+                const title = document.getElementById('list-title');
+                const input = document.getElementById('list-title-input');
+                const editBtn = document.getElementById('edit-list-btn');
+                const name = input.value.trim();
+
+                if (!name || !this.currentListId) {
+                    this.cancelTitleEdit();
+                    return;
+                }
+
+                try {
+                    await DB.query(`UPDATE todo_list SET name = '${this.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
+                    title.textContent = name;
+                } catch (e) {
+                    console.error('Save list name error:', e);
+                }
+
+                input.classList.add('hidden');
+                title.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
+            },
+
+            deleteCurrentList() {
+                const currentName = document.getElementById('list-title').textContent;
+
+                this.showModal(`
+                    <h2>Delete List</h2>
+                    <p style="margin-bottom: 16px; color: var(--ink-light);">Type <strong>${this.escapeHtml(currentName)}</strong> to confirm deletion:</p>
+                    <div class="form-group">
+                        <input type="text" id="delete-confirm-input" placeholder="Type list name to confirm">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button class="btn btn-danger" id="confirm-delete-btn" onclick="App.confirmDeleteList()" disabled>Delete</button>
+                    </div>
+                `);
+
+                const input = document.getElementById('delete-confirm-input');
+                const btn = document.getElementById('confirm-delete-btn');
+
+                input.addEventListener('input', () => {
+                    btn.disabled = input.value !== currentName;
+                });
+
+                setTimeout(() => input.focus(), 100);
+            },
+
+            async confirmDeleteList() {
+                try {
+                    await DB.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
+                    await DB.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
+                    this.closeModal();
+                    this.goBack();
+                } catch (e) {
+                    console.error('Delete list error:', e);
+                    alert('Failed to delete: ' + e.message);
+                }
+            },
+
+            showSettings() {
+                this.showModal(`
+                    <h2>Settings</h2>
+                    <p style="color: var(--ink-light); margin-bottom: 20px; font-size: 0.9rem;">Connected to: ${this.escapeHtml(DB.config?.baseUrl || 'Unknown')}</p>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="App.disconnect()">Disconnect</button>
+                        <button class="btn" onclick="App.closeModal()">Close</button>
+                    </div>
+                `);
+            },
+
+            disconnect() {
+                if (!confirm('Disconnect from database? Your data will remain on the server.')) return;
+
+                DB.clearConfig();
+                this.closeModal();
+                document.getElementById('ayb-url').value = '';
+                document.getElementById('ayb-token').value = '';
+                this.showScreen('setup');
+            },
+
+            showModal(content) {
+                document.getElementById('modal-content').innerHTML = content;
+                document.getElementById('modal-overlay').classList.remove('hidden');
+            },
+
+            closeModal() {
+                document.getElementById('modal-overlay').classList.add('hidden');
+            },
+
+            escapeHtml(str) {
+                if (!str) return '';
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            },
+
+            escapeSQL(str) {
+                if (!str) return '';
+                return str.replace(/'/g, "''");
+            },
+
+            formatShortDate(date) {
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const isTomorrow = date.toDateString() === tomorrow.toDateString();
+
+                if (isToday) {
+                    return 'Today ' + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                } else if (isTomorrow) {
+                    return 'Tomorrow';
+                } else {
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                }
+            },
+
+            formatRecurrence(todo) {
+                const type = todo.recurrence_type;
+                const value = todo.recurrence_value;
+
+                if (type === 'daily') return 'Daily';
+                if (type === 'weekly' && value) {
+                    const days = value.split(',').map(d => d.slice(0, 3)).join(', ');
+                    return `Weekly: ${days}`;
+                }
+                if (type === 'monthly') {
+                    if (value === 'first') return 'Monthly: 1st';
+                    if (value === 'last') return 'Monthly: Last';
+                    return `Monthly: ${value}`;
+                }
+                if (type === 'yearly') return `Yearly: ${value || ''}`;
+                return type || 'Recurring';
+            },
+
+            formatTimestamp(utcString) {
+                if (!utcString) return null;
+                // Parse UTC timestamp and format in local time
+                const date = new Date(utcString + 'Z'); // Append Z to treat as UTC
+                if (isNaN(date.getTime())) return null;
+
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const isYesterday = date.toDateString() === yesterday.toDateString();
+
+                const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+                if (isToday) {
+                    return `Today at ${timeStr}`;
+                } else if (isYesterday) {
+                    return `Yesterday at ${timeStr}`;
+                } else {
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined }) + ` at ${timeStr}`;
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => App.init());
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker registered'))
+                .catch(err => console.log('Service Worker registration failed:', err));
+        }
+    </script>
+</body>
+</html>
