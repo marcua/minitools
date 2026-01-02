@@ -314,11 +314,27 @@
             gap: 3px;
         }
 
+        /* Daily grid: 7 rows (days of week) flowing into columns (weeks) */
+        .streak-grid.daily {
+            display: grid;
+            grid-template-rows: repeat(7, 1fr);
+            grid-auto-flow: column;
+            grid-auto-columns: min-content;
+            gap: 2px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
         .streak-cell {
             width: 12px;
             height: 12px;
             border-radius: 2px;
             background: var(--streak-empty);
+            cursor: pointer;
+        }
+
+        .streak-cell:hover {
+            opacity: 0.8;
         }
 
         .streak-cell.filled {
@@ -330,12 +346,54 @@
             border: 1px solid var(--ink-faint);
         }
 
+        .streak-cell.placeholder {
+            visibility: hidden;
+        }
+
         /* Weekly/Monthly streaks */
         .streak-grid.weekly .streak-cell,
         .streak-grid.monthly .streak-cell {
             width: 20px;
             height: 20px;
             border-radius: 4px;
+        }
+
+        /* Streak popover */
+        .streak-popover {
+            display: none;
+            position: fixed;
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            padding: 12px;
+            max-width: 280px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 200;
+        }
+
+        .streak-popover.active {
+            display: block;
+        }
+
+        .streak-popover-date {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .streak-popover-note {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+            word-wrap: break-word;
+        }
+
+        .streak-popover-note a {
+            color: var(--accent);
+        }
+
+        .streak-popover-empty {
+            font-size: 0.875rem;
+            color: var(--ink-faint);
+            font-style: italic;
         }
 
         /* Year links */
@@ -579,6 +637,12 @@
                 <button class="btn btn-danger" id="confirm-ok">Confirm</button>
             </div>
         </div>
+    </div>
+
+    <!-- Streak Popover -->
+    <div class="streak-popover" id="streak-popover">
+        <div class="streak-popover-date" id="popover-date"></div>
+        <div id="popover-content"></div>
     </div>
 
     <script>
@@ -894,12 +958,13 @@
         async function getCompletionsForYear(year) {
             const startDate = `${year}-01-01`;
             const endDate = `${year}-12-31`;
-            const result = await DB.query(`SELECT goal_id, date FROM completions
+            const result = await DB.query(`SELECT goal_id, date, note FROM completions
                 WHERE date >= '${startDate}' AND date <= '${endDate}'
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
                 goal_id: Number(row[0]),
-                date: row[1]
+                date: row[1],
+                note: row[2]
             })) : [];
         }
 
@@ -1081,53 +1146,71 @@
         }
 
         function renderStreakChart(goal, completions, year) {
-            const completedDates = new Set(completions.map(c => c.date));
-            const today = new Date();
-            const todayStr = getLocalDate();
+            // Create map of date -> completion (with note)
+            const completionMap = {};
+            completions.forEach(c => {
+                completionMap[c.date] = c;
+            });
 
+            const today = new Date();
             let cells = '';
             let count = 0;
             let total = 0;
 
             if (goal.frequency === 'daily') {
-                // 365/366 cells
+                // 7-row grid like GitHub: rows are days of week, columns are weeks
                 const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
                 const daysInYear = isLeapYear ? 366 : 365;
+
+                // Add placeholder cells for days before Jan 1
+                const jan1 = new Date(year, 0, 1);
+                const startDayOfWeek = jan1.getDay(); // 0 = Sunday
+                for (let i = 0; i < startDayOfWeek; i++) {
+                    cells += `<div class="streak-cell placeholder"></div>`;
+                }
 
                 for (let day = 1; day <= daysInYear; day++) {
                     const date = new Date(year, 0, day);
                     const dateStr = getLocalDate(date);
                     const utcDate = localToUTC(dateStr);
                     const isFuture = date > today;
-                    const isFilled = completedDates.has(utcDate);
+                    const completion = completionMap[utcDate];
+                    const isFilled = !!completion;
 
                     if (!isFuture) total++;
                     if (isFilled) count++;
 
-                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}" title="${dateStr}"></div>`;
+                    const noteAttr = completion?.note ? `data-note="${escapeHtml(completion.note)}"` : '';
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
+                        data-date="${dateStr}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
                 }
             } else if (goal.frequency === 'weekly') {
                 // 52 cells
                 for (let week = 1; week <= 52; week++) {
-                    // Get date for this week
                     const weekDate = new Date(year, 0, (week - 1) * 7 + 4);
                     const isFuture = weekDate > today;
 
-                    // Check if any date in this week is completed
+                    // Check if any date in this week is completed, collect notes
                     let isFilled = false;
+                    let weekNotes = [];
                     for (let d = 0; d < 7; d++) {
                         const checkDate = new Date(year, 0, (week - 1) * 7 + d + 1);
                         const utcDate = localToUTC(getLocalDate(checkDate));
-                        if (completedDates.has(utcDate)) {
+                        const completion = completionMap[utcDate];
+                        if (completion) {
                             isFilled = true;
-                            break;
+                            if (completion.note) weekNotes.push(completion.note);
                         }
                     }
 
                     if (!isFuture) total++;
                     if (isFilled) count++;
 
-                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}" title="Week ${week}"></div>`;
+                    const weekStart = new Date(year, 0, (week - 1) * 7 + 1);
+                    const weekLabel = `Week ${week} (${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
+                    const noteAttr = weekNotes.length > 0 ? `data-note="${escapeHtml(weekNotes.join('\n\n'))}"` : '';
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
+                        data-date="${weekLabel}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
                 }
             } else {
                 // Monthly - 12 cells
@@ -1135,23 +1218,27 @@
                     const monthDate = new Date(year, month, 15);
                     const isFuture = monthDate > today;
 
-                    // Check if any date in this month is completed
+                    // Check if any date in this month is completed, collect notes
                     let isFilled = false;
+                    let monthNotes = [];
                     const daysInMonth = new Date(year, month + 1, 0).getDate();
                     for (let d = 1; d <= daysInMonth; d++) {
                         const checkDate = new Date(year, month, d);
                         const utcDate = localToUTC(getLocalDate(checkDate));
-                        if (completedDates.has(utcDate)) {
+                        const completion = completionMap[utcDate];
+                        if (completion) {
                             isFilled = true;
-                            break;
+                            if (completion.note) monthNotes.push(completion.note);
                         }
                     }
 
                     if (!isFuture) total++;
                     if (isFilled) count++;
 
-                    const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'short' });
-                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}" title="${monthName}"></div>`;
+                    const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    const noteAttr = monthNotes.length > 0 ? `data-note="${escapeHtml(monthNotes.join('\n\n'))}"` : '';
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
+                        data-date="${monthName}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
                 }
             }
 
@@ -1165,6 +1252,67 @@
                 </div>
             `;
         }
+
+        // ============ Streak Popover ============
+        window.showStreakPopover = function(event, element) {
+            event.stopPropagation();
+
+            const date = element.dataset.date;
+            const note = element.dataset.note;
+            const isFilled = element.classList.contains('filled');
+
+            const popover = document.getElementById('streak-popover');
+            const dateEl = document.getElementById('popover-date');
+            const contentEl = document.getElementById('popover-content');
+
+            dateEl.textContent = date;
+
+            if (isFilled && note) {
+                contentEl.innerHTML = `<div class="streak-popover-note">${renderMarkdown(note)}</div>`;
+            } else if (isFilled) {
+                contentEl.innerHTML = `<div class="streak-popover-empty">Completed (no note)</div>`;
+            } else if (element.classList.contains('future')) {
+                contentEl.innerHTML = `<div class="streak-popover-empty">Future</div>`;
+            } else {
+                contentEl.innerHTML = `<div class="streak-popover-empty">Not completed</div>`;
+            }
+
+            // Position the popover near the click
+            const rect = element.getBoundingClientRect();
+            const popoverWidth = 280;
+            const popoverHeight = 100; // approximate
+
+            let left = rect.left + rect.width / 2 - popoverWidth / 2;
+            let top = rect.bottom + 8;
+
+            // Keep within viewport
+            if (left < 10) left = 10;
+            if (left + popoverWidth > window.innerWidth - 10) {
+                left = window.innerWidth - popoverWidth - 10;
+            }
+
+            // If too close to bottom, show above
+            if (top + popoverHeight > window.innerHeight - 10) {
+                top = rect.top - popoverHeight - 8;
+            }
+
+            popover.style.left = left + 'px';
+            popover.style.top = top + 'px';
+            popover.classList.add('active');
+        };
+
+        // Close popover when clicking outside
+        document.addEventListener('click', (e) => {
+            const popover = document.getElementById('streak-popover');
+            if (!popover.contains(e.target) && !e.target.classList.contains('streak-cell')) {
+                popover.classList.remove('active');
+            }
+        });
+
+        // Close popover on scroll
+        document.addEventListener('scroll', () => {
+            document.getElementById('streak-popover').classList.remove('active');
+        }, true);
 
         // ============ Goals Management ============
         async function loadGoalsScreen() {
