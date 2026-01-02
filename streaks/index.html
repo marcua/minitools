@@ -1034,6 +1034,7 @@
         window.toggleGoal = async function(goalId) {
             const isNowCompleted = await toggleCompletion(goalId, currentDate);
             await refreshChecklist();
+            await refreshStreakCharts();
         };
 
         window.editNote = async function(goalId) {
