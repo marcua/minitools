@@ -801,7 +801,7 @@
             const where = includeArchived ? '' : 'WHERE archived = 0';
             const result = await DB.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
             return result.rows ? result.rows.map(row => ({
-                id: row[0],
+                id: Number(row[0]),
                 name: row[1],
                 frequency: row[2],
                 position: Number(row[3]),
@@ -856,8 +856,8 @@
                 JOIN goals g ON c.goal_id = g.id
                 WHERE c.date = '${utcDate}'`);
             return result.rows ? result.rows.map(row => ({
-                id: row[0],
-                goal_id: row[1],
+                id: Number(row[0]),
+                goal_id: Number(row[1]),
                 date: row[2],
                 note: row[3],
                 created_at: row[4],
@@ -902,7 +902,7 @@
                 WHERE date >= '${startDate}' AND date <= '${endDate}'
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
-                goal_id: row[0],
+                goal_id: Number(row[0]),
                 date: row[1]
             })) : [];
         }
