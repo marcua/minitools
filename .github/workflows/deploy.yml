@@ -149,6 +149,9 @@ jobs:
       pull-requests: write
     if: github.event_name == 'pull_request'
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Comment on PR with staging URL
         env:
           GH_TOKEN: ${{ github.token }}
