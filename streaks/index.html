@@ -170,7 +170,6 @@
             border: 2px solid var(--ink-faint);
             border-radius: 8px;
             margin-bottom: 8px;
-            touch-action: none;
         }
 
         .goal-item.dragging {
@@ -186,7 +185,6 @@
             cursor: grab;
             color: var(--ink-light);
             padding: 8px;
-            touch-action: none;
         }
 
         .goal-item .goal-info {
@@ -1467,11 +1465,12 @@
                 item.addEventListener('drop', handleDrop);
                 item.addEventListener('dragleave', handleDragLeave);
 
-                // Touch events for iOS
+                // Touch events for iOS (long press to drag)
                 const handle = item.querySelector('.drag-handle');
-                handle.addEventListener('touchstart', handleTouchStart, { passive: false });
+                handle.addEventListener('touchstart', handleTouchStart);
                 handle.addEventListener('touchmove', handleTouchMove, { passive: false });
                 handle.addEventListener('touchend', handleTouchEnd);
+                handle.addEventListener('touchcancel', handleTouchEnd);
             });
         }
 
@@ -1517,38 +1516,72 @@
             this.classList.remove('drag-over');
         }
 
-        // Touch drag and drop for iOS
+        // Touch drag and drop for iOS (long press to activate)
         let touchStartY = 0;
+        let touchStartX = 0;
         let touchCurrentItem = null;
+        let longPressTimer = null;
+        let isDragging = false;
+        const LONG_PRESS_DURATION = 400; // ms
+        const MOVE_THRESHOLD = 10; // px - cancel if moved more than this before long press
 
         function handleTouchStart(e) {
-            e.preventDefault();
             const item = this.closest('.goal-item');
-            draggedItem = item;
             touchCurrentItem = item;
-            item.classList.add('dragging');
             touchStartY = e.touches[0].clientY;
+            touchStartX = e.touches[0].clientX;
+            isDragging = false;
+
+            // Start long press timer
+            longPressTimer = setTimeout(() => {
+                // Activate drag mode
+                isDragging = true;
+                draggedItem = item;
+                item.classList.add('dragging');
+                // Haptic feedback if available
+                if (navigator.vibrate) navigator.vibrate(50);
+            }, LONG_PRESS_DURATION);
         }
 
         function handleTouchMove(e) {
-            e.preventDefault();
-            if (!draggedItem) return;
-
             const touch = e.touches[0];
-            const items = [...document.querySelectorAll('.goal-item:not(.dragging)')];
+            const deltaX = Math.abs(touch.clientX - touchStartX);
+            const deltaY = Math.abs(touch.clientY - touchStartY);
 
-            items.forEach(item => {
-                const rect = item.getBoundingClientRect();
-                if (touch.clientY > rect.top && touch.clientY < rect.bottom) {
-                    item.classList.add('drag-over');
-                } else {
-                    item.classList.remove('drag-over');
-                }
-            });
+            // If moved too much before long press, cancel (user is scrolling)
+            if (!isDragging && (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD)) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+                return; // Allow default scroll behavior
+            }
+
+            // If dragging, handle the drag
+            if (isDragging) {
+                e.preventDefault();
+                const items = [...document.querySelectorAll('.goal-item:not(.dragging)')];
+
+                items.forEach(item => {
+                    const rect = item.getBoundingClientRect();
+                    if (touch.clientY > rect.top && touch.clientY < rect.bottom) {
+                        item.classList.add('drag-over');
+                    } else {
+                        item.classList.remove('drag-over');
+                    }
+                });
+            }
         }
 
         function handleTouchEnd(e) {
-            if (!draggedItem) return;
+            // Clear long press timer if still pending
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+
+            if (!isDragging || !draggedItem) {
+                isDragging = false;
+                return;
+            }
 
             const overItem = document.querySelector('.goal-item.drag-over');
             if (overItem && overItem !== draggedItem) {
@@ -1571,6 +1604,7 @@
 
             saveGoalOrder();
             draggedItem = null;
+            isDragging = false;
         }
 
         async function saveGoalOrder() {
