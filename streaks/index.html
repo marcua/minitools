@@ -452,6 +452,8 @@
         .date-picker {
             display: flex;
             justify-content: center;
+            align-items: center;
+            gap: 8px;
             margin-bottom: 1.5rem;
         }
 
@@ -480,6 +482,25 @@
             cursor: pointer;
             min-height: 48px;
             text-align: center;
+        }
+
+        .date-nav-btn {
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            background: white;
+            color: var(--ink);
+            font-size: 1.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+
+        .date-nav-btn:hover {
+            border-color: var(--accent);
         }
 
         .date-picker input[type="date"]:focus {
@@ -543,6 +564,12 @@
                 width: 5px;
                 height: 5px;
             }
+            .date-picker-wrapper::before {
+                display: none;
+            }
+            .date-picker input[type="date"] {
+                padding: 12px 16px;
+            }
         }
     </style>
 </head>
@@ -585,9 +612,11 @@
             <h1>Streaks</h1>
 
             <div class="date-picker">
+                <button class="date-nav-btn" id="date-prev" aria-label="Previous day">←</button>
                 <div class="date-picker-wrapper">
                     <input type="date" id="date-picker">
                 </div>
+                <button class="date-nav-btn" id="date-next" aria-label="Next day">→</button>
             </div>
 
             <a href="#goals" class="edit-link">Edit goals</a>
@@ -1142,6 +1171,21 @@
         // Date picker
         document.getElementById('date-picker').addEventListener('change', (e) => {
             currentDate = e.target.value;
+            refreshChecklist();
+        });
+
+        // Date navigation arrows
+        document.getElementById('date-prev').addEventListener('click', () => {
+            const date = parseLocalDate(currentDate);
+            date.setDate(date.getDate() - 1);
+            currentDate = getLocalDate(date);
+            refreshChecklist();
+        });
+
+        document.getElementById('date-next').addEventListener('click', () => {
+            const date = parseLocalDate(currentDate);
+            date.setDate(date.getDate() + 1);
+            currentDate = getLocalDate(date);
             refreshChecklist();
         });
 
