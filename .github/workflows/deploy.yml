@@ -8,6 +8,8 @@ on:
   delete:
     branches:
       - '**'
+  pull_request:
+    types: [opened, reopened]
 
 jobs:
   deploy:
@@ -15,8 +17,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    # Don't run on delete events for main branch
-    if: github.event_name != 'delete' || github.event.ref != 'main'
+    # Don't run on delete events for main branch, or on PR events (handled by comment-on-pr job)
+    if: github.event_name != 'pull_request' && (github.event_name != 'delete' || github.event.ref != 'main')
 
     steps:
       - name: Checkout repository
@@ -124,6 +126,46 @@ jobs:
           $DEPLOY_URL
 
           _Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Commit: ${{ github.sha }}_"
+
+          # Check for existing comment with our marker
+          EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${COMMENT_MARKER}\")) | .id" | head -1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            # Update existing comment
+            gh api "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -X PATCH -f body="$COMMENT_BODY"
+            echo "Updated existing comment"
+          else
+            # Create new comment
+            gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
+            echo "Created new comment"
+          fi
+
+  # Separate job for commenting on PR creation (deployment already happened on push)
+  comment-on-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Comment on PR with staging URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          SANITIZED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+
+          DEPLOY_URL="https://marcua.net/minitools/_staging/${SANITIZED_BRANCH}"
+          COMMENT_MARKER="<!-- staging-deploy-comment -->"
+          COMMENT_BODY="${COMMENT_MARKER}
+          🚀 **Staging deployment ready!**
+
+          $DEPLOY_URL
+
+          _Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Commit: ${{ github.event.pull_request.head.sha }}_"
+
+          PR_NUMBER="${{ github.event.pull_request.number }}"
 
           # Check for existing comment with our marker
           EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
