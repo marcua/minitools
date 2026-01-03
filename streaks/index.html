@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#f5f2eb">
+    <title>Streaks</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <style>
+        :root {
+            --ink: #2c2416;
+            --ink-light: #5c5446;
+            --ink-faint: #d4cfc4;
+            --paper: #f5f2eb;
+            --accent: #e85d04;
+            --streak-empty: #e8e4db;
+            --streak-filled: #e85d04;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--paper);
+            color: var(--ink);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        /* Form elements */
+        label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+            color: var(--ink-light);
+        }
+
+        input[type="text"],
+        input[type="url"],
+        input[type="date"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            color: var(--ink);
+            margin-bottom: 1rem;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            touch-action: manipulation;
+            min-height: 48px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--ink-faint);
+            color: var(--ink);
+        }
+
+        .btn-danger {
+            background: #c1121f;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+            min-height: 40px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 1rem;
+        }
+
+        .btn-group-right {
+            justify-content: flex-end;
+        }
+
+        /* Toggle button group */
+        .toggle-group {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1rem;
+        }
+
+        .toggle-group .toggle-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--ink-faint);
+            background: white;
+            color: var(--ink);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .toggle-group .toggle-btn:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .toggle-group .toggle-btn:last-child {
+            border-radius: 0 8px 8px 0;
+        }
+
+        .toggle-group .toggle-btn:not(:first-child) {
+            border-left: none;
+        }
+
+        .toggle-group .toggle-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .toggle-group .toggle-btn:not(.active):hover {
+            background: var(--paper);
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* Goal items */
+        .goal-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .goal-item.dragging {
+            opacity: 0.5;
+            border-style: dashed;
+        }
+
+        .goal-item.drag-over {
+            border-color: var(--accent);
+        }
+
+        .goal-item .drag-handle {
+            cursor: grab;
+            color: var(--ink-light);
+            padding: 8px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .goal-item .goal-info {
+            flex: 1;
+        }
+
+        .goal-item .goal-name {
+            font-weight: 500;
+        }
+
+        .goal-item .goal-frequency {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+        }
+
+        .goal-item .goal-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .goal-item.archived {
+            opacity: 0.6;
+        }
+
+        /* Today's checklist */
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px;
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .checklist-item.completed {
+            border-color: var(--accent);
+            background: rgba(232, 93, 4, 0.05);
+        }
+
+        .checklist-checkbox {
+            width: 28px;
+            height: 28px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: white;
+            touch-action: manipulation;
+        }
+
+        .checklist-item.completed .checklist-checkbox {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .checklist-content {
+            flex: 1;
+        }
+
+        .checklist-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .checklist-frequency {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+            margin-bottom: 8px;
+        }
+
+        .checklist-note {
+            margin-top: 8px;
+        }
+
+        .checklist-note textarea {
+            margin-bottom: 0;
+            min-height: 60px;
+        }
+
+        .note-display {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: var(--paper);
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        .note-display a {
+            color: var(--accent);
+        }
+
+        /* Streak visualization */
+        .streak-section {
+            margin-top: 2rem;
+        }
+
+        .streak-chart {
+            margin-bottom: 1.5rem;
+        }
+
+        .streak-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .streak-title h3 {
+            margin-bottom: 0;
+        }
+
+        .streak-count {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+        }
+
+        .streak-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+
+        /* Daily grid: 7 rows (days of week) flowing into columns (weeks) */
+        .streak-grid.daily {
+            display: grid;
+            grid-template-rows: repeat(7, 1fr);
+            grid-auto-flow: column;
+            grid-auto-columns: min-content;
+            gap: 2px;
+        }
+
+        /* Smaller cells for daily grid to fit ~54 weeks */
+        .streak-grid.daily .streak-cell {
+            width: 8px;
+            height: 8px;
+        }
+
+        .streak-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: var(--streak-empty);
+            cursor: pointer;
+        }
+
+        .streak-cell:hover {
+            opacity: 0.8;
+        }
+
+        .streak-cell.filled {
+            background: var(--streak-filled);
+        }
+
+        .streak-cell.future {
+            background: transparent;
+            border: 1px solid var(--ink-faint);
+        }
+
+        .streak-cell.placeholder {
+            visibility: hidden;
+        }
+
+        /* Weekly/Monthly streaks */
+        .streak-grid.weekly .streak-cell,
+        .streak-grid.monthly .streak-cell {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        /* Streak popover */
+        .streak-popover {
+            display: none;
+            position: fixed;
+            background: white;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            padding: 12px;
+            max-width: 280px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 200;
+        }
+
+        .streak-popover.active {
+            display: block;
+        }
+
+        .streak-popover-date {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .streak-popover-note {
+            font-size: 0.875rem;
+            color: var(--ink-light);
+            word-wrap: break-word;
+        }
+
+        .streak-popover-note a {
+            color: var(--accent);
+        }
+
+        .streak-popover-empty {
+            font-size: 0.875rem;
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        /* Year links */
+        .year-links {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 2px solid var(--ink-faint);
+        }
+
+        .year-links a {
+            display: inline-block;
+            margin-right: 12px;
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--paper);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal h2 {
+            margin-bottom: 1rem;
+        }
+
+        /* Date navigation */
+        .date-picker {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 1.5rem;
+        }
+
+        .date-picker-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .date-picker-wrapper::before {
+            content: '📅';
+            position: absolute;
+            left: 12px;
+            font-size: 1rem;
+            pointer-events: none;
+        }
+
+        .date-picker input[type="date"] {
+            font-size: 1.125rem;
+            font-weight: 500;
+            padding: 12px 16px 12px 40px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            background: white;
+            color: var(--ink);
+            cursor: pointer;
+            min-height: 48px;
+            text-align: center;
+        }
+
+        .date-nav-btn {
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--ink-faint);
+            border-radius: 8px;
+            background: white;
+            color: var(--ink);
+            font-size: 1.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+
+        .date-nav-btn:hover {
+            border-color: var(--accent);
+        }
+
+        .date-picker input[type="date"]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Links */
+        .edit-link {
+            display: inline-block;
+            color: var(--accent);
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+
+        /* Error message */
+        .error-message {
+            background: #fef2f2;
+            border: 2px solid #c1121f;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 1rem;
+            color: #c1121f;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--ink-light);
+        }
+
+        /* Section divider */
+        .section-divider {
+            margin: 2rem 0;
+            border: none;
+            border-top: 2px solid var(--ink-faint);
+        }
+
+        /* Archive section */
+        .archive-section {
+            margin-top: 2rem;
+        }
+
+        .archive-toggle {
+            color: var(--ink-light);
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .archived-goals {
+            margin-top: 1rem;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 480px) {
+            .streak-grid.daily {
+                gap: 1px;
+            }
+            .streak-grid.daily .streak-cell {
+                width: 5px;
+                height: 5px;
+            }
+            .date-picker-wrapper::before {
+                display: none;
+            }
+            .date-picker input[type="date"] {
+                padding: 12px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Setup Screen -->
+    <div id="setup-screen" class="screen">
+        <div class="container">
+            <h1>Streaks</h1>
+            <p style="margin-bottom: 1.5rem; color: var(--ink-light);">Connect to your ayb database to get started.</p>
+
+            <form id="setup-form">
+                <label for="db-url">Database URL</label>
+                <input type="url" id="db-url" placeholder="https://host/entity/database" required>
+
+                <label for="api-token">API token</label>
+                <input type="text" id="api-token" placeholder="Your API token" required>
+
+                <div class="btn-group btn-group-right">
+                    <button type="submit" class="btn">Connect</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Error Screen -->
+    <div id="error-screen" class="screen">
+        <div class="container">
+            <h1>Connection error</h1>
+            <div class="error-message" id="error-message"></div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="change-db-btn">Use different database</button>
+                <button class="btn" id="retry-btn">Try again</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Screen (Today's Goals) -->
+    <div id="main-screen" class="screen">
+        <div class="container">
+            <h1>Streaks</h1>
+
+            <div class="date-picker">
+                <button class="date-nav-btn" id="date-prev" aria-label="Previous day">←</button>
+                <div class="date-picker-wrapper">
+                    <input type="date" id="date-picker">
+                </div>
+                <button class="date-nav-btn" id="date-next" aria-label="Next day">→</button>
+            </div>
+
+            <a href="#goals" class="edit-link">Edit goals</a>
+
+            <div id="checklist"></div>
+
+            <hr class="section-divider">
+
+            <div class="streak-section">
+                <h2 id="current-year-title"></h2>
+                <div id="streak-charts"></div>
+            </div>
+
+            <div class="year-links" id="year-links"></div>
+        </div>
+    </div>
+
+    <!-- Goals Management Screen -->
+    <div id="goals-screen" class="screen">
+        <div class="container">
+            <h1>Goals</h1>
+            <a href="#" class="edit-link">← Back to today</a>
+
+            <div class="btn-group" style="margin-bottom: 1.5rem;">
+                <button class="btn" id="add-goal-btn">Add goal</button>
+            </div>
+
+            <div id="goals-list"></div>
+
+            <div class="archive-section">
+                <span class="archive-toggle" id="archive-toggle">Show archived goals</span>
+                <div class="archived-goals" id="archived-goals" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Year View Screen -->
+    <div id="year-screen" class="screen">
+        <div class="container">
+            <h1 id="year-title"></h1>
+            <a href="#" class="edit-link">← Back to today</a>
+
+            <div id="year-streak-charts"></div>
+        </div>
+    </div>
+
+    <!-- Goal Modal -->
+    <div class="modal-overlay" id="goal-modal">
+        <div class="modal">
+            <h2 id="goal-modal-title">Add goal</h2>
+            <form id="goal-form">
+                <input type="hidden" id="goal-id">
+
+                <label for="goal-name">Goal name</label>
+                <input type="text" id="goal-name" required>
+
+                <label>Frequency</label>
+                <div class="toggle-group" id="goal-frequency">
+                    <button type="button" class="toggle-btn active" data-value="daily">Daily</button>
+                    <button type="button" class="toggle-btn" data-value="weekly">Weekly</button>
+                    <button type="button" class="toggle-btn" data-value="monthly">Monthly</button>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" id="cancel-goal-btn">Cancel</button>
+                    <button type="submit" class="btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal">
+            <h2 id="confirm-title">Confirm</h2>
+            <p id="confirm-message"></p>
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+                <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Streak Popover -->
+    <div class="streak-popover" id="streak-popover">
+        <div class="streak-popover-date" id="popover-date"></div>
+        <div id="popover-content"></div>
+    </div>
+
+    <script>
+        // ============ Configuration ============
+        const APP_NAME = 'streaks';
+
+        // ============ SQL Utilities ============
+        function escapeSQL(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/'/g, "''");
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Simple markdown to HTML (links only)
+        function renderMarkdown(text) {
+            if (!text) return '';
+            let html = escapeHtml(text);
+            // Convert URLs to links
+            html = html.replace(
+                /\[([^\]]+)\]\(([^)]+)\)/g,
+                '<a href="$2" target="_blank" rel="noopener">$1</a>'
+            );
+            // Convert bare URLs to links
+            html = html.replace(
+                /(https?:\/\/[^\s<]+)/g,
+                '<a href="$1" target="_blank" rel="noopener">$1</a>'
+            );
+            // Convert newlines to <br>
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        // ============ Date Utilities ============
+        function getLocalDate(date = new Date()) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function parseLocalDate(dateStr) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        function localToUTC(dateStr) {
+            const date = parseLocalDate(dateStr);
+            return date.toISOString().split('T')[0];
+        }
+
+        function formatDateDisplay(dateStr) {
+            const date = parseLocalDate(dateStr);
+            const today = new Date();
+            const todayStr = getLocalDate(today);
+
+            if (dateStr === todayStr) return 'Today';
+
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (dateStr === getLocalDate(yesterday)) return 'Yesterday';
+
+            return date.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function getWeekNumber(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+            const yearStart = new Date(d.getFullYear(), 0, 1);
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+
+        function getDayOfYear(date) {
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start;
+            return Math.floor(diff / (1000 * 60 * 60 * 24));
+        }
+
+        // ============ Database ============
+        const DB = {
+            config: null,
+
+            init() {
+                const saved = localStorage.getItem(`${APP_NAME}_config`);
+                if (saved) {
+                    this.config = JSON.parse(saved);
+                    return true;
+                }
+                return false;
+            },
+
+            saveConfig(url, token) {
+                const urlObj = new URL(url);
+                const pathParts = urlObj.pathname.split('/').filter(p => p);
+
+                let baseUrl, entity, database;
+
+                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
+                    // Format: https://host/v1/entity/database
+                    entity = pathParts[1];
+                    database = pathParts[2];
+                    baseUrl = urlObj.origin;
+                } else if (pathParts.length >= 2) {
+                    // Format: https://host/entity/database
+                    entity = pathParts[0];
+                    database = pathParts[1];
+                    baseUrl = urlObj.origin;
+                } else {
+                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
+                }
+
+                this.config = { baseUrl, entity, database, token };
+                localStorage.setItem(`${APP_NAME}_config`, JSON.stringify(this.config));
+            },
+
+            clearConfig() {
+                this.config = null;
+                localStorage.removeItem(`${APP_NAME}_config`);
+            },
+
+            async query(sql) {
+                if (!this.config) throw new Error('Database not configured');
+
+                const { baseUrl, entity, database, token } = this.config;
+                const url = `${baseUrl}/v1/${entity}/${database}/query`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'text/plain'
+                    },
+                    body: sql
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Query failed: ${text}`);
+                }
+
+                return response.json();
+            }
+        };
+
+        // ============ Migrations ============
+        const migrations = [
+            // v0: Initial schema
+            `CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly', 'monthly')),
+                position INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS completions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (goal_id) REFERENCES goals(id),
+                UNIQUE(goal_id, date)
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_completions_date ON completions(date)`,
+            `CREATE INDEX IF NOT EXISTS idx_completions_goal ON completions(goal_id)`
+        ];
+
+        async function runMigrations() {
+            // Create migrations table
+            await DB.query(`CREATE TABLE IF NOT EXISTS _migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+            // Get current version
+            const result = await DB.query('SELECT MAX(version) as version FROM _migrations');
+            let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
+
+            // Auto-repair if version is invalid
+            if (currentVersion > migrations.length) {
+                await DB.query('DELETE FROM _migrations');
+                currentVersion = 0;
+            }
+
+            // Run pending migrations
+            for (let i = currentVersion; i < migrations.length; i++) {
+                try {
+                    await DB.query(migrations[i]);
+                } catch (e) {
+                    // Ignore "already exists" errors for idempotency
+                    const msg = e.message.toLowerCase();
+                    if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
+                        throw e;
+                    }
+                }
+                // Use INSERT OR REPLACE to handle re-running migrations
+                await DB.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
+            }
+        }
+
+        // ============ Goals CRUD ============
+        async function getGoals(includeArchived = false) {
+            const where = includeArchived ? '' : 'WHERE archived = 0';
+            const result = await DB.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
+            return result.rows ? result.rows.map(row => ({
+                id: Number(row[0]),
+                name: row[1],
+                frequency: row[2],
+                position: Number(row[3]),
+                archived: Number(row[4]),
+                created_at: row[5],
+                updated_at: row[6]
+            })) : [];
+        }
+
+        async function createGoal(name, frequency) {
+            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
+
+            await DB.query(`INSERT INTO goals (name, frequency, position) VALUES (
+                '${escapeSQL(name)}', '${escapeSQL(frequency)}', ${maxPos + 1}
+            )`);
+        }
+
+        async function updateGoal(id, name, frequency) {
+            await DB.query(`UPDATE goals SET
+                name = '${escapeSQL(name)}',
+                frequency = '${escapeSQL(frequency)}',
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${id}`);
+        }
+
+        async function archiveGoal(id) {
+            await DB.query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+        }
+
+        async function unarchiveGoal(id) {
+            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
+
+            await DB.query(`UPDATE goals SET
+                archived = 0,
+                position = ${maxPos + 1},
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${id}`);
+        }
+
+        async function reorderGoals(orderedIds) {
+            for (let i = 0; i < orderedIds.length; i++) {
+                await DB.query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
+            }
+        }
+
+        // ============ Completions CRUD ============
+        async function getCompletionsForDate(dateStr) {
+            const utcDate = localToUTC(dateStr);
+            const result = await DB.query(`SELECT c.*, g.name, g.frequency FROM completions c
+                JOIN goals g ON c.goal_id = g.id
+                WHERE c.date = '${utcDate}'`);
+            return result.rows ? result.rows.map(row => ({
+                id: Number(row[0]),
+                goal_id: Number(row[1]),
+                date: row[2],
+                note: row[3],
+                created_at: row[4],
+                updated_at: row[5],
+                goal_name: row[6],
+                goal_frequency: row[7]
+            })) : [];
+        }
+
+        async function toggleCompletion(goalId, dateStr, note = null) {
+            const utcDate = localToUTC(dateStr);
+
+            // Check if already completed
+            const existing = await DB.query(`SELECT id FROM completions
+                WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+
+            if (existing.rows && existing.rows.length > 0) {
+                // Delete completion
+                await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                return false;
+            } else {
+                // Create completion
+                const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
+                await DB.query(`INSERT INTO completions (goal_id, date, note)
+                    VALUES (${goalId}, '${utcDate}', ${noteValue})`);
+                return true;
+            }
+        }
+
+        async function updateCompletionNote(goalId, dateStr, note) {
+            const utcDate = localToUTC(dateStr);
+            await DB.query(`UPDATE completions SET
+                note = '${escapeSQL(note)}',
+                updated_at = CURRENT_TIMESTAMP
+                WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+        }
+
+        async function getCompletionsForYear(year) {
+            const startDate = `${year}-01-01`;
+            const endDate = `${year}-12-31`;
+            const result = await DB.query(`SELECT goal_id, date, note FROM completions
+                WHERE date >= '${startDate}' AND date <= '${endDate}'
+                ORDER BY date`);
+            return result.rows ? result.rows.map(row => ({
+                goal_id: Number(row[0]),
+                date: row[1],
+                note: row[2]
+            })) : [];
+        }
+
+        async function getYearsWithData() {
+            const result = await DB.query(`SELECT DISTINCT substr(date, 1, 4) as year
+                FROM completions ORDER BY year DESC`);
+            return result.rows ? result.rows.map(row => parseInt(row[0])) : [];
+        }
+
+        // ============ UI State ============
+        let currentDate = getLocalDate();
+        let goals = [];
+        let completions = [];
+        let draggedItem = null;
+
+        // ============ Screen Management ============
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        // ============ Setup Screen ============
+        document.getElementById('setup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = document.getElementById('db-url').value.trim();
+            const token = document.getElementById('api-token').value.trim();
+
+            try {
+                DB.saveConfig(url, token);
+                await tryConnect();
+            } catch (e) {
+                showError(e.message);
+            }
+        });
+
+        async function tryConnect() {
+            try {
+                await runMigrations();
+                await handleRoute();
+            } catch (e) {
+                console.error('Connection error:', e);
+                showError(e.message);
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            showScreen('error-screen');
+        }
+
+        document.getElementById('retry-btn').addEventListener('click', async () => {
+            const retryBtn = document.getElementById('retry-btn');
+            retryBtn.disabled = true;
+            retryBtn.textContent = 'Connecting...';
+
+            try {
+                await tryConnect();
+            } finally {
+                retryBtn.disabled = false;
+                retryBtn.textContent = 'Try again';
+            }
+        });
+
+        document.getElementById('change-db-btn').addEventListener('click', () => {
+            // Clear form fields so user can enter new credentials
+            document.getElementById('db-url').value = '';
+            document.getElementById('api-token').value = '';
+            showScreen('setup-screen');
+        });
+
+        // ============ Main Screen ============
+        async function loadMainScreen() {
+            showScreen('main-screen');
+            await refreshChecklist();
+            await refreshStreakCharts();
+        }
+
+        async function refreshChecklist() {
+            goals = await getGoals();
+            completions = await getCompletionsForDate(currentDate);
+
+            document.getElementById('date-picker').value = currentDate;
+
+            const container = document.getElementById('checklist');
+
+            if (goals.length === 0) {
+                container.innerHTML = '<div class="empty-state">No goals yet. <a href="#goals">Add your first goal</a></div>';
+                return;
+            }
+
+            // Filter goals based on frequency and date
+            const applicableGoals = goals.filter(goal => {
+                // All goals are applicable (user can complete any time)
+                return true;
+            });
+
+            container.innerHTML = applicableGoals.map(goal => {
+                const completion = completions.find(c => c.goal_id === goal.id);
+                const isCompleted = !!completion;
+
+                return `
+                    <div class="checklist-item ${isCompleted ? 'completed' : ''}" data-goal-id="${goal.id}">
+                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})">
+                            ${isCompleted ? '✓' : ''}
+                        </div>
+                        <div class="checklist-content">
+                            <div class="checklist-name">${escapeHtml(goal.name)}</div>
+                            <div class="checklist-frequency">${goal.frequency}</div>
+                            ${isCompleted ? `
+                                <div class="note-display" onclick="editNote(${goal.id})">
+                                    ${completion.note ? renderMarkdown(completion.note) : '<em style="color: var(--ink-light)">Add note...</em>'}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.toggleGoal = async function(goalId) {
+            const isNowCompleted = await toggleCompletion(goalId, currentDate);
+            await refreshChecklist();
+            await refreshStreakCharts();
+        };
+
+        window.editNote = async function(goalId) {
+            const completion = completions.find(c => c.goal_id === goalId);
+            const note = prompt('Note (markdown supported):', completion?.note || '');
+            if (note !== null) {
+                await updateCompletionNote(goalId, currentDate, note);
+                await refreshChecklist();
+            }
+        };
+
+        // Date picker
+        document.getElementById('date-picker').addEventListener('change', (e) => {
+            currentDate = e.target.value;
+            refreshChecklist();
+        });
+
+        // Date navigation arrows
+        document.getElementById('date-prev').addEventListener('click', () => {
+            const date = parseLocalDate(currentDate);
+            date.setDate(date.getDate() - 1);
+            currentDate = getLocalDate(date);
+            refreshChecklist();
+        });
+
+        document.getElementById('date-next').addEventListener('click', () => {
+            const date = parseLocalDate(currentDate);
+            date.setDate(date.getDate() + 1);
+            currentDate = getLocalDate(date);
+            refreshChecklist();
+        });
+
+        // ============ Streak Charts ============
+        async function refreshStreakCharts() {
+            const year = new Date().getFullYear();
+            document.getElementById('current-year-title').textContent = `${year} progress`;
+
+            const yearCompletions = await getCompletionsForYear(year);
+            const container = document.getElementById('streak-charts');
+
+            if (goals.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = goals.map(goal => {
+                const goalCompletions = yearCompletions.filter(c => c.goal_id === goal.id);
+                return renderStreakChart(goal, goalCompletions, year);
+            }).join('');
+
+            // Year links
+            const years = await getYearsWithData();
+            const otherYears = years.filter(y => y !== year);
+            const linksContainer = document.getElementById('year-links');
+
+            if (otherYears.length > 0) {
+                linksContainer.innerHTML = '<strong>Previous years:</strong> ' +
+                    otherYears.map(y => `<a href="#year/${y}">${y}</a>`).join('');
+                linksContainer.style.display = 'block';
+            } else {
+                linksContainer.style.display = 'none';
+            }
+        }
+
+        function renderStreakChart(goal, completions, year) {
+            // Create map of date -> completion (with note)
+            const completionMap = {};
+            completions.forEach(c => {
+                completionMap[c.date] = c;
+            });
+
+            const today = new Date();
+            let cells = '';
+            let count = 0;
+            let total = 0;
+
+            if (goal.frequency === 'daily') {
+                // 7-row grid like GitHub: rows are days of week, columns are weeks
+                const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+                const daysInYear = isLeapYear ? 366 : 365;
+
+                // Add placeholder cells for days before Jan 1
+                const jan1 = new Date(year, 0, 1);
+                const startDayOfWeek = jan1.getDay(); // 0 = Sunday
+                for (let i = 0; i < startDayOfWeek; i++) {
+                    cells += `<div class="streak-cell placeholder"></div>`;
+                }
+
+                for (let day = 1; day <= daysInYear; day++) {
+                    const date = new Date(year, 0, day);
+                    const dateStr = getLocalDate(date);
+                    const utcDate = localToUTC(dateStr);
+                    const isFuture = date > today;
+                    const completion = completionMap[utcDate];
+                    const isFilled = !!completion;
+
+                    if (!isFuture) total++;
+                    if (isFilled) count++;
+
+                    const noteAttr = completion?.note ? `data-note="${escapeHtml(completion.note)}"` : '';
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
+                        data-date="${dateStr}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
+                }
+            } else if (goal.frequency === 'weekly') {
+                // 52 cells
+                for (let week = 1; week <= 52; week++) {
+                    const weekDate = new Date(year, 0, (week - 1) * 7 + 4);
+                    const isFuture = weekDate > today;
+
+                    // Check if any date in this week is completed, collect notes
+                    let isFilled = false;
+                    let weekNotes = [];
+                    for (let d = 0; d < 7; d++) {
+                        const checkDate = new Date(year, 0, (week - 1) * 7 + d + 1);
+                        const utcDate = localToUTC(getLocalDate(checkDate));
+                        const completion = completionMap[utcDate];
+                        if (completion) {
+                            isFilled = true;
+                            if (completion.note) weekNotes.push(completion.note);
+                        }
+                    }
+
+                    if (!isFuture) total++;
+                    if (isFilled) count++;
+
+                    const weekStart = new Date(year, 0, (week - 1) * 7 + 1);
+                    const weekLabel = `Week ${week} (${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
+                    const noteAttr = weekNotes.length > 0 ? `data-note="${escapeHtml(weekNotes.join('\n\n'))}"` : '';
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
+                        data-date="${weekLabel}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
+                }
+            } else {
+                // Monthly - 12 cells
+                for (let month = 0; month < 12; month++) {
+                    const monthDate = new Date(year, month, 15);
+                    const isFuture = monthDate > today;
+
+                    // Check if any date in this month is completed, collect notes
+                    let isFilled = false;
+                    let monthNotes = [];
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const checkDate = new Date(year, month, d);
+                        const utcDate = localToUTC(getLocalDate(checkDate));
+                        const completion = completionMap[utcDate];
+                        if (completion) {
+                            isFilled = true;
+                            if (completion.note) monthNotes.push(completion.note);
+                        }
+                    }
+
+                    if (!isFuture) total++;
+                    if (isFilled) count++;
+
+                    const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    const noteAttr = monthNotes.length > 0 ? `data-note="${escapeHtml(monthNotes.join('\n\n'))}"` : '';
+                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
+                        data-date="${monthName}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
+                }
+            }
+
+            return `
+                <div class="streak-chart">
+                    <div class="streak-title">
+                        <h3>${escapeHtml(goal.name)}</h3>
+                        <span class="streak-count">${count}/${total}</span>
+                    </div>
+                    <div class="streak-grid ${goal.frequency}">${cells}</div>
+                </div>
+            `;
+        }
+
+        // ============ Streak Popover ============
+        window.showStreakPopover = function(event, element) {
+            event.stopPropagation();
+
+            const date = element.dataset.date;
+            const note = element.dataset.note;
+            const isFilled = element.classList.contains('filled');
+
+            const popover = document.getElementById('streak-popover');
+            const dateEl = document.getElementById('popover-date');
+            const contentEl = document.getElementById('popover-content');
+
+            dateEl.textContent = date;
+
+            if (isFilled && note) {
+                contentEl.innerHTML = `<div class="streak-popover-note">${renderMarkdown(note)}</div>`;
+            } else if (isFilled) {
+                contentEl.innerHTML = `<div class="streak-popover-empty">Completed (no note)</div>`;
+            } else if (element.classList.contains('future')) {
+                contentEl.innerHTML = `<div class="streak-popover-empty">Future</div>`;
+            } else {
+                contentEl.innerHTML = `<div class="streak-popover-empty">Not completed</div>`;
+            }
+
+            // Position the popover near the click
+            const rect = element.getBoundingClientRect();
+            const popoverWidth = 280;
+            const popoverHeight = 100; // approximate
+
+            let left = rect.left + rect.width / 2 - popoverWidth / 2;
+            let top = rect.bottom + 8;
+
+            // Keep within viewport
+            if (left < 10) left = 10;
+            if (left + popoverWidth > window.innerWidth - 10) {
+                left = window.innerWidth - popoverWidth - 10;
+            }
+
+            // If too close to bottom, show above
+            if (top + popoverHeight > window.innerHeight - 10) {
+                top = rect.top - popoverHeight - 8;
+            }
+
+            popover.style.left = left + 'px';
+            popover.style.top = top + 'px';
+            popover.classList.add('active');
+        };
+
+        // Close popover when clicking outside
+        document.addEventListener('click', (e) => {
+            const popover = document.getElementById('streak-popover');
+            if (!popover.contains(e.target) && !e.target.classList.contains('streak-cell')) {
+                popover.classList.remove('active');
+            }
+        });
+
+        // Close popover on scroll
+        document.addEventListener('scroll', () => {
+            document.getElementById('streak-popover').classList.remove('active');
+        }, true);
+
+        // ============ Goals Management ============
+        async function loadGoalsScreen() {
+            showScreen('goals-screen');
+            await refreshGoalsList();
+        }
+
+        async function refreshGoalsList() {
+            const allGoals = await getGoals(true);
+            const activeGoals = allGoals.filter(g => !g.archived);
+            const archivedGoals = allGoals.filter(g => g.archived);
+
+            const container = document.getElementById('goals-list');
+
+            if (activeGoals.length === 0) {
+                container.innerHTML = '<div class="empty-state">No goals yet. Add your first goal to get started.</div>';
+            } else {
+                container.innerHTML = activeGoals.map(goal => `
+                    <div class="goal-item" data-goal-id="${goal.id}" draggable="true">
+                        <span class="drag-handle">⋮⋮</span>
+                        <div class="goal-info">
+                            <div class="goal-name">${escapeHtml(goal.name)}</div>
+                            <div class="goal-frequency">${goal.frequency}</div>
+                        </div>
+                        <div class="goal-actions">
+                            <button class="btn btn-secondary btn-small" onclick="editGoal(${goal.id})">Edit</button>
+                            <button class="btn btn-secondary btn-small" onclick="confirmArchive(${goal.id})">Archive</button>
+                        </div>
+                    </div>
+                `).join('');
+
+                setupDragAndDrop();
+            }
+
+            // Archived goals
+            const archivedContainer = document.getElementById('archived-goals');
+            if (archivedGoals.length > 0) {
+                document.getElementById('archive-toggle').style.display = 'inline';
+                archivedContainer.innerHTML = archivedGoals.map(goal => `
+                    <div class="goal-item archived" data-goal-id="${goal.id}">
+                        <div class="goal-info">
+                            <div class="goal-name">${escapeHtml(goal.name)}</div>
+                            <div class="goal-frequency">${goal.frequency}</div>
+                        </div>
+                        <div class="goal-actions">
+                            <button class="btn btn-secondary btn-small" onclick="confirmUnarchive(${goal.id})">Unarchive</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('archive-toggle').style.display = 'none';
+                archivedContainer.style.display = 'none';
+                archivedContainer.innerHTML = '';
+            }
+        }
+
+        document.getElementById('archive-toggle').addEventListener('click', () => {
+            const container = document.getElementById('archived-goals');
+            const toggle = document.getElementById('archive-toggle');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                toggle.textContent = 'Hide archived goals';
+            } else {
+                container.style.display = 'none';
+                toggle.textContent = 'Show archived goals';
+            }
+        });
+
+        // Drag and drop
+        function setupDragAndDrop() {
+            const items = document.querySelectorAll('.goal-item[draggable="true"]');
+
+            items.forEach(item => {
+                // Mouse events
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('drop', handleDrop);
+                item.addEventListener('dragleave', handleDragLeave);
+
+                // Touch events for iOS (long press to drag)
+                const handle = item.querySelector('.drag-handle');
+                handle.addEventListener('touchstart', handleTouchStart);
+                handle.addEventListener('touchmove', handleTouchMove, { passive: false });
+                handle.addEventListener('touchend', handleTouchEnd);
+                handle.addEventListener('touchcancel', handleTouchEnd);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd() {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.goal-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            saveGoalOrder();
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (this !== draggedItem) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave() {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            if (this !== draggedItem) {
+                const container = document.getElementById('goals-list');
+                const items = [...container.querySelectorAll('.goal-item')];
+                const fromIndex = items.indexOf(draggedItem);
+                const toIndex = items.indexOf(this);
+
+                if (fromIndex < toIndex) {
+                    this.parentNode.insertBefore(draggedItem, this.nextSibling);
+                } else {
+                    this.parentNode.insertBefore(draggedItem, this);
+                }
+            }
+            this.classList.remove('drag-over');
+        }
+
+        // Touch drag and drop for iOS (long press to activate)
+        let touchStartY = 0;
+        let touchStartX = 0;
+        let touchCurrentItem = null;
+        let longPressTimer = null;
+        let isDragging = false;
+        const LONG_PRESS_DURATION = 400; // ms
+        const MOVE_THRESHOLD = 10; // px - cancel if moved more than this before long press
+
+        function handleTouchStart(e) {
+            const item = this.closest('.goal-item');
+            touchCurrentItem = item;
+            touchStartY = e.touches[0].clientY;
+            touchStartX = e.touches[0].clientX;
+            isDragging = false;
+
+            // Start long press timer
+            longPressTimer = setTimeout(() => {
+                // Activate drag mode
+                isDragging = true;
+                draggedItem = item;
+                item.classList.add('dragging');
+                // Haptic feedback if available
+                if (navigator.vibrate) navigator.vibrate(50);
+            }, LONG_PRESS_DURATION);
+        }
+
+        function handleTouchMove(e) {
+            const touch = e.touches[0];
+            const deltaX = Math.abs(touch.clientX - touchStartX);
+            const deltaY = Math.abs(touch.clientY - touchStartY);
+
+            // If moved too much before long press, cancel (user is scrolling)
+            if (!isDragging && (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD)) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+                return; // Allow default scroll behavior
+            }
+
+            // If dragging, handle the drag
+            if (isDragging) {
+                e.preventDefault();
+                const items = [...document.querySelectorAll('.goal-item:not(.dragging)')];
+
+                items.forEach(item => {
+                    const rect = item.getBoundingClientRect();
+                    if (touch.clientY > rect.top && touch.clientY < rect.bottom) {
+                        item.classList.add('drag-over');
+                    } else {
+                        item.classList.remove('drag-over');
+                    }
+                });
+            }
+        }
+
+        function handleTouchEnd(e) {
+            // Clear long press timer if still pending
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+
+            if (!isDragging || !draggedItem) {
+                isDragging = false;
+                return;
+            }
+
+            const overItem = document.querySelector('.goal-item.drag-over');
+            if (overItem && overItem !== draggedItem) {
+                const container = document.getElementById('goals-list');
+                const items = [...container.querySelectorAll('.goal-item')];
+                const fromIndex = items.indexOf(draggedItem);
+                const toIndex = items.indexOf(overItem);
+
+                if (fromIndex < toIndex) {
+                    overItem.parentNode.insertBefore(draggedItem, overItem.nextSibling);
+                } else {
+                    overItem.parentNode.insertBefore(draggedItem, overItem);
+                }
+            }
+
+            draggedItem.classList.remove('dragging');
+            document.querySelectorAll('.goal-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+
+            saveGoalOrder();
+            draggedItem = null;
+            isDragging = false;
+        }
+
+        async function saveGoalOrder() {
+            const items = document.querySelectorAll('#goals-list .goal-item');
+            const orderedIds = [...items].map(item => parseInt(item.dataset.goalId));
+            await reorderGoals(orderedIds);
+        }
+
+        // Goal CRUD UI
+
+        // Frequency toggle helpers
+        function setFrequency(value) {
+            document.querySelectorAll('#goal-frequency .toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.value === value);
+            });
+        }
+
+        function getFrequency() {
+            const active = document.querySelector('#goal-frequency .toggle-btn.active');
+            return active ? active.dataset.value : 'daily';
+        }
+
+        // Toggle button click handlers
+        document.querySelectorAll('#goal-frequency .toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setFrequency(btn.dataset.value);
+            });
+        });
+
+        document.getElementById('add-goal-btn').addEventListener('click', () => {
+            document.getElementById('goal-modal-title').textContent = 'Add goal';
+            document.getElementById('goal-id').value = '';
+            document.getElementById('goal-name').value = '';
+            setFrequency('daily');
+            showModal('goal-modal');
+        });
+
+        window.editGoal = async function(id) {
+            const allGoals = await getGoals(true);
+            const goal = allGoals.find(g => g.id === id);
+            if (!goal) return;
+
+            document.getElementById('goal-modal-title').textContent = 'Edit goal';
+            document.getElementById('goal-id').value = id;
+            document.getElementById('goal-name').value = goal.name;
+            setFrequency(goal.frequency);
+            showModal('goal-modal');
+        };
+
+        document.getElementById('cancel-goal-btn').addEventListener('click', () => {
+            hideModal('goal-modal');
+        });
+
+        document.getElementById('goal-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('goal-id').value;
+            const name = document.getElementById('goal-name').value.trim();
+            const frequency = getFrequency();
+
+            if (id) {
+                await updateGoal(parseInt(id), name, frequency);
+            } else {
+                await createGoal(name, frequency);
+            }
+
+            hideModal('goal-modal');
+            await refreshGoalsList();
+            goals = await getGoals(); // Refresh for main screen
+        });
+
+        // Confirm dialogs
+        let confirmCallback = null;
+
+        window.confirmArchive = function(id) {
+            document.getElementById('confirm-title').textContent = 'Archive goal';
+            document.getElementById('confirm-message').textContent = 'Are you sure you want to archive this goal? You can unarchive it later.';
+            confirmCallback = async () => {
+                await archiveGoal(id);
+                await refreshGoalsList();
+                goals = await getGoals();
+            };
+            showModal('confirm-modal');
+        };
+
+        window.confirmUnarchive = function(id) {
+            document.getElementById('confirm-title').textContent = 'Unarchive goal';
+            document.getElementById('confirm-message').textContent = 'This will restore the goal to your active list.';
+            document.getElementById('confirm-ok').textContent = 'Unarchive';
+            document.getElementById('confirm-ok').className = 'btn';
+            confirmCallback = async () => {
+                await unarchiveGoal(id);
+                await refreshGoalsList();
+                goals = await getGoals();
+            };
+            showModal('confirm-modal');
+        };
+
+        document.getElementById('confirm-cancel').addEventListener('click', () => {
+            hideModal('confirm-modal');
+            // Reset button styles
+            document.getElementById('confirm-ok').textContent = 'Confirm';
+            document.getElementById('confirm-ok').className = 'btn btn-danger';
+        });
+
+        document.getElementById('confirm-ok').addEventListener('click', async () => {
+            if (confirmCallback) {
+                await confirmCallback();
+                confirmCallback = null;
+            }
+            hideModal('confirm-modal');
+            // Reset button styles
+            document.getElementById('confirm-ok').textContent = 'Confirm';
+            document.getElementById('confirm-ok').className = 'btn btn-danger';
+        });
+
+        // ============ Year View ============
+        async function loadYearScreen(year) {
+            document.getElementById('year-title').textContent = `${year} progress`;
+            showScreen('year-screen');
+
+            const allGoals = await getGoals(true);
+            const yearCompletions = await getCompletionsForYear(year);
+
+            const container = document.getElementById('year-streak-charts');
+            container.innerHTML = allGoals.map(goal => {
+                const goalCompletions = yearCompletions.filter(c => c.goal_id === goal.id);
+                return renderStreakChart(goal, goalCompletions, year);
+            }).join('');
+        }
+
+        // ============ Routing ============
+        async function handleRoute() {
+            const hash = window.location.hash.slice(1) || '';
+            localStorage.setItem(`${APP_NAME}_last_hash`, hash);
+
+            if (hash === 'goals') {
+                await loadGoalsScreen();
+            } else if (hash.startsWith('year/')) {
+                const year = parseInt(hash.split('/')[1]);
+                await loadYearScreen(year);
+            } else {
+                await loadMainScreen();
+            }
+        }
+
+        window.addEventListener('hashchange', handleRoute);
+
+        // ============ Initialize ============
+        async function init() {
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                try {
+                    await navigator.serviceWorker.register('sw.js');
+                } catch (e) {
+                    console.log('Service worker registration failed:', e);
+                }
+            }
+
+            // Check for stored config
+            if (DB.init()) {
+                // Restore last hash before connecting
+                const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
+                if (lastHash) {
+                    window.location.hash = lastHash;
+                }
+                await tryConnect();
+            } else {
+                showScreen('setup-screen');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
