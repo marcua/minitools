@@ -1,7 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-    <rect fill="#FAF9F7" width="100" height="100" rx="20"/>
-    <rect fill="#e85d04" x="8" y="8" width="84" height="84" rx="16"/>
-    <circle fill="none" stroke="#FAF9F7" stroke-width="6" cx="50" cy="50" r="28"/>
-    <circle fill="none" stroke="#FAF9F7" stroke-width="6" cx="50" cy="50" r="14"/>
-    <circle fill="#FAF9F7" cx="50" cy="50" r="4"/>
+    <!-- Background -->
+    <rect fill="#FAFBFC" width="100" height="100" rx="22"/>
+
+    <!-- Subtle border -->
+    <rect fill="none" stroke="#E1E4E8" stroke-width="2" x="1" y="1" width="98" height="98" rx="21"/>
+
+    <!-- 3x3 Heatmap Grid -->
+    <!-- Row 1 -->
+    <rect fill="#0D9488" x="18" y="18" width="18" height="18" rx="3"/>
+    <rect fill="#0D9488" x="41" y="18" width="18" height="18" rx="3"/>
+    <rect fill="#E1E4E8" x="64" y="18" width="18" height="18" rx="3"/>
+
+    <!-- Row 2 -->
+    <rect fill="#E1E4E8" x="18" y="41" width="18" height="18" rx="3"/>
+    <rect fill="#0D9488" x="41" y="41" width="18" height="18" rx="3"/>
+    <rect fill="#0D9488" x="64" y="41" width="18" height="18" rx="3"/>
+
+    <!-- Row 3 -->
+    <rect fill="#0D9488" x="18" y="64" width="18" height="18" rx="3"/>
+    <rect fill="#0D9488" x="41" y="64" width="18" height="18" rx="3"/>
+    <rect fill="#0D9488" x="64" y="64" width="18" height="18" rx="3"/>
 </svg>
