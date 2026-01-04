@@ -5,20 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" content="#f5f2eb">
+    <meta name="theme-color" content="#FAFBFC">
     <title>Streaks</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --ink: #2c2416;
-            --ink-light: #5c5446;
-            --ink-faint: #d4cfc4;
-            --paper: #f5f2eb;
-            --accent: #e85d04;
-            --streak-empty: #e8e4db;
-            --streak-filled: #e85d04;
+            --paper: #FAFBFC;
+            --paper-warm: #F6F5F3;
+            --surface: #FFFFFF;
+            --border: #E1E4E8;
+            --border-strong: #D0D4D9;
+
+            --ink: #1B2631;
+            --ink-secondary: #57606A;
+            --ink-muted: #8B949E;
+            --ink-faint: #B8BFC6;
+
+            --signal: #0D9488;
+            --signal-light: #0D948815;
+            --signal-medium: #0D948830;
+            --signal-hover: #0B7A70;
+
+            --warm: #D97706;
+            --danger: #DC2626;
+            --success: #059669;
+
+            --shadow-sm: 0 1px 2px rgba(27, 38, 49, 0.04);
+            --shadow-md: 0 2px 8px rgba(27, 38, 49, 0.06), 0 1px 2px rgba(27, 38, 49, 0.04);
+            --shadow-lg: 0 8px 24px rgba(27, 38, 49, 0.08), 0 2px 8px rgba(27, 38, 49, 0.04);
+
+            --font-display: 'Outfit', system-ui, sans-serif;
+            --font-body: 'DM Sans', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --duration-fast: 120ms;
+            --duration-normal: 200ms;
+            --duration-slow: 350ms;
         }
 
         * {
@@ -28,8 +57,9 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--paper);
+            font-family: var(--font-body);
+            background-color: var(--paper);
+            background-image: radial-gradient(ellipse at 50% -20%, var(--signal-light) 0%, transparent 50%);
             color: var(--ink);
             min-height: 100vh;
             line-height: 1.5;
@@ -41,22 +71,34 @@
             padding: 20px;
         }
 
+        /* Page titles */
         h1 {
+            font-family: var(--font-display);
             font-size: 1.75rem;
-            margin-bottom: 1rem;
             font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+            margin-top: 48px;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
         }
 
         h2 {
+            font-family: var(--font-display);
             font-size: 1.25rem;
-            margin-bottom: 0.75rem;
             font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            margin-bottom: 0.75rem;
         }
 
         h3 {
-            font-size: 1rem;
+            font-family: var(--font-body);
+            font-size: 1.05rem;
+            font-weight: 500;
+            color: var(--ink);
             margin-bottom: 0.5rem;
-            font-weight: 600;
         }
 
         .screen {
@@ -65,14 +107,22 @@
 
         .screen.active {
             display: block;
+            animation: fadeIn var(--duration-normal) var(--ease-out);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* Form elements */
         label {
             display: block;
-            margin-bottom: 0.25rem;
+            font-family: var(--font-body);
             font-weight: 500;
-            color: var(--ink-light);
+            font-size: 0.85rem;
+            color: var(--ink-secondary);
+            margin-bottom: 6px;
         }
 
         input[type="text"],
@@ -81,20 +131,23 @@
         textarea,
         select {
             width: 100%;
-            padding: 12px;
-            border: 2px solid var(--ink-faint);
-            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: var(--font-body);
             font-size: 16px;
-            background: white;
+            background: var(--surface);
             color: var(--ink);
             margin-bottom: 1rem;
+            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
         }
 
         input:focus,
         textarea:focus,
         select:focus {
             outline: none;
-            border-color: var(--accent);
+            border-color: var(--signal);
+            box-shadow: 0 0 0 3px var(--signal-light);
         }
 
         textarea {
@@ -104,39 +157,60 @@
 
         /* Buttons */
         .btn {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: 12px 24px;
-            background: var(--accent);
+            background: var(--signal);
             color: white;
             border: none;
             border-radius: 8px;
+            font-family: var(--font-body);
             font-size: 16px;
             font-weight: 500;
             cursor: pointer;
             touch-action: manipulation;
             min-height: 48px;
+            transition: background var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
         }
 
         .btn:hover {
-            opacity: 0.9;
+            background: var(--signal-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
         }
 
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
 
         .btn-secondary {
-            background: var(--ink-faint);
-            color: var(--ink);
+            background: transparent;
+            color: var(--ink-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--paper-warm);
+            transform: translateY(-1px);
         }
 
         .btn-danger {
-            background: #c1121f;
+            background: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background: #B91C1C;
         }
 
         .btn-small {
-            padding: 8px 16px;
+            padding: 8px 14px;
             font-size: 14px;
             min-height: 40px;
         }
@@ -151,54 +225,55 @@
             justify-content: flex-end;
         }
 
-        /* Toggle button group */
+        /* Toggle button group (Segmented Control) */
         .toggle-group {
             display: flex;
             gap: 0;
             margin-bottom: 1rem;
+            background: var(--paper-warm);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px;
         }
 
         .toggle-group .toggle-btn {
             flex: 1;
-            padding: 12px 16px;
-            border: 2px solid var(--ink-faint);
-            background: white;
-            color: var(--ink);
+            padding: 10px 16px;
+            border: none;
+            background: transparent;
+            color: var(--ink-secondary);
+            font-family: var(--font-body);
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .toggle-group .toggle-btn:first-child {
-            border-radius: 8px 0 0 8px;
-        }
-
-        .toggle-group .toggle-btn:last-child {
-            border-radius: 0 8px 8px 0;
-        }
-
-        .toggle-group .toggle-btn:not(:first-child) {
-            border-left: none;
+            border-radius: 6px;
+            transition: all var(--duration-normal) var(--ease-spring);
         }
 
         .toggle-group .toggle-btn.active {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
+            background: var(--surface);
+            color: var(--ink);
+            box-shadow: var(--shadow-sm);
         }
 
         .toggle-group .toggle-btn:not(.active):hover {
-            background: var(--paper);
+            color: var(--ink);
         }
 
         /* Cards */
         .card {
-            background: white;
-            border: 2px solid var(--ink-faint);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 22px;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow var(--duration-fast), border-color var(--duration-fast);
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-strong);
         }
 
         /* Goal items */
@@ -206,11 +281,18 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 12px;
-            background: white;
-            border: 2px solid var(--ink-faint);
-            border-radius: 8px;
-            margin-bottom: 8px;
+            padding: 14px 18px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow-sm);
+            transition: all var(--duration-fast);
+        }
+
+        .goal-item:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-strong);
         }
 
         .goal-item.dragging {
@@ -219,15 +301,22 @@
         }
 
         .goal-item.drag-over {
-            border-color: var(--accent);
+            border-color: var(--signal);
+            background: var(--signal-light);
         }
 
         .goal-item .drag-handle {
             cursor: grab;
-            color: var(--ink-light);
+            color: var(--ink-faint);
             padding: 8px;
             -webkit-user-select: none;
             user-select: none;
+            opacity: 0;
+            transition: opacity var(--duration-fast);
+        }
+
+        .goal-item:hover .drag-handle {
+            opacity: 1;
         }
 
         .goal-item .goal-info {
@@ -235,12 +324,20 @@
         }
 
         .goal-item .goal-name {
+            font-family: var(--font-body);
             font-weight: 500;
+            font-size: 1.05rem;
+            color: var(--ink);
         }
 
         .goal-item .goal-frequency {
-            font-size: 0.875rem;
-            color: var(--ink-light);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-muted);
+            margin-top: 2px;
         }
 
         .goal-item .goal-actions {
@@ -249,44 +346,84 @@
         }
 
         .goal-item.archived {
-            opacity: 0.6;
+            opacity: 0.5;
         }
 
         /* Today's checklist */
         .checklist-item {
             display: flex;
             align-items: flex-start;
-            gap: 12px;
-            padding: 16px;
-            background: white;
-            border: 2px solid var(--ink-faint);
-            border-radius: 8px;
-            margin-bottom: 12px;
+            gap: 14px;
+            padding: 18px 22px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow-sm);
+            transition: all var(--duration-fast);
+            animation: cardFadeIn var(--duration-slow) var(--ease-out) backwards;
+        }
+
+        .checklist-item:nth-child(1) { animation-delay: 0ms; }
+        .checklist-item:nth-child(2) { animation-delay: 30ms; }
+        .checklist-item:nth-child(3) { animation-delay: 60ms; }
+        .checklist-item:nth-child(4) { animation-delay: 90ms; }
+        .checklist-item:nth-child(5) { animation-delay: 120ms; }
+        .checklist-item:nth-child(n+6) { animation-delay: 150ms; }
+
+        @keyframes cardFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .checklist-item:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-strong);
         }
 
         .checklist-item.completed {
-            border-color: var(--accent);
-            background: rgba(232, 93, 4, 0.05);
+            border-left: 3px solid var(--signal);
+            background: var(--signal-light);
+            border-color: transparent;
+            border-left-color: var(--signal);
         }
 
         .checklist-checkbox {
-            width: 28px;
-            height: 28px;
-            border: 2px solid var(--ink-faint);
+            width: 24px;
+            height: 24px;
+            border: 1.5px solid var(--border-strong);
             border-radius: 6px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            background: white;
+            background: var(--surface);
             touch-action: manipulation;
+            margin-top: 2px;
+            transition: all var(--duration-fast) var(--ease-spring);
+        }
+
+        .checklist-checkbox:hover {
+            border-color: var(--signal);
         }
 
         .checklist-item.completed .checklist-checkbox {
-            background: var(--accent);
-            border-color: var(--accent);
+            background: var(--signal);
+            border-color: var(--signal);
             color: white;
+            animation: checkBounce var(--duration-normal) var(--ease-spring);
+        }
+
+        @keyframes checkBounce {
+            0% { transform: scale(0.95); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .checklist-checkbox svg {
+            width: 14px;
+            height: 14px;
         }
 
         .checklist-content {
@@ -294,51 +431,78 @@
         }
 
         .checklist-name {
+            font-family: var(--font-body);
             font-weight: 500;
-            margin-bottom: 4px;
+            font-size: 1.05rem;
+            color: var(--ink);
+            margin-bottom: 2px;
         }
 
         .checklist-frequency {
-            font-size: 0.875rem;
-            color: var(--ink-light);
-            margin-bottom: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-muted);
         }
 
         .checklist-note {
-            margin-top: 8px;
+            margin-top: 12px;
         }
 
         .checklist-note textarea {
             margin-bottom: 0;
             min-height: 60px;
+            background: var(--paper-warm);
+            font-style: italic;
+        }
+
+        .checklist-note textarea::placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
         }
 
         .note-display {
-            margin-top: 8px;
-            padding: 8px 12px;
-            background: var(--paper);
+            margin-top: 12px;
+            padding: 10px 14px;
+            background: var(--paper-warm);
+            border: 1px solid var(--border);
             border-radius: 6px;
             font-size: 0.875rem;
+            color: var(--ink-secondary);
+            cursor: pointer;
+            transition: border-color var(--duration-fast);
+        }
+
+        .note-display:hover {
+            border-color: var(--signal);
         }
 
         .note-display a {
-            color: var(--accent);
+            color: var(--signal);
+        }
+
+        .note-placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
         }
 
         /* Streak visualization */
         .streak-section {
-            margin-top: 2rem;
+            margin-top: 2.5rem;
         }
 
         .streak-chart {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
+            animation: cardFadeIn var(--duration-slow) var(--ease-out) backwards;
         }
 
         .streak-title {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
+            align-items: baseline;
+            margin-bottom: 10px;
         }
 
         .streak-title h3 {
@@ -346,8 +510,17 @@
         }
 
         .streak-count {
+            font-family: var(--font-mono);
             font-size: 0.875rem;
-            color: var(--ink-light);
+        }
+
+        .streak-count .numerator {
+            color: var(--signal);
+            font-weight: 500;
+        }
+
+        .streak-count .denominator {
+            color: var(--ink-muted);
         }
 
         .streak-grid {
@@ -362,34 +535,46 @@
             grid-template-rows: repeat(7, 1fr);
             grid-auto-flow: column;
             grid-auto-columns: min-content;
-            gap: 2px;
+            gap: 3px;
         }
 
-        /* Smaller cells for daily grid to fit ~54 weeks */
+        /* Cells for daily grid */
         .streak-grid.daily .streak-cell {
-            width: 8px;
-            height: 8px;
+            width: 11px;
+            height: 11px;
         }
 
         .streak-cell {
-            width: 12px;
-            height: 12px;
+            width: 11px;
+            height: 11px;
             border-radius: 2px;
-            background: var(--streak-empty);
+            background: var(--border);
             cursor: pointer;
+            transition: transform var(--duration-fast) var(--ease-spring);
         }
 
         .streak-cell:hover {
-            opacity: 0.8;
+            transform: scale(1.3);
+            z-index: 1;
         }
 
         .streak-cell.filled {
-            background: var(--streak-filled);
+            background: var(--signal);
         }
 
         .streak-cell.future {
             background: transparent;
-            border: 1px solid var(--ink-faint);
+            border: 1px dashed var(--border);
+        }
+
+        .streak-cell.missed {
+            background: var(--paper-warm);
+            border: 1px dashed var(--border);
+        }
+
+        .streak-cell.today {
+            box-shadow: 0 0 0 2px var(--signal-medium);
+            transform: scale(1.1);
         }
 
         .streak-cell.placeholder {
@@ -404,17 +589,39 @@
             border-radius: 4px;
         }
 
+        /* Month labels */
+        .month-labels {
+            display: flex;
+            margin-bottom: 6px;
+            padding-left: 0;
+        }
+
+        .month-label {
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--ink-muted);
+        }
+
         /* Streak popover */
         .streak-popover {
             display: none;
             position: fixed;
-            background: white;
-            border: 2px solid var(--ink-faint);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 12px;
+            padding: 12px 16px;
             max-width: 280px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: var(--shadow-md);
             z-index: 200;
+            animation: popoverIn var(--duration-fast) var(--ease-out);
+        }
+
+        @keyframes popoverIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .streak-popover.active {
@@ -422,23 +629,26 @@
         }
 
         .streak-popover-date {
-            font-weight: 600;
+            font-family: var(--font-mono);
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: var(--ink);
             margin-bottom: 4px;
         }
 
         .streak-popover-note {
             font-size: 0.875rem;
-            color: var(--ink-light);
+            color: var(--ink-secondary);
             word-wrap: break-word;
         }
 
         .streak-popover-note a {
-            color: var(--accent);
+            color: var(--signal);
         }
 
         .streak-popover-empty {
             font-size: 0.875rem;
-            color: var(--ink-faint);
+            color: var(--ink-muted);
             font-style: italic;
         }
 
@@ -446,14 +656,27 @@
         .year-links {
             margin-top: 2rem;
             padding-top: 1rem;
-            border-top: 2px solid var(--ink-faint);
+            border-top: 1px solid var(--border);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+        }
+
+        .year-links strong {
+            color: var(--ink-secondary);
+            font-weight: 500;
         }
 
         .year-links a {
             display: inline-block;
-            margin-right: 12px;
-            color: var(--accent);
+            margin-left: 12px;
+            color: var(--signal);
             text-decoration: none;
+            transition: color var(--duration-fast);
+        }
+
+        .year-links a:hover {
+            color: var(--signal-hover);
+            text-decoration: underline;
         }
 
         /* Modal */
@@ -464,121 +687,208 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(27, 38, 49, 0.4);
             z-index: 100;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            backdrop-filter: blur(2px);
         }
 
         .modal-overlay.active {
             display: flex;
+            animation: modalFadeIn var(--duration-normal) var(--ease-out);
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .modal {
-            background: var(--paper);
+            background: var(--surface);
             border-radius: 12px;
             padding: 24px;
             max-width: 400px;
             width: 100%;
             max-height: 80vh;
             overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            animation: modalSlideIn var(--duration-normal) var(--ease-spring);
+        }
+
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .modal h2 {
-            margin-bottom: 1rem;
+            margin-bottom: 1.25rem;
         }
 
         /* Date navigation */
-        .date-picker {
+        .date-nav {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .date-nav-day {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-muted);
+        }
+
+        .date-nav-row {
+            display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 1.5rem;
-        }
-
-        .date-picker-wrapper {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-        }
-
-        .date-picker-wrapper::before {
-            content: '📅';
-            position: absolute;
-            left: 12px;
-            font-size: 1rem;
-            pointer-events: none;
-        }
-
-        .date-picker input[type="date"] {
-            font-size: 1.125rem;
-            font-weight: 500;
-            padding: 12px 16px 12px 40px;
-            border: 2px solid var(--ink-faint);
-            border-radius: 8px;
-            background: white;
-            color: var(--ink);
-            cursor: pointer;
-            min-height: 48px;
-            text-align: center;
         }
 
         .date-nav-btn {
-            width: 44px;
-            height: 44px;
-            border: 2px solid var(--ink-faint);
+            width: 40px;
+            height: 40px;
+            border: none;
             border-radius: 8px;
-            background: white;
-            color: var(--ink);
+            background: transparent;
+            color: var(--ink-faint);
             font-size: 1.25rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             touch-action: manipulation;
+            transition: color var(--duration-fast), background var(--duration-fast);
         }
 
         .date-nav-btn:hover {
-            border-color: var(--accent);
+            color: var(--signal);
+            background: var(--paper-warm);
         }
 
-        .date-picker input[type="date"]:focus {
+        .date-nav-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .date-picker-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: transparent;
+            transition: background var(--duration-fast);
+        }
+
+        .date-picker-wrapper:hover {
+            background: var(--paper-warm);
+        }
+
+        .date-picker-wrapper input[type="date"] {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            font-weight: 500;
+            padding: 0;
+            margin: 0;
+            border: none;
+            background: transparent;
+            color: var(--ink);
+            cursor: pointer;
+            text-align: center;
+            width: auto;
+        }
+
+        .date-picker-wrapper input[type="date"]:focus {
             outline: none;
-            border-color: var(--accent);
+            box-shadow: none;
+        }
+
+        .date-picker-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+            opacity: 0;
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
         }
 
         /* Links */
         .edit-link {
             display: inline-block;
-            color: var(--accent);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            color: var(--signal);
             text-decoration: none;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            transition: color var(--duration-fast);
+        }
+
+        .edit-link:hover {
+            color: var(--signal-hover);
+            text-decoration: underline;
         }
 
         /* Error message */
         .error-message {
-            background: #fef2f2;
-            border: 2px solid #c1121f;
+            background: #FEF2F2;
+            border: 1px solid var(--danger);
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 1rem;
-            color: #c1121f;
+            color: var(--danger);
+            font-size: 0.9rem;
         }
 
         /* Empty state */
         .empty-state {
             text-align: center;
-            padding: 2rem;
-            color: var(--ink-light);
+            padding: 3rem 2rem;
+            color: var(--ink-secondary);
+        }
+
+        .empty-state-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            color: var(--border-strong);
+        }
+
+        .empty-state-icon .accent {
+            color: var(--signal);
+        }
+
+        .empty-state-title {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--ink-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state-text {
+            color: var(--ink-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .empty-state a {
+            color: var(--signal);
         }
 
         /* Section divider */
         .section-divider {
             margin: 2rem 0;
             border: none;
-            border-top: 2px solid var(--ink-faint);
+            border-top: 1px solid var(--border);
         }
 
         /* Archive section */
@@ -587,9 +897,52 @@
         }
 
         .archive-toggle {
-            color: var(--ink-light);
-            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: var(--font-body);
             font-size: 0.875rem;
+            color: var(--ink-muted);
+            cursor: pointer;
+            padding: 8px 0;
+            transition: color var(--duration-fast);
+        }
+
+        .archive-toggle:hover {
+            color: var(--ink-secondary);
+        }
+
+        .archive-toggle svg {
+            width: 16px;
+            height: 16px;
+            transition: transform var(--duration-fast);
+        }
+
+        .archive-toggle.expanded svg {
+            transform: rotate(180deg);
+        }
+
+        .archive-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 1.5rem 0 1rem;
+        }
+
+        .archive-divider::before,
+        .archive-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .archive-divider span {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-muted);
         }
 
         .archived-goals {
@@ -598,28 +951,144 @@
 
         /* Mobile responsive */
         @media (max-width: 480px) {
+            .container {
+                padding: 16px;
+            }
+
+            h1 {
+                margin-top: 32px;
+            }
+
+            .checklist-item,
+            .goal-item {
+                padding: 14px 16px;
+                margin-left: -16px;
+                margin-right: -16px;
+                border-radius: 0;
+                border-left: none;
+                border-right: none;
+            }
+
+            .checklist-item.completed {
+                border-left: 3px solid var(--signal);
+            }
+
             .streak-grid.daily {
-                gap: 1px;
+                gap: 2px;
             }
+
             .streak-grid.daily .streak-cell {
-                width: 5px;
-                height: 5px;
+                width: 9px;
+                height: 9px;
             }
-            .date-picker-wrapper::before {
-                display: none;
+
+            .goal-item .drag-handle {
+                opacity: 1;
             }
-            .date-picker input[type="date"] {
-                padding: 12px 16px;
+
+            .goal-item .goal-actions {
+                flex-direction: column;
+                gap: 6px;
             }
+
+            .goal-item .goal-actions .btn {
+                width: 100%;
+            }
+        }
+
+        @media (min-width: 481px) and (max-width: 768px) {
+            .container {
+                max-width: 540px;
+            }
+        }
+
+        /* Accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Focus states */
+        .btn:focus-visible,
+        .checklist-checkbox:focus-visible,
+        .date-nav-btn:focus-visible,
+        .toggle-btn:focus-visible {
+            outline: 2px solid var(--signal);
+            outline-offset: 2px;
+        }
+
+        /* Setup screen specifics */
+        #setup-screen .container {
+            max-width: 400px;
+        }
+
+        #setup-screen p {
+            color: var(--ink-secondary);
+            margin-bottom: 1.5rem;
         }
     </style>
 </head>
 <body>
+    <!-- SVG Icon Sprite -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+        <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </symbol>
+        <symbol id="icon-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+        </symbol>
+        <symbol id="icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+        </symbol>
+        <symbol id="icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+        </symbol>
+        <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </symbol>
+        <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </symbol>
+        <symbol id="icon-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="21 8 21 21 3 21 3 8"></polyline>
+            <rect x="1" y="3" width="22" height="5"></rect>
+            <line x1="10" y1="12" x2="14" y2="12"></line>
+        </symbol>
+        <symbol id="icon-unarchive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="21 8 21 21 3 21 3 8"></polyline>
+            <rect x="1" y="3" width="22" height="5"></rect>
+            <polyline points="12 17 12 11"></polyline>
+            <polyline points="9 14 12 11 15 14"></polyline>
+        </symbol>
+        <symbol id="icon-drag" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6" r="1.5"></circle>
+            <circle cx="15" cy="6" r="1.5"></circle>
+            <circle cx="9" cy="12" r="1.5"></circle>
+            <circle cx="15" cy="12" r="1.5"></circle>
+            <circle cx="9" cy="18" r="1.5"></circle>
+            <circle cx="15" cy="18" r="1.5"></circle>
+        </symbol>
+        <symbol id="icon-clipboard" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="16" y="12" width="48" height="60" rx="4"></rect>
+            <rect x="28" y="6" width="24" height="12" rx="2"></rect>
+            <line x1="28" y1="32" x2="52" y2="32" class="accent" stroke="var(--signal)"></line>
+            <polyline points="26 42 30 46 38 38" class="accent" stroke="var(--signal)"></polyline>
+            <line x1="44" y1="42" x2="52" y2="42"></line>
+            <polyline points="26 54 30 58 38 50" class="accent" stroke="var(--signal)"></polyline>
+            <line x1="44" y1="54" x2="52" y2="54"></line>
+        </symbol>
+    </svg>
+
     <!-- Setup Screen -->
     <div id="setup-screen" class="screen">
         <div class="container">
             <h1>Streaks</h1>
-            <p style="margin-bottom: 1.5rem; color: var(--ink-light);">Connect to your ayb database to get started.</p>
+            <p>Connect to your ayb database to get started.</p>
 
             <form id="setup-form">
                 <label for="db-url">Database URL</label>
@@ -652,12 +1121,19 @@
         <div class="container">
             <h1>Streaks</h1>
 
-            <div class="date-picker">
-                <button class="date-nav-btn" id="date-prev" aria-label="Previous day">←</button>
-                <div class="date-picker-wrapper">
-                    <input type="date" id="date-picker">
+            <div class="date-nav">
+                <div class="date-nav-day" id="date-day-label"></div>
+                <div class="date-nav-row">
+                    <button class="date-nav-btn" id="date-prev" aria-label="Previous day">
+                        <svg><use href="#icon-chevron-left"/></svg>
+                    </button>
+                    <div class="date-picker-wrapper">
+                        <input type="date" id="date-picker">
+                    </div>
+                    <button class="date-nav-btn" id="date-next" aria-label="Next day">
+                        <svg><use href="#icon-chevron-right"/></svg>
+                    </button>
                 </div>
-                <button class="date-nav-btn" id="date-next" aria-label="Next day">→</button>
             </div>
 
             <a href="#goals" class="edit-link">Edit goals</a>
@@ -679,16 +1155,22 @@
     <div id="goals-screen" class="screen">
         <div class="container">
             <h1>Goals</h1>
-            <a href="#" class="edit-link">← Back to today</a>
+            <a href="#" class="edit-link">&larr; Back to today</a>
 
             <div class="btn-group" style="margin-bottom: 1.5rem;">
-                <button class="btn" id="add-goal-btn">Add goal</button>
+                <button class="btn" id="add-goal-btn">
+                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use href="#icon-plus"/></svg>
+                    Add goal
+                </button>
             </div>
 
             <div id="goals-list"></div>
 
             <div class="archive-section">
-                <span class="archive-toggle" id="archive-toggle">Show archived goals</span>
+                <div class="archive-toggle" id="archive-toggle">
+                    <svg><use href="#icon-chevron-down"/></svg>
+                    <span>Show archived</span>
+                </div>
                 <div class="archived-goals" id="archived-goals" style="display: none;"></div>
             </div>
         </div>
@@ -698,7 +1180,7 @@
     <div id="year-screen" class="screen">
         <div class="container">
             <h1 id="year-title"></h1>
-            <a href="#" class="edit-link">← Back to today</a>
+            <a href="#" class="edit-link">&larr; Back to today</a>
 
             <div id="year-streak-charts"></div>
         </div>
@@ -733,8 +1215,8 @@
     <div class="modal-overlay" id="confirm-modal">
         <div class="modal">
             <h2 id="confirm-title">Confirm</h2>
-            <p id="confirm-message"></p>
-            <div class="btn-group" style="margin-top: 1rem;">
+            <p id="confirm-message" style="color: var(--ink-secondary); margin-bottom: 1rem;"></p>
+            <div class="btn-group">
                 <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
                 <button class="btn btn-danger" id="confirm-ok">Confirm</button>
             </div>
@@ -817,6 +1299,19 @@
                 month: 'short',
                 day: 'numeric'
             });
+        }
+
+        function getDayOfWeek(dateStr) {
+            const date = parseLocalDate(dateStr);
+            return date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+        }
+
+        function formatDateNav(dateStr) {
+            const date = parseLocalDate(dateStr);
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${month} / ${day} / ${year}`;
         }
 
         function getWeekNumber(date) {
@@ -1157,11 +1652,19 @@
             completions = await getCompletionsForDate(currentDate);
 
             document.getElementById('date-picker').value = currentDate;
+            document.getElementById('date-day-label').textContent = getDayOfWeek(currentDate);
 
             const container = document.getElementById('checklist');
 
             if (goals.length === 0) {
-                container.innerHTML = '<div class="empty-state">No goals yet. <a href="#goals">Add your first goal</a></div>';
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg class="empty-state-icon"><use href="#icon-clipboard"/></svg>
+                        <div class="empty-state-title">No habits yet</div>
+                        <div class="empty-state-text">Start tracking something meaningful</div>
+                        <a href="#goals" class="btn">Add your first goal</a>
+                    </div>
+                `;
                 return;
             }
 
@@ -1177,15 +1680,15 @@
 
                 return `
                     <div class="checklist-item ${isCompleted ? 'completed' : ''}" data-goal-id="${goal.id}">
-                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})">
-                            ${isCompleted ? '✓' : ''}
+                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})" tabindex="0" role="checkbox" aria-checked="${isCompleted}" aria-label="${escapeHtml(goal.name)}">
+                            ${isCompleted ? '<svg><use href="#icon-check"/></svg>' : ''}
                         </div>
                         <div class="checklist-content">
                             <div class="checklist-name">${escapeHtml(goal.name)}</div>
                             <div class="checklist-frequency">${goal.frequency}</div>
                             ${isCompleted ? `
                                 <div class="note-display" onclick="editNote(${goal.id})">
-                                    ${completion.note ? renderMarkdown(completion.note) : '<em style="color: var(--ink-light)">Add note...</em>'}
+                                    ${completion.note ? renderMarkdown(completion.note) : '<span class="note-placeholder">Add note...</span>'}
                                 </div>
                             ` : ''}
                         </div>
@@ -1233,7 +1736,7 @@
         // ============ Streak Charts ============
         async function refreshStreakCharts() {
             const year = new Date().getFullYear();
-            document.getElementById('current-year-title').textContent = `${year} progress`;
+            document.getElementById('current-year-title').textContent = `${year} Progress`;
 
             const yearCompletions = await getCompletionsForYear(year);
             const container = document.getElementById('streak-charts');
@@ -1254,7 +1757,7 @@
             const linksContainer = document.getElementById('year-links');
 
             if (otherYears.length > 0) {
-                linksContainer.innerHTML = '<strong>Previous years:</strong> ' +
+                linksContainer.innerHTML = '<strong>Previous years:</strong>' +
                     otherYears.map(y => `<a href="#year/${y}">${y}</a>`).join('');
                 linksContainer.style.display = 'block';
             } else {
@@ -1270,6 +1773,7 @@
             });
 
             const today = new Date();
+            const todayStr = getLocalDate(today);
             let cells = '';
             let count = 0;
             let total = 0;
@@ -1291,6 +1795,7 @@
                     const dateStr = getLocalDate(date);
                     const utcDate = localToUTC(dateStr);
                     const isFuture = date > today;
+                    const isToday = dateStr === todayStr;
                     const completion = completionMap[utcDate];
                     const isFilled = !!completion;
 
@@ -1298,8 +1803,17 @@
                     if (isFilled) count++;
 
                     const noteAttr = completion?.note ? `data-note="${escapeHtml(completion.note)}"` : '';
-                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
-                        data-date="${dateStr}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
+                    const classes = [
+                        'streak-cell',
+                        isFilled ? 'filled' : '',
+                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : ''),
+                        isToday ? 'today' : ''
+                    ].filter(Boolean).join(' ');
+
+                    cells += `<div class="${classes}" data-date="${dateStr}" ${noteAttr}
+                        onclick="showStreakPopover(event, this)"
+                        title="${dateStr}"
+                        aria-label="${dateStr}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
                 }
             } else if (goal.frequency === 'weekly') {
                 // 52 cells
@@ -1326,8 +1840,16 @@
                     const weekStart = new Date(year, 0, (week - 1) * 7 + 1);
                     const weekLabel = `Week ${week} (${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
                     const noteAttr = weekNotes.length > 0 ? `data-note="${escapeHtml(weekNotes.join('\n\n'))}"` : '';
-                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
-                        data-date="${weekLabel}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
+                    const classes = [
+                        'streak-cell',
+                        isFilled ? 'filled' : '',
+                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : '')
+                    ].filter(Boolean).join(' ');
+
+                    cells += `<div class="${classes}" data-date="${weekLabel}" ${noteAttr}
+                        onclick="showStreakPopover(event, this)"
+                        title="${weekLabel}"
+                        aria-label="${weekLabel}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
                 }
             } else {
                 // Monthly - 12 cells
@@ -1354,8 +1876,16 @@
 
                     const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                     const noteAttr = monthNotes.length > 0 ? `data-note="${escapeHtml(monthNotes.join('\n\n'))}"` : '';
-                    cells += `<div class="streak-cell ${isFilled ? 'filled' : ''} ${isFuture ? 'future' : ''}"
-                        data-date="${monthName}" ${noteAttr} onclick="showStreakPopover(event, this)"></div>`;
+                    const classes = [
+                        'streak-cell',
+                        isFilled ? 'filled' : '',
+                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : '')
+                    ].filter(Boolean).join(' ');
+
+                    cells += `<div class="${classes}" data-date="${monthName}" ${noteAttr}
+                        onclick="showStreakPopover(event, this)"
+                        title="${monthName}"
+                        aria-label="${monthName}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
                 }
             }
 
@@ -1363,7 +1893,7 @@
                 <div class="streak-chart">
                     <div class="streak-title">
                         <h3>${escapeHtml(goal.name)}</h3>
-                        <span class="streak-count">${count}/${total}</span>
+                        <span class="streak-count"><span class="numerator">${count}</span><span class="denominator">/${total}</span></span>
                     </div>
                     <div class="streak-grid ${goal.frequency}">${cells}</div>
                 </div>
@@ -1445,11 +1975,19 @@
             const container = document.getElementById('goals-list');
 
             if (activeGoals.length === 0) {
-                container.innerHTML = '<div class="empty-state">No goals yet. Add your first goal to get started.</div>';
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg class="empty-state-icon"><use href="#icon-clipboard"/></svg>
+                        <div class="empty-state-title">No goals yet</div>
+                        <div class="empty-state-text">Add your first goal to get started</div>
+                    </div>
+                `;
             } else {
                 container.innerHTML = activeGoals.map(goal => `
                     <div class="goal-item" data-goal-id="${goal.id}" draggable="true">
-                        <span class="drag-handle">⋮⋮</span>
+                        <span class="drag-handle">
+                            <svg style="width: 20px; height: 20px;"><use href="#icon-drag"/></svg>
+                        </span>
                         <div class="goal-info">
                             <div class="goal-name">${escapeHtml(goal.name)}</div>
                             <div class="goal-frequency">${goal.frequency}</div>
@@ -1466,9 +2004,14 @@
 
             // Archived goals
             const archivedContainer = document.getElementById('archived-goals');
+            const archiveToggle = document.getElementById('archive-toggle');
+
             if (archivedGoals.length > 0) {
-                document.getElementById('archive-toggle').style.display = 'inline';
-                archivedContainer.innerHTML = archivedGoals.map(goal => `
+                archiveToggle.style.display = 'inline-flex';
+                archiveToggle.querySelector('span').textContent = `Show archived (${archivedGoals.length})`;
+                archivedContainer.innerHTML = `
+                    <div class="archive-divider"><span>Archived</span></div>
+                ` + archivedGoals.map(goal => `
                     <div class="goal-item archived" data-goal-id="${goal.id}">
                         <div class="goal-info">
                             <div class="goal-name">${escapeHtml(goal.name)}</div>
@@ -1480,7 +2023,7 @@
                     </div>
                 `).join('');
             } else {
-                document.getElementById('archive-toggle').style.display = 'none';
+                archiveToggle.style.display = 'none';
                 archivedContainer.style.display = 'none';
                 archivedContainer.innerHTML = '';
             }
@@ -1491,10 +2034,14 @@
             const toggle = document.getElementById('archive-toggle');
             if (container.style.display === 'none') {
                 container.style.display = 'block';
-                toggle.textContent = 'Hide archived goals';
+                toggle.classList.add('expanded');
+                toggle.querySelector('span').textContent = 'Hide archived';
             } else {
                 container.style.display = 'none';
-                toggle.textContent = 'Show archived goals';
+                toggle.classList.remove('expanded');
+                // Re-count archived goals
+                const count = container.querySelectorAll('.goal-item').length;
+                toggle.querySelector('span').textContent = `Show archived (${count})`;
             }
         });
 
@@ -1726,6 +2273,8 @@
         window.confirmArchive = function(id) {
             document.getElementById('confirm-title').textContent = 'Archive goal';
             document.getElementById('confirm-message').textContent = 'Are you sure you want to archive this goal? You can unarchive it later.';
+            document.getElementById('confirm-ok').textContent = 'Archive';
+            document.getElementById('confirm-ok').className = 'btn btn-danger';
             confirmCallback = async () => {
                 await archiveGoal(id);
                 await refreshGoalsList();
@@ -1767,7 +2316,7 @@
 
         // ============ Year View ============
         async function loadYearScreen(year) {
-            document.getElementById('year-title').textContent = `${year} progress`;
+            document.getElementById('year-title').textContent = `${year} Progress`;
             showScreen('year-screen');
 
             const allGoals = await getGoals(true);

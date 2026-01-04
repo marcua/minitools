@@ -4,8 +4,8 @@
     "description": "Track your daily, weekly, and monthly goals with streak charts",
     "start_url": "./",
     "display": "standalone",
-    "background_color": "#f5f2eb",
-    "theme_color": "#f5f2eb",
+    "background_color": "#FAFBFC",
+    "theme_color": "#FAFBFC",
     "icons": [
         {
             "src": "icon.svg",
