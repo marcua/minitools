@@ -1734,6 +1734,23 @@
             refreshChecklist();
         });
 
+        // Auto-navigate to current day when tab regains focus after date change
+        let lastKnownDate = getLocalDate();
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                const today = getLocalDate();
+                if (today !== lastKnownDate) {
+                    lastKnownDate = today;
+                    // Only auto-navigate if we're on the main screen
+                    if (document.getElementById('main-screen').classList.contains('active')) {
+                        currentDate = today;
+                        await refreshChecklist();
+                        await refreshStreakCharts();
+                    }
+                }
+            }
+        });
+
         // ============ Streak Charts ============
         async function refreshStreakCharts() {
             const year = new Date().getFullYear();
