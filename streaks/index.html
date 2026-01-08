@@ -488,6 +488,56 @@
             font-style: italic;
         }
 
+        .note-edit-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 8px;
+            padding: 4px;
+            color: var(--ink-faint);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: color var(--duration-fast), background var(--duration-fast);
+        }
+
+        .note-edit-icon:hover {
+            color: var(--signal);
+            background: var(--paper-warm);
+        }
+
+        .note-edit-icon svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .note-inline-editor {
+            margin-top: 12px;
+        }
+
+        .note-inline-editor textarea {
+            margin-bottom: 8px;
+            min-height: 60px;
+            background: var(--paper-warm);
+            font-size: 0.875rem;
+        }
+
+        .note-inline-editor textarea::placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        .note-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .note-actions .btn {
+            padding: 6px 12px;
+            font-size: 13px;
+            min-height: 32px;
+        }
+
         /* Streak visualization */
         .streak-section {
             margin-top: 2.5rem;
@@ -1679,6 +1729,7 @@
                 const completion = completions.find(c => c.goal_id === goal.id);
                 const isCompleted = !!completion;
 
+                const noteValue = completion?.note || '';
                 return `
                     <div class="checklist-item ${isCompleted ? 'completed' : ''}" data-goal-id="${goal.id}">
                         <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})" tabindex="0" role="checkbox" aria-checked="${isCompleted}" aria-label="${escapeHtml(goal.name)}">
@@ -1688,10 +1739,21 @@
                             <div class="checklist-name">${escapeHtml(goal.name)}</div>
                             <div class="checklist-frequency">${goal.frequency}</div>
                             ${isCompleted ? `
-                                <div class="note-display" onclick="editNote(${goal.id})">
-                                    ${completion.note ? renderMarkdown(completion.note) : '<span class="note-placeholder">Add note...</span>'}
+                                <div class="note-display" onclick="startEditNote(${goal.id}, this)" data-goal-id="${goal.id}">
+                                    ${noteValue ? renderMarkdown(noteValue) : '<span class="note-placeholder">Add note...</span>'}
                                 </div>
-                            ` : ''}
+                                <div class="note-inline-editor" data-goal-id="${goal.id}" style="display: none;">
+                                    <textarea placeholder="Add note (markdown supported)..." data-original="${escapeHtml(noteValue)}">${escapeHtml(noteValue)}</textarea>
+                                    <div class="note-actions" style="display: none;">
+                                        <button class="btn btn-secondary" onclick="cancelEditNote(${goal.id})">Cancel</button>
+                                        <button class="btn" onclick="saveNote(${goal.id})">Save</button>
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="note-edit-icon" onclick="startEditNoteUnchecked(${goal.id})" title="Add note">
+                                    <svg><use href="#icon-edit"/></svg>
+                                </div>
+                            `}
                         </div>
                     </div>
                 `;
@@ -1704,14 +1766,63 @@
             await refreshStreakCharts();
         };
 
-        window.editNote = async function(goalId) {
-            const completion = completions.find(c => c.goal_id === goalId);
-            const note = prompt('Note (markdown supported):', completion?.note || '');
-            if (note !== null) {
-                await updateCompletionNote(goalId, currentDate, note);
+        window.startEditNote = function(goalId, displayEl) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
+            if (editor && display) {
+                display.style.display = 'none';
+                editor.style.display = 'block';
+                const textarea = editor.querySelector('textarea');
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                setupNoteInputListener(goalId);
+            }
+        };
+
+        window.startEditNoteUnchecked = async function(goalId) {
+            // Create a completion first so we can add a note
+            await toggleCompletion(goalId, currentDate);
+            await refreshChecklist();
+            await refreshStreakCharts();
+            // Now start editing
+            setTimeout(() => {
+                const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
+                if (display) startEditNote(goalId, display);
+            }, 50);
+        };
+
+        window.cancelEditNote = function(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
+            if (editor && display) {
+                const textarea = editor.querySelector('textarea');
+                textarea.value = textarea.dataset.original || '';
+                editor.querySelector('.note-actions').style.display = 'none';
+                editor.style.display = 'none';
+                display.style.display = 'block';
+            }
+        };
+
+        window.saveNote = async function(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            if (editor) {
+                const textarea = editor.querySelector('textarea');
+                await updateCompletionNote(goalId, currentDate, textarea.value);
                 await refreshChecklist();
             }
         };
+
+        function setupNoteInputListener(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            if (editor) {
+                const textarea = editor.querySelector('textarea');
+                const actions = editor.querySelector('.note-actions');
+                textarea.oninput = function() {
+                    const hasChanged = textarea.value !== (textarea.dataset.original || '');
+                    actions.style.display = hasChanged ? 'flex' : 'none';
+                };
+            }
+        }
 
         // Date picker
         document.getElementById('date-picker').addEventListener('change', (e) => {
