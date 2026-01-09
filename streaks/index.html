@@ -2088,6 +2088,7 @@
             const date = element.dataset.date;
             const note = element.dataset.note;
             const isFilled = element.classList.contains('filled');
+            const hasNoteOnly = element.classList.contains('has-note');
 
             const popover = document.getElementById('streak-popover');
             const dateEl = document.getElementById('popover-date');
@@ -2095,8 +2096,9 @@
 
             dateEl.textContent = date;
 
-            if (isFilled && note) {
-                contentEl.innerHTML = `<div class="streak-popover-note">${renderMarkdown(note)}</div>`;
+            if (note) {
+                const prefix = hasNoteOnly ? '<div class="streak-popover-empty">Not completed</div>' : '';
+                contentEl.innerHTML = `${prefix}<div class="streak-popover-note">${renderMarkdown(note)}</div>`;
             } else if (isFilled) {
                 contentEl.innerHTML = `<div class="streak-popover-empty">Completed (no note)</div>`;
             } else if (element.classList.contains('future')) {
