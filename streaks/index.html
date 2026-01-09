@@ -1588,30 +1588,24 @@
         async function toggleCompletion(goalId, dateStr, note = null) {
             const utcDate = localToUTC(dateStr);
 
-            // Check if record exists
-            const existing = await DB.query(`SELECT id, note, checked FROM completions
+            // Check if checked completion exists
+            const existing = await DB.query(`SELECT id, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
 
             if (existing.rows && existing.rows.length > 0) {
-                const hasNote = existing.rows[0][1];
-                const isChecked = Number(existing.rows[0][2]);
+                const isChecked = Number(existing.rows[0][1]);
                 if (isChecked) {
-                    // Unchecking: keep record if has note, delete if no note
-                    if (hasNote) {
-                        await DB.query(`UPDATE completions SET checked = 0, updated_at = CURRENT_TIMESTAMP
-                            WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
-                    } else {
-                        await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
-                    }
+                    // Unchecking: delete the completion entirely
+                    await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                     return false;
                 } else {
-                    // Checking: update to checked
+                    // Has note but unchecked, now checking it
                     await DB.query(`UPDATE completions SET checked = 1, updated_at = CURRENT_TIMESTAMP
                         WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                     return true;
                 }
             } else {
-                // Create completion (checked)
+                // Create new checked completion
                 const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
                 await DB.query(`INSERT INTO completions (goal_id, date, note, checked)
                     VALUES (${goalId}, '${utcDate}', ${noteValue}, 1)`);
