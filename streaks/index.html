@@ -430,6 +430,13 @@
             flex: 1;
         }
 
+        .checklist-name-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
         .checklist-name {
             font-family: var(--font-body);
             font-weight: 500;
@@ -492,11 +499,11 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            margin-top: 8px;
             padding: 4px;
             color: var(--ink-faint);
             cursor: pointer;
             border-radius: 4px;
+            flex-shrink: 0;
             transition: color var(--duration-fast), background var(--duration-fast);
         }
 
@@ -506,8 +513,8 @@
         }
 
         .note-edit-icon svg {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
         }
 
         .note-inline-editor {
@@ -1468,7 +1475,9 @@
                 UNIQUE(goal_id, date)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_completions_date ON completions(date)`,
-            `CREATE INDEX IF NOT EXISTS idx_completions_goal ON completions(goal_id)`
+            `CREATE INDEX IF NOT EXISTS idx_completions_goal ON completions(goal_id)`,
+            // v4: Add checked column to allow notes without completion
+            `ALTER TABLE completions ADD COLUMN checked INTEGER NOT NULL DEFAULT 1`
         ];
 
         async function runMigrations() {
@@ -1570,49 +1579,89 @@
                 note: row[3],
                 created_at: row[4],
                 updated_at: row[5],
-                goal_name: row[6],
-                goal_frequency: row[7]
+                checked: Number(row[6]),
+                goal_name: row[7],
+                goal_frequency: row[8]
             })) : [];
         }
 
         async function toggleCompletion(goalId, dateStr, note = null) {
             const utcDate = localToUTC(dateStr);
 
-            // Check if already completed
-            const existing = await DB.query(`SELECT id FROM completions
+            // Check if record exists
+            const existing = await DB.query(`SELECT id, note, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
 
             if (existing.rows && existing.rows.length > 0) {
-                // Delete completion
-                await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
-                return false;
+                const hasNote = existing.rows[0][1];
+                const isChecked = Number(existing.rows[0][2]);
+                if (isChecked) {
+                    // Unchecking: keep record if has note, delete if no note
+                    if (hasNote) {
+                        await DB.query(`UPDATE completions SET checked = 0, updated_at = CURRENT_TIMESTAMP
+                            WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    } else {
+                        await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    }
+                    return false;
+                } else {
+                    // Checking: update to checked
+                    await DB.query(`UPDATE completions SET checked = 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    return true;
+                }
             } else {
-                // Create completion
+                // Create completion (checked)
                 const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
-                await DB.query(`INSERT INTO completions (goal_id, date, note)
-                    VALUES (${goalId}, '${utcDate}', ${noteValue})`);
+                await DB.query(`INSERT INTO completions (goal_id, date, note, checked)
+                    VALUES (${goalId}, '${utcDate}', ${noteValue}, 1)`);
                 return true;
             }
         }
 
         async function updateCompletionNote(goalId, dateStr, note) {
             const utcDate = localToUTC(dateStr);
-            await DB.query(`UPDATE completions SET
-                note = '${escapeSQL(note)}',
-                updated_at = CURRENT_TIMESTAMP
+            // Check if record exists
+            const existing = await DB.query(`SELECT id, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+
+            if (existing.rows && existing.rows.length > 0) {
+                // Update existing record
+                if (note) {
+                    await DB.query(`UPDATE completions SET
+                        note = '${escapeSQL(note)}',
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                } else {
+                    // If clearing note and not checked, delete record
+                    const isChecked = Number(existing.rows[0][1]);
+                    if (!isChecked) {
+                        await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    } else {
+                        await DB.query(`UPDATE completions SET
+                            note = NULL,
+                            updated_at = CURRENT_TIMESTAMP
+                            WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    }
+                }
+            } else if (note) {
+                // Create new record with note (unchecked)
+                await DB.query(`INSERT INTO completions (goal_id, date, note, checked)
+                    VALUES (${goalId}, '${utcDate}', '${escapeSQL(note)}', 0)`);
+            }
         }
 
         async function getCompletionsForYear(year) {
             const startDate = `${year}-01-01`;
             const endDate = `${year}-12-31`;
-            const result = await DB.query(`SELECT goal_id, date, note FROM completions
-                WHERE date >= '${startDate}' AND date <= '${endDate}'
+            const result = await DB.query(`SELECT goal_id, date, note, checked FROM completions
+                WHERE date >= '${startDate}' AND date <= '${endDate}' AND checked = 1
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
                 goal_id: Number(row[0]),
                 date: row[1],
-                note: row[2]
+                note: row[2],
+                checked: Number(row[3])
             })) : [];
         }
 
@@ -1727,33 +1776,32 @@
 
             container.innerHTML = applicableGoals.map(goal => {
                 const completion = completions.find(c => c.goal_id === goal.id);
-                const isCompleted = !!completion;
-
+                const isChecked = completion?.checked === 1;
                 const noteValue = completion?.note || '';
+
                 return `
-                    <div class="checklist-item ${isCompleted ? 'completed' : ''}" data-goal-id="${goal.id}">
-                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})" tabindex="0" role="checkbox" aria-checked="${isCompleted}" aria-label="${escapeHtml(goal.name)}">
-                            ${isCompleted ? '<svg><use href="#icon-check"/></svg>' : ''}
+                    <div class="checklist-item ${isChecked ? 'completed' : ''}" data-goal-id="${goal.id}">
+                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})" tabindex="0" role="checkbox" aria-checked="${isChecked}" aria-label="${escapeHtml(goal.name)}">
+                            ${isChecked ? '<svg><use href="#icon-check"/></svg>' : ''}
                         </div>
                         <div class="checklist-content">
-                            <div class="checklist-name">${escapeHtml(goal.name)}</div>
-                            <div class="checklist-frequency">${goal.frequency}</div>
-                            ${isCompleted ? `
-                                <div class="note-display" onclick="startEditNote(${goal.id}, this)" data-goal-id="${goal.id}">
-                                    ${noteValue ? renderMarkdown(noteValue) : '<span class="note-placeholder">Add note...</span>'}
-                                </div>
-                                <div class="note-inline-editor" data-goal-id="${goal.id}" style="display: none;">
-                                    <textarea placeholder="Add note (markdown supported)..." data-original="${escapeHtml(noteValue)}">${escapeHtml(noteValue)}</textarea>
-                                    <div class="note-actions" style="display: none;">
-                                        <button class="btn btn-secondary" onclick="cancelEditNote(${goal.id})">Cancel</button>
-                                        <button class="btn" onclick="saveNote(${goal.id})">Save</button>
-                                    </div>
-                                </div>
-                            ` : `
-                                <div class="note-edit-icon" onclick="startEditNoteUnchecked(${goal.id})" title="Add note">
+                            <div class="checklist-name-row">
+                                <div class="checklist-name">${escapeHtml(goal.name)}</div>
+                                <div class="note-edit-icon" onclick="startEditNote(${goal.id})" title="Add note">
                                     <svg><use href="#icon-edit"/></svg>
                                 </div>
-                            `}
+                            </div>
+                            <div class="checklist-frequency">${goal.frequency}</div>
+                            <div class="note-display" onclick="startEditNote(${goal.id})" data-goal-id="${goal.id}" style="${noteValue ? '' : 'display: none;'}">
+                                ${noteValue ? renderMarkdown(noteValue) : ''}
+                            </div>
+                            <div class="note-inline-editor" data-goal-id="${goal.id}" style="display: none;">
+                                <textarea placeholder="Add note (markdown supported)..." data-original="${escapeHtml(noteValue)}">${escapeHtml(noteValue)}</textarea>
+                                <div class="note-actions" style="display: none;">
+                                    <button class="btn btn-secondary" onclick="cancelEditNote(${goal.id})">Cancel</button>
+                                    <button class="btn" onclick="saveNote(${goal.id})">Save</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1766,11 +1814,11 @@
             await refreshStreakCharts();
         };
 
-        window.startEditNote = function(goalId, displayEl) {
+        window.startEditNote = function(goalId) {
             const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
             const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
-            if (editor && display) {
-                display.style.display = 'none';
+            if (editor) {
+                if (display) display.style.display = 'none';
                 editor.style.display = 'block';
                 const textarea = editor.querySelector('textarea');
                 textarea.focus();
@@ -1779,27 +1827,17 @@
             }
         };
 
-        window.startEditNoteUnchecked = async function(goalId) {
-            // Create a completion first so we can add a note
-            await toggleCompletion(goalId, currentDate);
-            await refreshChecklist();
-            await refreshStreakCharts();
-            // Now start editing
-            setTimeout(() => {
-                const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
-                if (display) startEditNote(goalId, display);
-            }, 50);
-        };
-
         window.cancelEditNote = function(goalId) {
             const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
             const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
-            if (editor && display) {
+            if (editor) {
                 const textarea = editor.querySelector('textarea');
-                textarea.value = textarea.dataset.original || '';
+                const originalNote = textarea.dataset.original || '';
+                textarea.value = originalNote;
                 editor.querySelector('.note-actions').style.display = 'none';
                 editor.style.display = 'none';
-                display.style.display = 'block';
+                // Only show display if there's a note
+                if (display) display.style.display = originalNote ? 'block' : 'none';
             }
         };
 
