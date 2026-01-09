@@ -629,6 +629,11 @@
             border: 1px dashed var(--border);
         }
 
+        .streak-cell.has-note {
+            background: var(--signal-light);
+            border: 1px solid var(--signal);
+        }
+
         .streak-cell.today {
             box-shadow: 0 0 0 2px var(--signal-medium);
             transform: scale(1.1);
@@ -1649,7 +1654,7 @@
             const startDate = `${year}-01-01`;
             const endDate = `${year}-12-31`;
             const result = await DB.query(`SELECT goal_id, date, note, checked FROM completions
-                WHERE date >= '${startDate}' AND date <= '${endDate}' AND checked = 1
+                WHERE date >= '${startDate}' AND date <= '${endDate}'
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
                 goal_id: Number(row[0]),
@@ -1958,23 +1963,26 @@
                     const isFuture = date > today;
                     const isToday = dateStr === todayStr;
                     const completion = completionMap[utcDate];
-                    const isFilled = !!completion;
+                    const isChecked = completion?.checked === 1;
+                    const hasNote = !!completion?.note;
 
                     if (!isFuture) total++;
-                    if (isFilled) count++;
+                    if (isChecked) count++;
 
                     const noteAttr = completion?.note ? `data-note="${escapeHtml(completion.note)}"` : '';
                     const classes = [
                         'streak-cell',
-                        isFilled ? 'filled' : '',
-                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : ''),
+                        isChecked ? 'filled' : '',
+                        !isChecked && hasNote ? 'has-note' : '',
+                        isFuture ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : ''),
                         isToday ? 'today' : ''
                     ].filter(Boolean).join(' ');
 
+                    const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
                     cells += `<div class="${classes}" data-date="${dateStr}" ${noteAttr}
                         onclick="showStreakPopover(event, this)"
                         title="${dateStr}"
-                        aria-label="${dateStr}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
+                        aria-label="${dateStr}: ${statusLabel}"></div>`;
                 }
             } else if (goal.frequency === 'weekly') {
                 // 52 cells
@@ -1983,34 +1991,40 @@
                     const isFuture = weekDate > today;
 
                     // Check if any date in this week is completed, collect notes
-                    let isFilled = false;
+                    let isChecked = false;
+                    let hasNote = false;
                     let weekNotes = [];
                     for (let d = 0; d < 7; d++) {
                         const checkDate = new Date(year, 0, (week - 1) * 7 + d + 1);
                         const utcDate = localToUTC(getLocalDate(checkDate));
                         const completion = completionMap[utcDate];
                         if (completion) {
-                            isFilled = true;
-                            if (completion.note) weekNotes.push(completion.note);
+                            if (completion.checked === 1) isChecked = true;
+                            if (completion.note) {
+                                hasNote = true;
+                                weekNotes.push(completion.note);
+                            }
                         }
                     }
 
                     if (!isFuture) total++;
-                    if (isFilled) count++;
+                    if (isChecked) count++;
 
                     const weekStart = new Date(year, 0, (week - 1) * 7 + 1);
                     const weekLabel = `Week ${week} (${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
                     const noteAttr = weekNotes.length > 0 ? `data-note="${escapeHtml(weekNotes.join('\n\n'))}"` : '';
                     const classes = [
                         'streak-cell',
-                        isFilled ? 'filled' : '',
-                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : '')
+                        isChecked ? 'filled' : '',
+                        !isChecked && hasNote ? 'has-note' : '',
+                        isFuture ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
                     ].filter(Boolean).join(' ');
 
+                    const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
                     cells += `<div class="${classes}" data-date="${weekLabel}" ${noteAttr}
                         onclick="showStreakPopover(event, this)"
                         title="${weekLabel}"
-                        aria-label="${weekLabel}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
+                        aria-label="${weekLabel}: ${statusLabel}"></div>`;
                 }
             } else {
                 // Monthly - 12 cells
@@ -2019,7 +2033,8 @@
                     const isFuture = monthDate > today;
 
                     // Check if any date in this month is completed, collect notes
-                    let isFilled = false;
+                    let isChecked = false;
+                    let hasNote = false;
                     let monthNotes = [];
                     const daysInMonth = new Date(year, month + 1, 0).getDate();
                     for (let d = 1; d <= daysInMonth; d++) {
@@ -2027,26 +2042,31 @@
                         const utcDate = localToUTC(getLocalDate(checkDate));
                         const completion = completionMap[utcDate];
                         if (completion) {
-                            isFilled = true;
-                            if (completion.note) monthNotes.push(completion.note);
+                            if (completion.checked === 1) isChecked = true;
+                            if (completion.note) {
+                                hasNote = true;
+                                monthNotes.push(completion.note);
+                            }
                         }
                     }
 
                     if (!isFuture) total++;
-                    if (isFilled) count++;
+                    if (isChecked) count++;
 
                     const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                     const noteAttr = monthNotes.length > 0 ? `data-note="${escapeHtml(monthNotes.join('\n\n'))}"` : '';
                     const classes = [
                         'streak-cell',
-                        isFilled ? 'filled' : '',
-                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : '')
+                        isChecked ? 'filled' : '',
+                        !isChecked && hasNote ? 'has-note' : '',
+                        isFuture ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
                     ].filter(Boolean).join(' ');
 
+                    const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
                     cells += `<div class="${classes}" data-date="${monthName}" ${noteAttr}
                         onclick="showStreakPopover(event, this)"
                         title="${monthName}"
-                        aria-label="${monthName}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
+                        aria-label="${monthName}: ${statusLabel}"></div>`;
                 }
             }
 
