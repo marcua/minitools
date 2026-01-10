@@ -721,6 +721,14 @@
             font-weight: 500;
         }
 
+        .completed-badge {
+            background: #E6F4EA;
+            color: #1E7E34;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
         .todo-item.completed .todo-title {
             text-decoration: line-through;
             color: var(--ink-light);
@@ -2499,6 +2507,9 @@
                 if (type === 'recurring' && todo.recurrence_type) {
                     indicators.push(`<span class="todo-indicator recurring-badge">${this.formatRecurrence(todo)}</span>`);
                 }
+                if (todo.completed && todo.completed_at) {
+                    indicators.push(`<span class="todo-indicator completed-badge">${this.formatCompletedDate(todo.completed_at)}</span>`);
+                }
 
                 if (hasPlainNotes) {
                     indicators.push(`<span class="todo-indicator"><svg><use href="#icon-notes"/></svg></span>`);
@@ -3345,6 +3356,26 @@
                     return 'Today ' + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
                 } else if (isTomorrow) {
                     return 'Tomorrow';
+                } else {
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                }
+            },
+
+            formatCompletedDate(utcString) {
+                if (!utcString) return '';
+                const date = new Date(utcString + 'Z');
+                if (isNaN(date.getTime())) return '';
+
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const isYesterday = date.toDateString() === yesterday.toDateString();
+
+                if (isToday) {
+                    return 'Today';
+                } else if (isYesterday) {
+                    return 'Yesterday';
                 } else {
                     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
                 }
