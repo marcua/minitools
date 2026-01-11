@@ -437,92 +437,105 @@
 
         /* Landscape mode on mobile - compact layout */
         @media (max-height: 500px) and (orientation: landscape) {
+            body {
+                justify-content: center;
+                align-items: center;
+            }
+
+            .screen {
+                max-width: 90vw;
+            }
+
             .screen.active {
                 gap: var(--space-sm);
+                justify-content: center;
             }
 
             h1 {
-                font-size: 2rem;
+                font-size: 2.2rem;
             }
 
             h2 {
-                font-size: 1.3rem;
+                font-size: 1.4rem;
             }
 
             .subtitle {
-                font-size: 0.9rem;
-                padding: 4px 12px;
+                font-size: 1rem;
+                padding: 6px 14px;
             }
 
             .game-grid {
                 flex-direction: row;
                 display: flex;
-                gap: var(--space-sm);
+                gap: var(--space-md);
                 padding: var(--space-xs);
+                justify-content: center;
             }
 
             .game-card {
-                padding: var(--space-sm);
-                gap: 4px;
+                padding: var(--space-md);
+                gap: 6px;
+                min-width: 180px;
             }
 
             .game-card .emoji {
-                font-size: 2rem;
+                font-size: 2.2rem;
             }
 
             .game-card .title {
-                font-size: 1rem;
+                font-size: 1.1rem;
             }
 
             .game-card .desc {
-                font-size: 0.75rem;
+                font-size: 0.85rem;
             }
 
             .game-header {
-                padding: var(--space-xs) var(--space-sm);
+                padding: var(--space-xs) var(--space-md);
             }
 
             .round-indicator, .score, .back-btn {
-                font-size: 0.9rem;
+                font-size: 1rem;
             }
 
             .number-target {
-                width: 60px;
-                height: 60px;
-                font-size: 2rem;
+                width: 65px;
+                height: 65px;
+                font-size: 2.2rem;
             }
 
             .groups-container {
-                gap: var(--space-md);
+                gap: var(--space-lg);
                 flex-direction: row;
+                justify-content: center;
             }
 
             .emoji-group {
-                min-width: 120px;
-                min-height: 100px;
-                padding: var(--space-sm);
+                min-width: 140px;
+                min-height: 110px;
+                padding: var(--space-md);
             }
 
             .emoji-group .emoji-item {
-                font-size: 1.5rem;
+                font-size: 1.8rem;
             }
 
             .result-emoji {
-                font-size: 3rem;
+                font-size: 3.5rem;
             }
 
             .result-score {
-                font-size: 1.2rem;
-                padding: var(--space-sm) var(--space-md);
+                font-size: 1.3rem;
+                padding: var(--space-sm) var(--space-lg);
             }
 
             .result-message {
-                font-size: 1rem;
+                font-size: 1.1rem;
             }
 
             .btn {
-                font-size: 1rem;
-                padding: var(--space-sm) var(--space-md);
+                font-size: 1.1rem;
+                padding: var(--space-sm) var(--space-lg);
             }
         }
     </style>
