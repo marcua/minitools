@@ -1,4 +1,4 @@
-const CACHE_NAME = 'somany-v1';
+const CACHE_NAME = 'somany-v2';
 const ASSETS = [
     './',
     './index.html',

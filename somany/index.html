@@ -61,7 +61,8 @@
 
         html, body {
             height: 100%;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         body {
@@ -77,6 +78,14 @@
             align-items: center;
             justify-content: center;
             padding: var(--space-md);
+        }
+
+        /* Landscape mode on mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+            body {
+                justify-content: flex-start;
+                padding: var(--space-sm);
+            }
         }
 
         /* ============================================
@@ -423,6 +432,97 @@
             .emoji-group {
                 width: 80%;
                 max-width: none;
+            }
+        }
+
+        /* Landscape mode on mobile - compact layout */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .screen.active {
+                gap: var(--space-sm);
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            h2 {
+                font-size: 1.3rem;
+            }
+
+            .subtitle {
+                font-size: 0.9rem;
+                padding: 4px 12px;
+            }
+
+            .game-grid {
+                flex-direction: row;
+                display: flex;
+                gap: var(--space-sm);
+                padding: var(--space-xs);
+            }
+
+            .game-card {
+                padding: var(--space-sm);
+                gap: 4px;
+            }
+
+            .game-card .emoji {
+                font-size: 2rem;
+            }
+
+            .game-card .title {
+                font-size: 1rem;
+            }
+
+            .game-card .desc {
+                font-size: 0.75rem;
+            }
+
+            .game-header {
+                padding: var(--space-xs) var(--space-sm);
+            }
+
+            .round-indicator, .score, .back-btn {
+                font-size: 0.9rem;
+            }
+
+            .number-target {
+                width: 60px;
+                height: 60px;
+                font-size: 2rem;
+            }
+
+            .groups-container {
+                gap: var(--space-md);
+                flex-direction: row;
+            }
+
+            .emoji-group {
+                min-width: 120px;
+                min-height: 100px;
+                padding: var(--space-sm);
+            }
+
+            .emoji-group .emoji-item {
+                font-size: 1.5rem;
+            }
+
+            .result-emoji {
+                font-size: 3rem;
+            }
+
+            .result-score {
+                font-size: 1.2rem;
+                padding: var(--space-sm) var(--space-md);
+            }
+
+            .result-message {
+                font-size: 1rem;
+            }
+
+            .btn {
+                font-size: 1rem;
+                padding: var(--space-sm) var(--space-md);
             }
         }
     </style>
