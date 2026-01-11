@@ -1,0 +1,26 @@
+{
+    "name": "So Many!",
+    "short_name": "So Many",
+    "description": "Fun counting games for toddlers with friendly emoji",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#FFE66D",
+    "theme_color": "#FFE66D",
+    "icons": [
+        {
+            "src": "icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "icon.svg",
+            "sizes": "192x192",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "categories": ["games", "education", "kids"]
+}

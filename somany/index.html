@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#FFE66D">
+    <title>So Many!</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <style>
+        /* ============================================
+           CSS RESET & BASE
+           ============================================ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ============================================
+           NEOBRUTALISM DESIGN SYSTEM
+           ============================================ */
+        :root {
+            /* Primary palette - bold & playful */
+            --yellow: #FFE66D;
+            --pink: #FF6B9D;
+            --blue: #4ECDC4;
+            --purple: #A855F7;
+            --orange: #FF9F43;
+            --green: #7ED957;
+            --red: #FF6B6B;
+
+            /* Neutrals */
+            --white: #FFFFFF;
+            --black: #1A1A2E;
+            --shadow: #1A1A2E;
+
+            /* Typography */
+            --font-main: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif;
+
+            /* Borders & shadows */
+            --border-thick: 4px solid var(--black);
+            --border-chonky: 6px solid var(--black);
+            --shadow-brutal: 6px 6px 0px var(--shadow);
+            --shadow-brutal-lg: 8px 8px 0px var(--shadow);
+            --shadow-brutal-sm: 4px 4px 0px var(--shadow);
+
+            /* Spacing */
+            --space-xs: 8px;
+            --space-sm: 12px;
+            --space-md: 20px;
+            --space-lg: 32px;
+            --space-xl: 48px;
+
+            /* Radius */
+            --radius: 12px;
+            --radius-lg: 20px;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: var(--yellow);
+            background-image:
+                radial-gradient(circle at 20% 80%, var(--pink) 0%, transparent 20%),
+                radial-gradient(circle at 80% 20%, var(--blue) 0%, transparent 20%),
+                radial-gradient(circle at 50% 50%, var(--purple) 0%, transparent 30%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-md);
+        }
+
+        /* ============================================
+           SCREENS
+           ============================================ */
+        .screen {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            animation: bounceIn 0.4s ease-out;
+        }
+
+        .screen.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--space-lg);
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            60% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* ============================================
+           TYPOGRAPHY
+           ============================================ */
+        h1 {
+            font-size: clamp(2.5rem, 10vw, 4rem);
+            color: var(--black);
+            text-shadow: 4px 4px 0px var(--white);
+            letter-spacing: 2px;
+        }
+
+        h2 {
+            font-size: clamp(1.5rem, 6vw, 2.5rem);
+            color: var(--black);
+            text-shadow: 3px 3px 0px var(--white);
+        }
+
+        .subtitle {
+            font-size: clamp(1rem, 4vw, 1.5rem);
+            color: var(--black);
+            background: var(--white);
+            padding: var(--space-xs) var(--space-md);
+            border: var(--border-thick);
+            box-shadow: var(--shadow-brutal-sm);
+            display: inline-block;
+            transform: rotate(-2deg);
+        }
+
+        /* ============================================
+           GAME MENU GRID
+           ============================================ */
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-md);
+            width: 100%;
+            padding: var(--space-sm);
+        }
+
+        .game-card {
+            background: var(--white);
+            border: var(--border-chonky);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-brutal-lg);
+            padding: var(--space-lg);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .game-card:hover, .game-card:focus {
+            transform: translate(-4px, -4px);
+            box-shadow: 12px 12px 0px var(--shadow);
+        }
+
+        .game-card:active {
+            transform: translate(2px, 2px);
+            box-shadow: 4px 4px 0px var(--shadow);
+        }
+
+        .game-card.pink { background: var(--pink); }
+        .game-card.blue { background: var(--blue); }
+        .game-card.purple { background: var(--purple); color: var(--white); }
+        .game-card.orange { background: var(--orange); }
+
+        .game-card .emoji {
+            font-size: 3rem;
+        }
+
+        .game-card .title {
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .game-card .desc {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        /* ============================================
+           GAME AREA
+           ============================================ */
+        .game-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-sm) var(--space-md);
+            background: var(--white);
+            border: var(--border-thick);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-brutal-sm);
+        }
+
+        .round-indicator {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .score {
+            font-size: 1.2rem;
+            background: var(--green);
+            padding: var(--space-xs) var(--space-sm);
+            border: 3px solid var(--black);
+            border-radius: 8px;
+        }
+
+        .back-btn {
+            background: var(--red);
+            color: var(--white);
+            border: 3px solid var(--black);
+            border-radius: 8px;
+            padding: var(--space-xs) var(--space-sm);
+            font-family: var(--font-main);
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-brutal-sm);
+            transition: transform 0.1s;
+        }
+
+        .back-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px var(--shadow);
+        }
+
+        .question {
+            font-size: clamp(1.5rem, 5vw, 2rem);
+            color: var(--black);
+            background: var(--white);
+            padding: var(--space-md) var(--space-lg);
+            border: var(--border-thick);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-brutal);
+        }
+
+        .number-target {
+            font-size: clamp(2.5rem, 8vw, 4rem);
+            background: var(--purple);
+            color: var(--white);
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: var(--border-chonky);
+            border-radius: 50%;
+            box-shadow: var(--shadow-brutal);
+        }
+
+        /* ============================================
+           EMOJI GROUPS
+           ============================================ */
+        .groups-container {
+            display: flex;
+            gap: var(--space-lg);
+            width: 100%;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .emoji-group {
+            background: var(--white);
+            border: var(--border-chonky);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-brutal-lg);
+            padding: var(--space-lg);
+            min-width: 140px;
+            min-height: 140px;
+            max-width: 200px;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: center;
+            gap: 8px;
+        }
+
+        .emoji-group:hover {
+            transform: translate(-4px, -4px);
+            box-shadow: 12px 12px 0px var(--shadow);
+        }
+
+        .emoji-group:active {
+            transform: translate(2px, 2px);
+            box-shadow: 4px 4px 0px var(--shadow);
+        }
+
+        .emoji-group.correct {
+            animation: correctPulse 0.5s ease;
+            background: var(--green);
+        }
+
+        .emoji-group.wrong {
+            animation: wrongShake 0.5s ease;
+            background: var(--red);
+        }
+
+        @keyframes correctPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes wrongShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .emoji-group .emoji-item {
+            font-size: clamp(1.8rem, 6vw, 2.5rem);
+            line-height: 1;
+        }
+
+        /* ============================================
+           RESULTS SCREEN
+           ============================================ */
+        .result-emoji {
+            font-size: 5rem;
+            animation: bounce 0.6s ease infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        .result-score {
+            font-size: 2rem;
+            background: var(--white);
+            padding: var(--space-md) var(--space-xl);
+            border: var(--border-chonky);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-brutal-lg);
+        }
+
+        .result-message {
+            font-size: 1.5rem;
+            color: var(--black);
+        }
+
+        /* ============================================
+           BUTTONS
+           ============================================ */
+        .btn {
+            font-family: var(--font-main);
+            font-size: 1.3rem;
+            padding: var(--space-md) var(--space-xl);
+            border: var(--border-thick);
+            border-radius: var(--radius);
+            cursor: pointer;
+            box-shadow: var(--shadow-brutal);
+            transition: transform 0.1s, box-shadow 0.1s;
+            background: var(--white);
+            color: var(--black);
+        }
+
+        .btn:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 8px 8px 0px var(--shadow);
+        }
+
+        .btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 4px 4px 0px var(--shadow);
+        }
+
+        .btn.primary {
+            background: var(--green);
+        }
+
+        .btn.secondary {
+            background: var(--blue);
+        }
+
+        /* ============================================
+           FEEDBACK OVERLAY
+           ============================================ */
+        .feedback-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .feedback-overlay.active {
+            display: flex;
+        }
+
+        .feedback-content {
+            font-size: 6rem;
+            animation: popIn 0.3s ease-out;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media (max-width: 500px) {
+            .groups-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .emoji-group {
+                width: 80%;
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ============================================
+         MENU SCREEN
+         ============================================ -->
+    <div id="menu-screen" class="screen active">
+        <h1>So Many!</h1>
+        <p class="subtitle">Counting games for little ones</p>
+
+        <div class="game-grid">
+            <div class="game-card pink" onclick="startGame('bigger-smaller')">
+                <span class="emoji">🦆🐸</span>
+                <span class="title">More or Less?</span>
+                <span class="desc">Pick the bigger or smaller group!</span>
+            </div>
+
+            <div class="game-card blue" onclick="startGame('count-match')">
+                <span class="emoji">🔢🎯</span>
+                <span class="title">Find the Number!</span>
+                <span class="desc">Find the group with the right count!</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================
+         BIGGER/SMALLER GAME
+         ============================================ -->
+    <div id="bigger-smaller-screen" class="screen">
+        <div class="game-header">
+            <button class="back-btn" onclick="goToMenu()">← Back</button>
+            <span class="round-indicator">Round <span id="bs-round">1</span>/5</span>
+            <span class="score">⭐ <span id="bs-score">0</span></span>
+        </div>
+
+        <h2 id="bs-question">Which has MORE?</h2>
+
+        <div class="groups-container">
+            <div id="bs-group-left" class="emoji-group" onclick="selectGroup('bigger-smaller', 'left')"></div>
+            <div id="bs-group-right" class="emoji-group" onclick="selectGroup('bigger-smaller', 'right')"></div>
+        </div>
+    </div>
+
+    <!-- ============================================
+         COUNT MATCH GAME
+         ============================================ -->
+    <div id="count-match-screen" class="screen">
+        <div class="game-header">
+            <button class="back-btn" onclick="goToMenu()">← Back</button>
+            <span class="round-indicator">Round <span id="cm-round">1</span>/5</span>
+            <span class="score">⭐ <span id="cm-score">0</span></span>
+        </div>
+
+        <h2>Find the group with:</h2>
+        <div id="cm-target" class="number-target">3</div>
+
+        <div class="groups-container">
+            <div id="cm-group-left" class="emoji-group" onclick="selectGroup('count-match', 'left')"></div>
+            <div id="cm-group-right" class="emoji-group" onclick="selectGroup('count-match', 'right')"></div>
+        </div>
+    </div>
+
+    <!-- ============================================
+         RESULTS SCREEN
+         ============================================ -->
+    <div id="results-screen" class="screen">
+        <div id="result-emoji" class="result-emoji">🎉</div>
+        <h2 id="result-title">Great Job!</h2>
+        <div class="result-score">You got <span id="final-score">5</span> out of 5!</div>
+        <p id="result-message" class="result-message"></p>
+
+        <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; justify-content: center;">
+            <button class="btn primary" onclick="playAgain()">Play Again!</button>
+            <button class="btn secondary" onclick="goToMenu()">More Games</button>
+        </div>
+    </div>
+
+    <!-- ============================================
+         FEEDBACK OVERLAY
+         ============================================ -->
+    <div id="feedback-overlay" class="feedback-overlay">
+        <div id="feedback-content" class="feedback-content">✓</div>
+    </div>
+
+    <!-- ============================================
+         JAVASCRIPT
+         ============================================ -->
+    <script>
+        // ============================================
+        // GAME STATE
+        // ============================================
+        const state = {
+            currentGame: null,
+            currentRound: 1,
+            totalRounds: 5,
+            score: 0,
+            leftCount: 0,
+            rightCount: 0,
+            correctAnswer: null, // 'left' or 'right'
+            questionType: null,  // 'more' or 'less' for bigger-smaller
+            targetNumber: 0,     // for count-match
+            isProcessing: false
+        };
+
+        // Friendly emoji pairs for games
+        const emojiPairs = [
+            ['🦆', '🐸'],
+            ['🐱', '🐶'],
+            ['🐰', '🐻'],
+            ['🦋', '🐝'],
+            ['🐢', '🐌'],
+            ['🦊', '🐼'],
+            ['🐷', '🐮'],
+            ['🦁', '🐯'],
+            ['🐧', '🐥'],
+            ['🦄', '🐴']
+        ];
+
+        // ============================================
+        // NAVIGATION
+        // ============================================
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function goToMenu() {
+            showScreen('menu-screen');
+            state.currentGame = null;
+        }
+
+        // ============================================
+        // GAME INITIALIZATION
+        // ============================================
+        function startGame(gameType) {
+            state.currentGame = gameType;
+            state.currentRound = 1;
+            state.score = 0;
+            state.isProcessing = false;
+
+            if (gameType === 'bigger-smaller') {
+                showScreen('bigger-smaller-screen');
+                setupBiggerSmallerRound();
+            } else if (gameType === 'count-match') {
+                showScreen('count-match-screen');
+                setupCountMatchRound();
+            }
+        }
+
+        function playAgain() {
+            if (state.currentGame) {
+                startGame(state.currentGame);
+            } else {
+                goToMenu();
+            }
+        }
+
+        // ============================================
+        // BIGGER/SMALLER GAME LOGIC
+        // ============================================
+        function setupBiggerSmallerRound() {
+            // Update UI
+            document.getElementById('bs-round').textContent = state.currentRound;
+            document.getElementById('bs-score').textContent = state.score;
+
+            // Pick random emoji pair
+            const pair = emojiPairs[Math.floor(Math.random() * emojiPairs.length)];
+
+            // Generate random counts (1-6 for each, ensuring they're different)
+            let leftCount, rightCount;
+            do {
+                leftCount = Math.floor(Math.random() * 6) + 1;
+                rightCount = Math.floor(Math.random() * 6) + 1;
+            } while (leftCount === rightCount);
+
+            state.leftCount = leftCount;
+            state.rightCount = rightCount;
+
+            // Randomly ask for MORE or LESS
+            state.questionType = Math.random() < 0.5 ? 'more' : 'less';
+            document.getElementById('bs-question').textContent =
+                state.questionType === 'more' ? 'Which has MORE?' : 'Which has LESS?';
+
+            // Determine correct answer
+            if (state.questionType === 'more') {
+                state.correctAnswer = leftCount > rightCount ? 'left' : 'right';
+            } else {
+                state.correctAnswer = leftCount < rightCount ? 'left' : 'right';
+            }
+
+            // Render groups
+            renderGroup('bs-group-left', pair[0], leftCount);
+            renderGroup('bs-group-right', pair[1], rightCount);
+
+            // Reset group styles
+            resetGroupStyles('bs-group-left', 'bs-group-right');
+        }
+
+        // ============================================
+        // COUNT MATCH GAME LOGIC
+        // ============================================
+        function setupCountMatchRound() {
+            // Update UI
+            document.getElementById('cm-round').textContent = state.currentRound;
+            document.getElementById('cm-score').textContent = state.score;
+
+            // Pick random emoji pair
+            const pair = emojiPairs[Math.floor(Math.random() * emojiPairs.length)];
+
+            // Generate random counts (1-6 for each, ensuring they're different)
+            let leftCount, rightCount;
+            do {
+                leftCount = Math.floor(Math.random() * 6) + 1;
+                rightCount = Math.floor(Math.random() * 6) + 1;
+            } while (leftCount === rightCount);
+
+            state.leftCount = leftCount;
+            state.rightCount = rightCount;
+
+            // Randomly choose which one is the target
+            const targetIsLeft = Math.random() < 0.5;
+            state.targetNumber = targetIsLeft ? leftCount : rightCount;
+            state.correctAnswer = targetIsLeft ? 'left' : 'right';
+
+            // Update target display
+            document.getElementById('cm-target').textContent = state.targetNumber;
+
+            // Render groups
+            renderGroup('cm-group-left', pair[0], leftCount);
+            renderGroup('cm-group-right', pair[1], rightCount);
+
+            // Reset group styles
+            resetGroupStyles('cm-group-left', 'cm-group-right');
+        }
+
+        // ============================================
+        // HELPER FUNCTIONS
+        // ============================================
+        function renderGroup(elementId, emoji, count) {
+            const container = document.getElementById(elementId);
+            container.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const span = document.createElement('span');
+                span.className = 'emoji-item';
+                span.textContent = emoji;
+                container.appendChild(span);
+            }
+        }
+
+        function resetGroupStyles(...elementIds) {
+            elementIds.forEach(id => {
+                const el = document.getElementById(id);
+                el.classList.remove('correct', 'wrong');
+                el.style.pointerEvents = 'auto';
+            });
+        }
+
+        // ============================================
+        // SELECTION & FEEDBACK
+        // ============================================
+        function selectGroup(gameType, selection) {
+            if (state.isProcessing) return;
+            state.isProcessing = true;
+
+            const isCorrect = selection === state.correctAnswer;
+
+            // Get group elements
+            let leftEl, rightEl, setupNextRound;
+            if (gameType === 'bigger-smaller') {
+                leftEl = document.getElementById('bs-group-left');
+                rightEl = document.getElementById('bs-group-right');
+                setupNextRound = setupBiggerSmallerRound;
+            } else {
+                leftEl = document.getElementById('cm-group-left');
+                rightEl = document.getElementById('cm-group-right');
+                setupNextRound = setupCountMatchRound;
+            }
+
+            // Disable further clicks
+            leftEl.style.pointerEvents = 'none';
+            rightEl.style.pointerEvents = 'none';
+
+            // Show feedback on groups
+            const selectedEl = selection === 'left' ? leftEl : rightEl;
+            const correctEl = state.correctAnswer === 'left' ? leftEl : rightEl;
+
+            if (isCorrect) {
+                selectedEl.classList.add('correct');
+                state.score++;
+                showFeedback('✓', '#7ED957');
+            } else {
+                selectedEl.classList.add('wrong');
+                correctEl.classList.add('correct');
+                showFeedback('✗', '#FF6B6B');
+            }
+
+            // Update score display
+            if (gameType === 'bigger-smaller') {
+                document.getElementById('bs-score').textContent = state.score;
+            } else {
+                document.getElementById('cm-score').textContent = state.score;
+            }
+
+            // Next round or results
+            setTimeout(() => {
+                if (state.currentRound >= state.totalRounds) {
+                    showResults();
+                } else {
+                    state.currentRound++;
+                    state.isProcessing = false;
+                    setupNextRound();
+                }
+            }, 1200);
+        }
+
+        function showFeedback(symbol, color) {
+            const overlay = document.getElementById('feedback-overlay');
+            const content = document.getElementById('feedback-content');
+            content.textContent = symbol;
+            content.style.color = color;
+            overlay.classList.add('active');
+
+            setTimeout(() => {
+                overlay.classList.remove('active');
+            }, 800);
+        }
+
+        // ============================================
+        // RESULTS
+        // ============================================
+        function showResults() {
+            showScreen('results-screen');
+
+            document.getElementById('final-score').textContent = state.score;
+
+            // Set emoji and message based on score
+            const resultEmoji = document.getElementById('result-emoji');
+            const resultTitle = document.getElementById('result-title');
+            const resultMessage = document.getElementById('result-message');
+
+            if (state.score === 5) {
+                resultEmoji.textContent = '🏆';
+                resultTitle.textContent = 'PERFECT!';
+                resultMessage.textContent = 'You are a counting superstar!';
+            } else if (state.score >= 4) {
+                resultEmoji.textContent = '🎉';
+                resultTitle.textContent = 'Amazing!';
+                resultMessage.textContent = 'So close to perfect!';
+            } else if (state.score >= 3) {
+                resultEmoji.textContent = '😊';
+                resultTitle.textContent = 'Great Job!';
+                resultMessage.textContent = 'You\'re getting good at this!';
+            } else if (state.score >= 2) {
+                resultEmoji.textContent = '👍';
+                resultTitle.textContent = 'Good Try!';
+                resultMessage.textContent = 'Keep practicing!';
+            } else {
+                resultEmoji.textContent = '💪';
+                resultTitle.textContent = 'Nice Effort!';
+                resultMessage.textContent = 'Try again, you can do it!';
+            }
+
+            state.isProcessing = false;
+        }
+
+        // ============================================
+        // SERVICE WORKER REGISTRATION
+        // ============================================
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker registered'))
+                .catch(err => console.log('Service Worker registration failed:', err));
+        }
+    </script>
+</body>
+</html>
