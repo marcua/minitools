@@ -1,0 +1,242 @@
+#!/bin/bash
+#
+# paste-image-remote: Paste clipboard image to remote server for Claude Code
+#
+# Usage: paste-image-remote [options]
+#
+# This tool solves the problem of pasting images into Claude Code when
+# connected over SSH. It:
+#   1. Saves the clipboard image to a local temp file
+#   2. SCPs it to the remote server
+#   3. Copies "@/remote/path" to your clipboard for pasting into Claude Code
+#   4. Schedules automatic cleanup after a delay
+#
+# Requirements:
+#   - macOS: pngpaste (brew install pngpaste)
+#   - Linux: xclip (apt install xclip)
+#
+# Configuration (set via environment variables or config file):
+#   SSH_IMAGE_HOST     - SSH host (e.g., user@server.com)
+#   SSH_IMAGE_PATH     - Remote directory for images (default: /tmp/claude-images)
+#   SSH_IMAGE_CLEANUP  - Cleanup delay in minutes (default: 5, 0 to disable)
+#
+
+set -e
+
+# Default configuration
+DEFAULT_REMOTE_PATH="/tmp/claude-images"
+DEFAULT_CLEANUP_MINUTES=5
+
+# Load config file if it exists
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/paste-image-remote/config"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+fi
+
+# Configuration (env vars override config file)
+REMOTE_HOST="${SSH_IMAGE_HOST:-$REMOTE_HOST}"
+REMOTE_PATH="${SSH_IMAGE_PATH:-${REMOTE_PATH:-$DEFAULT_REMOTE_PATH}}"
+CLEANUP_MINUTES="${SSH_IMAGE_CLEANUP:-${CLEANUP_MINUTES:-$DEFAULT_CLEANUP_MINUTES}}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [options]
+
+Paste clipboard image to remote server for use with Claude Code over SSH.
+
+Options:
+    -h, --host HOST      SSH host (user@server.com)
+    -p, --path PATH      Remote directory (default: $DEFAULT_REMOTE_PATH)
+    -c, --cleanup MIN    Cleanup delay in minutes (default: $DEFAULT_CLEANUP_MINUTES, 0=never)
+    -n, --name NAME      Custom filename (default: timestamp-based)
+    --no-cleanup         Don't schedule cleanup
+    --help               Show this help
+
+Environment variables:
+    SSH_IMAGE_HOST       SSH host
+    SSH_IMAGE_PATH       Remote directory
+    SSH_IMAGE_CLEANUP    Cleanup delay in minutes
+
+Config file: $CONFIG_FILE
+
+Example config file:
+    REMOTE_HOST="user@myserver.com"
+    REMOTE_PATH="/home/user/claude-images"
+    CLEANUP_MINUTES=10
+
+Examples:
+    $(basename "$0") -h user@server.com
+    $(basename "$0") -h user@server.com -p /home/user/images -c 10
+    SSH_IMAGE_HOST=user@server.com $(basename "$0")
+EOF
+    exit 0
+}
+
+error() {
+    echo -e "${RED}Error:${NC} $1" >&2
+    exit 1
+}
+
+info() {
+    echo -e "${BLUE}→${NC} $1"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}!${NC} $1"
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--host)
+            REMOTE_HOST="$2"
+            shift 2
+            ;;
+        -p|--path)
+            REMOTE_PATH="$2"
+            shift 2
+            ;;
+        -c|--cleanup)
+            CLEANUP_MINUTES="$2"
+            shift 2
+            ;;
+        -n|--name)
+            CUSTOM_NAME="$2"
+            shift 2
+            ;;
+        --no-cleanup)
+            CLEANUP_MINUTES=0
+            shift
+            ;;
+        --help)
+            usage
+            ;;
+        *)
+            error "Unknown option: $1"
+            ;;
+    esac
+done
+
+# Validate required configuration
+if [[ -z "$REMOTE_HOST" ]]; then
+    error "No SSH host specified. Use -h option, SSH_IMAGE_HOST env var, or config file."
+fi
+
+# Detect OS and set clipboard tool
+detect_clipboard_tool() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        if command -v pngpaste &> /dev/null; then
+            echo "pngpaste"
+        else
+            error "pngpaste not found. Install with: brew install pngpaste"
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux
+        if command -v xclip &> /dev/null; then
+            echo "xclip"
+        else
+            error "xclip not found. Install with: apt install xclip (or equivalent)"
+        fi
+    else
+        error "Unsupported OS: $OSTYPE"
+    fi
+}
+
+# Save clipboard image to file
+save_clipboard_image() {
+    local output_file="$1"
+    local tool
+    tool=$(detect_clipboard_tool)
+
+    case $tool in
+        pngpaste)
+            if ! pngpaste "$output_file" 2>/dev/null; then
+                error "No image in clipboard or pngpaste failed"
+            fi
+            ;;
+        xclip)
+            if ! xclip -selection clipboard -t image/png -o > "$output_file" 2>/dev/null; then
+                error "No image in clipboard or xclip failed"
+            fi
+            # Check if file is empty
+            if [[ ! -s "$output_file" ]]; then
+                rm -f "$output_file"
+                error "No image in clipboard"
+            fi
+            ;;
+    esac
+}
+
+# Copy text to clipboard
+copy_to_clipboard() {
+    local text="$1"
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo -n "$text" | pbcopy
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo -n "$text" | xclip -selection clipboard
+    fi
+}
+
+# Main execution
+main() {
+    # Generate filename
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+    local filename="${CUSTOM_NAME:-clipboard-$timestamp}.png"
+    local local_temp="/tmp/$filename"
+    local remote_file="$REMOTE_PATH/$filename"
+
+    # Step 1: Save clipboard image to local temp file
+    info "Saving clipboard image..."
+    save_clipboard_image "$local_temp"
+
+    local filesize
+    filesize=$(ls -lh "$local_temp" | awk '{print $5}')
+    success "Saved image ($filesize)"
+
+    # Step 2: Create remote directory if needed and copy file
+    info "Uploading to $REMOTE_HOST:$remote_file..."
+    ssh "$REMOTE_HOST" "mkdir -p '$REMOTE_PATH'" || error "Failed to create remote directory"
+    scp -q "$local_temp" "$REMOTE_HOST:$remote_file" || error "Failed to upload file"
+    success "Uploaded"
+
+    # Step 3: Clean up local temp file
+    rm -f "$local_temp"
+
+    # Step 4: Schedule remote cleanup
+    if [[ "$CLEANUP_MINUTES" -gt 0 ]]; then
+        local cleanup_seconds=$((CLEANUP_MINUTES * 60))
+        info "Scheduling cleanup in $CLEANUP_MINUTES minutes..."
+        # Run cleanup in background on remote, detached from SSH session
+        ssh "$REMOTE_HOST" "nohup bash -c 'sleep $cleanup_seconds && rm -f \"$remote_file\"' >/dev/null 2>&1 &" || warn "Failed to schedule cleanup"
+        success "Cleanup scheduled"
+    fi
+
+    # Step 5: Copy @path to clipboard
+    local claude_ref="@$remote_file"
+    copy_to_clipboard "$claude_ref"
+
+    echo ""
+    success "Done! Copied to clipboard: ${GREEN}$claude_ref${NC}"
+    echo ""
+    echo "Paste into Claude Code with Ctrl+V (or Cmd+V)"
+
+    if [[ "$CLEANUP_MINUTES" -gt 0 ]]; then
+        echo -e "${YELLOW}Note:${NC} File will be deleted in $CLEANUP_MINUTES minutes"
+    fi
+}
+
+main
