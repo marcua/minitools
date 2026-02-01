@@ -18,83 +18,146 @@ This tool runs on your **local machine** and:
 
 ## Installation
 
-### macOS
-
 ```bash
-# Install pngpaste (required for clipboard image access)
-brew install pngpaste
-
-# Copy the script to your PATH
-cp paste-image-remote /usr/local/bin/
-# or
-cp paste-image-remote ~/bin/
+# Clone or download, then run:
+./paste-image-remote install
 ```
 
-### Linux
+That's it. The installer:
+- Detects your OS (macOS or Linux)
+- Installs the clipboard dependency (`pngpaste` on macOS, `xclip` on Linux)
+- Copies the script to your PATH (`/usr/local/bin`, `~/.local/bin`, or `~/bin`)
+- Adds the install directory to your PATH if needed
+- Creates the config directory
+
+You can re-run `paste-image-remote install` at any time -- it's idempotent.
+
+## Quick Start
 
 ```bash
-# Install xclip (required for clipboard image access)
-sudo apt install xclip  # Debian/Ubuntu
-sudo pacman -S xclip    # Arch
-sudo dnf install xclip  # Fedora
+# 1. Install
+./paste-image-remote install
 
-# Copy the script to your PATH
-cp paste-image-remote ~/.local/bin/
+# 2. Add your remote host
+paste-image-remote add-host
+
+# 3. Copy an image to your clipboard, then:
+paste-image-remote
+
+# 4. Paste into Claude Code with Ctrl+V / Cmd+V
 ```
 
-## Configuration
+## Managing Hosts
 
-### Option 1: Config File
+The tool supports multiple remote hosts. If only one host is configured, it's used automatically. If multiple are configured, you'll be prompted to pick one.
 
-Create `~/.config/paste-image-remote/config`:
+### Add a host
 
+Interactive:
 ```bash
-REMOTE_HOST="user@myserver.com"
-REMOTE_PATH="/home/user/claude-images"
-CLEANUP_MINUTES=10
+paste-image-remote add-host
 ```
 
-### Option 2: Environment Variables
-
+Or inline:
 ```bash
-export SSH_IMAGE_HOST="user@myserver.com"
-export SSH_IMAGE_PATH="/home/user/claude-images"
-export SSH_IMAGE_CLEANUP=10
+paste-image-remote add-host work user@work-server.com /home/user/images
+paste-image-remote add-host home user@home-server.com
 ```
 
-Add to your `~/.bashrc` or `~/.zshrc` for persistence.
+The third argument (remote path) is optional and defaults to `/tmp/claude-images`.
 
-### Option 3: Command Line Arguments
+### Update a host
+
+Run `add-host` again with the same name -- it will ask to update:
+```bash
+paste-image-remote add-host work user@new-server.com /new/path
+```
+
+### Remove a host
+
+Interactive (shows a numbered list):
+```bash
+paste-image-remote remove-host
+```
+
+Or by name:
+```bash
+paste-image-remote remove-host work
+```
+
+### List hosts
 
 ```bash
-paste-image-remote -h user@server.com -p /tmp/images -c 5
+paste-image-remote list-hosts
 ```
 
 ## Usage
 
-1. **Copy an image** to your clipboard (screenshot, copy from browser, etc.)
+### Single host configured
 
-2. **Run the tool** on your local machine:
-   ```bash
-   paste-image-remote
-   ```
+```bash
+# Just run it -- the sole host is selected automatically
+paste-image-remote
+```
 
-3. **Paste** into Claude Code with Ctrl+V (or Cmd+V)
-   - The tool copied `@/path/to/image.png` to your clipboard
-   - Claude Code will read the image file
+### Multiple hosts configured
 
-4. **Done!** The file auto-deletes after the cleanup delay (default: 5 minutes)
+```bash
+# You'll see a numbered menu:
+#   Select a host:
+#     1. work  (user@work-server.com)
+#     2. home  (user@home-server.com)
+#   Host number [1-2]:
+paste-image-remote
+```
 
-## Options
+### Override host via flags
+
+```bash
+paste-image-remote -h user@server.com
+paste-image-remote -h user@server.com -p /custom/path
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| *(default)* | Paste clipboard image to remote host |
+| `install` | Install dependencies and add script to PATH |
+| `add-host` | Add or update a remote host |
+| `remove-host` | Remove a remote host |
+| `list-hosts` | List configured hosts |
+
+## Paste Options
 
 | Option | Description |
 |--------|-------------|
-| `-h, --host HOST` | SSH host (user@server.com) |
+| `-h, --host HOST` | SSH host (overrides configured hosts) |
 | `-p, --path PATH` | Remote directory (default: /tmp/claude-images) |
 | `-c, --cleanup MIN` | Cleanup delay in minutes (default: 5) |
 | `-n, --name NAME` | Custom filename |
 | `--no-cleanup` | Don't schedule cleanup |
 | `--help` | Show help |
+
+## Environment Variables
+
+These override configured hosts when set:
+
+| Variable | Description |
+|----------|-------------|
+| `SSH_IMAGE_HOST` | SSH host |
+| `SSH_IMAGE_PATH` | Remote directory |
+| `SSH_IMAGE_CLEANUP` | Cleanup delay in minutes |
+
+## Configuration
+
+Host data is stored in `~/.config/paste-image-remote/hosts` (tab-separated). You can edit it directly if you prefer, but the `add-host` / `remove-host` commands are easier.
+
+Global settings live in `~/.config/paste-image-remote/settings`:
+
+```bash
+CLEANUP_MINUTES=5
+```
 
 ## Keyboard Shortcut (Recommended)
 
@@ -149,11 +212,14 @@ bindsym $mod+Shift+v exec paste-image-remote
 
 ## Troubleshooting
 
-### "pngpaste not found"
-Install it: `brew install pngpaste`
+### "pngpaste not found" / "xclip not found"
+Run `paste-image-remote install` to automatically install dependencies.
 
 ### "No image in clipboard"
 Make sure you've copied an image, not a file. Use Cmd+Shift+4 (macOS) or a screenshot tool.
+
+### "No hosts configured"
+Run `paste-image-remote add-host` to configure a remote host.
 
 ### "Failed to upload file"
 Check your SSH connection and permissions on the remote path.

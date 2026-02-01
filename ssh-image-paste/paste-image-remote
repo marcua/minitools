@@ -2,7 +2,12 @@
 #
 # paste-image-remote: Paste clipboard image to remote server for Claude Code
 #
-# Usage: paste-image-remote [options]
+# Usage:
+#   paste-image-remote                   Paste clipboard image to remote host
+#   paste-image-remote install           Install dependencies and add to PATH
+#   paste-image-remote add-host          Add or update a remote host
+#   paste-image-remote remove-host       Remove a remote host
+#   paste-image-remote list-hosts        List configured hosts
 #
 # This tool solves the problem of pasting images into Claude Code when
 # connected over SSH. It:
@@ -11,15 +16,6 @@
 #   3. Copies "@/remote/path" to your clipboard for pasting into Claude Code
 #   4. Schedules automatic cleanup after a delay
 #
-# Requirements:
-#   - macOS: pngpaste (brew install pngpaste)
-#   - Linux: xclip (apt install xclip)
-#
-# Configuration (set via environment variables or config file):
-#   SSH_IMAGE_HOST     - SSH host (e.g., user@server.com)
-#   SSH_IMAGE_PATH     - Remote directory for images (default: /tmp/claude-images)
-#   SSH_IMAGE_CLEANUP  - Cleanup delay in minutes (default: 5, 0 to disable)
-#
 
 set -e
 
@@ -27,57 +23,20 @@ set -e
 DEFAULT_REMOTE_PATH="/tmp/claude-images"
 DEFAULT_CLEANUP_MINUTES=5
 
-# Load config file if it exists
-CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/paste-image-remote/config"
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-fi
-
-# Configuration (env vars override config file)
-REMOTE_HOST="${SSH_IMAGE_HOST:-$REMOTE_HOST}"
-REMOTE_PATH="${SSH_IMAGE_PATH:-${REMOTE_PATH:-$DEFAULT_REMOTE_PATH}}"
-CLEANUP_MINUTES="${SSH_IMAGE_CLEANUP:-${CLEANUP_MINUTES:-$DEFAULT_CLEANUP_MINUTES}}"
+# Config directory and files
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/paste-image-remote"
+HOSTS_FILE="$CONFIG_DIR/hosts"
+SETTINGS_FILE="$CONFIG_DIR/settings"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-usage() {
-    cat <<EOF
-Usage: $(basename "$0") [options]
-
-Paste clipboard image to remote server for use with Claude Code over SSH.
-
-Options:
-    -h, --host HOST      SSH host (user@server.com)
-    -p, --path PATH      Remote directory (default: $DEFAULT_REMOTE_PATH)
-    -c, --cleanup MIN    Cleanup delay in minutes (default: $DEFAULT_CLEANUP_MINUTES, 0=never)
-    -n, --name NAME      Custom filename (default: timestamp-based)
-    --no-cleanup         Don't schedule cleanup
-    --help               Show this help
-
-Environment variables:
-    SSH_IMAGE_HOST       SSH host
-    SSH_IMAGE_PATH       Remote directory
-    SSH_IMAGE_CLEANUP    Cleanup delay in minutes
-
-Config file: $CONFIG_FILE
-
-Example config file:
-    REMOTE_HOST="user@myserver.com"
-    REMOTE_PATH="/home/user/claude-images"
-    CLEANUP_MINUTES=10
-
-Examples:
-    $(basename "$0") -h user@server.com
-    $(basename "$0") -h user@server.com -p /home/user/images -c 10
-    SSH_IMAGE_HOST=user@server.com $(basename "$0")
-EOF
-    exit 0
-}
+# ─── Output helpers ──────────────────────────────────────────────────────────
 
 error() {
     echo -e "${RED}Error:${NC} $1" >&2
@@ -96,65 +55,385 @@ warn() {
     echo -e "${YELLOW}!${NC} $1"
 }
 
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -h|--host)
-            REMOTE_HOST="$2"
-            shift 2
-            ;;
-        -p|--path)
-            REMOTE_PATH="$2"
-            shift 2
-            ;;
-        -c|--cleanup)
-            CLEANUP_MINUTES="$2"
-            shift 2
-            ;;
-        -n|--name)
-            CUSTOM_NAME="$2"
-            shift 2
-            ;;
-        --no-cleanup)
-            CLEANUP_MINUTES=0
-            shift
-            ;;
-        --help)
-            usage
-            ;;
-        *)
-            error "Unknown option: $1"
-            ;;
-    esac
-done
+# ─── Config helpers ──────────────────────────────────────────────────────────
 
-# Validate required configuration
-if [[ -z "$REMOTE_HOST" ]]; then
-    error "No SSH host specified. Use -h option, SSH_IMAGE_HOST env var, or config file."
-fi
+ensure_config_dir() {
+    mkdir -p "$CONFIG_DIR"
+    touch "$HOSTS_FILE"
+    if [[ ! -f "$SETTINGS_FILE" ]]; then
+        echo "CLEANUP_MINUTES=$DEFAULT_CLEANUP_MINUTES" > "$SETTINGS_FILE"
+    fi
+}
 
-# Detect OS and set clipboard tool
+# Read all hosts into parallel arrays. Call load_hosts before using.
+#   HOST_NAMES[i], HOST_ADDRS[i], HOST_PATHS[i]
+HOST_NAMES=()
+HOST_ADDRS=()
+HOST_PATHS=()
+
+load_hosts() {
+    HOST_NAMES=()
+    HOST_ADDRS=()
+    HOST_PATHS=()
+    if [[ ! -f "$HOSTS_FILE" ]]; then
+        return
+    fi
+    while IFS=$'\t' read -r name addr path; do
+        [[ -z "$name" ]] && continue
+        HOST_NAMES+=("$name")
+        HOST_ADDRS+=("$addr")
+        HOST_PATHS+=("${path:-$DEFAULT_REMOTE_PATH}")
+    done < "$HOSTS_FILE"
+}
+
+save_hosts() {
+    : > "$HOSTS_FILE"
+    for i in "${!HOST_NAMES[@]}"; do
+        printf '%s\t%s\t%s\n' "${HOST_NAMES[$i]}" "${HOST_ADDRS[$i]}" "${HOST_PATHS[$i]}" >> "$HOSTS_FILE"
+    done
+}
+
+find_host_index() {
+    local needle="$1"
+    for i in "${!HOST_NAMES[@]}"; do
+        if [[ "${HOST_NAMES[$i]}" == "$needle" ]]; then
+            echo "$i"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# ─── install subcommand ─────────────────────────────────────────────────────
+
+cmd_install() {
+    echo -e "${BOLD}paste-image-remote installer${NC}"
+    echo ""
+
+    # 1. Install clipboard dependency
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        info "Detected macOS"
+        if command -v pngpaste &> /dev/null; then
+            success "pngpaste already installed ($(which pngpaste))"
+        else
+            if command -v brew &> /dev/null; then
+                info "Installing pngpaste via Homebrew..."
+                brew install pngpaste
+                success "pngpaste installed"
+            else
+                error "Homebrew not found. Install Homebrew first: https://brew.sh\n  Then run this installer again."
+            fi
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        info "Detected Linux"
+        if command -v xclip &> /dev/null; then
+            success "xclip already installed ($(which xclip))"
+        else
+            info "Installing xclip..."
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get update -qq && sudo apt-get install -y -qq xclip
+            elif command -v pacman &> /dev/null; then
+                sudo pacman -S --noconfirm xclip
+            elif command -v dnf &> /dev/null; then
+                sudo dnf install -y xclip
+            else
+                error "Could not detect package manager. Install xclip manually."
+            fi
+            success "xclip installed"
+        fi
+    else
+        error "Unsupported OS: $OSTYPE"
+    fi
+
+    # 2. Determine install path
+    local install_dir=""
+    local script_source
+    script_source="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Prefer /usr/local/bin, fall back to ~/bin
+        if [[ -d /usr/local/bin && -w /usr/local/bin ]]; then
+            install_dir="/usr/local/bin"
+        else
+            install_dir="$HOME/bin"
+        fi
+    else
+        # Linux: prefer ~/.local/bin
+        install_dir="$HOME/.local/bin"
+    fi
+
+    mkdir -p "$install_dir"
+
+    local install_dest="$install_dir/paste-image-remote"
+
+    # 3. Copy script (skip if already running from install location)
+    if [[ "$script_source" == "$install_dest" ]]; then
+        success "Already installed at $install_dest"
+    else
+        cp "$script_source" "$install_dest"
+        chmod +x "$install_dest"
+        success "Installed to $install_dest"
+    fi
+
+    # 4. Check if install_dir is on PATH
+    if echo "$PATH" | tr ':' '\n' | grep -qx "$install_dir"; then
+        success "$install_dir is on your PATH"
+    else
+        warn "$install_dir is not on your PATH"
+        local shell_rc=""
+        if [[ -n "$ZSH_VERSION" || "$SHELL" == */zsh ]]; then
+            shell_rc="$HOME/.zshrc"
+        else
+            shell_rc="$HOME/.bashrc"
+        fi
+        local export_line="export PATH=\"$install_dir:\$PATH\""
+
+        if [[ -f "$shell_rc" ]] && grep -qF "$install_dir" "$shell_rc"; then
+            success "PATH entry already in $shell_rc (restart your shell)"
+        else
+            echo "" >> "$shell_rc"
+            echo "# Added by paste-image-remote installer" >> "$shell_rc"
+            echo "$export_line" >> "$shell_rc"
+            success "Added $install_dir to PATH in $shell_rc"
+            warn "Run 'source $shell_rc' or open a new terminal for the change to take effect"
+        fi
+    fi
+
+    # 5. Create config directory
+    ensure_config_dir
+    success "Config directory ready at $CONFIG_DIR"
+
+    # 6. Prompt to add a host if none configured
+    load_hosts
+    echo ""
+    if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
+        echo -e "No hosts configured yet. Add one now with:"
+        echo -e "  ${BOLD}paste-image-remote add-host${NC}"
+    else
+        echo -e "You have ${#HOST_NAMES[@]} host(s) configured. Run ${BOLD}paste-image-remote list-hosts${NC} to see them."
+    fi
+
+    echo ""
+    success "Installation complete!"
+}
+
+# ─── add-host subcommand ────────────────────────────────────────────────────
+
+cmd_add_host() {
+    ensure_config_dir
+    load_hosts
+
+    local name="" addr="" path=""
+
+    # Parse inline arguments: add-host NAME USER@HOST [PATH]
+    shift_args=("$@")
+    if [[ ${#shift_args[@]} -ge 2 ]]; then
+        name="${shift_args[0]}"
+        addr="${shift_args[1]}"
+        path="${shift_args[2]:-$DEFAULT_REMOTE_PATH}"
+    else
+        # Interactive prompts
+        echo -e "${BOLD}Add a remote host${NC}"
+        echo ""
+
+        read -rp "Short name for this host (e.g., work, home): " name
+        [[ -z "$name" ]] && error "Name cannot be empty"
+
+        # Check if name already exists
+        if find_host_index "$name" > /dev/null 2>&1; then
+            local idx
+            idx=$(find_host_index "$name")
+            warn "Host '$name' already exists: ${HOST_ADDRS[$idx]} → ${HOST_PATHS[$idx]}"
+            read -rp "Update it? [Y/n]: " confirm
+            if [[ "$confirm" =~ ^[Nn] ]]; then
+                echo "Cancelled."
+                exit 0
+            fi
+        fi
+
+        read -rp "SSH address (e.g., user@server.com): " addr
+        [[ -z "$addr" ]] && error "SSH address cannot be empty"
+
+        read -rp "Remote image directory [${DEFAULT_REMOTE_PATH}]: " path
+        path="${path:-$DEFAULT_REMOTE_PATH}"
+    fi
+
+    # Validate name has no tabs/newlines
+    if [[ "$name" == *$'\t'* || "$name" == *$'\n'* ]]; then
+        error "Host name cannot contain tabs or newlines"
+    fi
+
+    # Add or update
+    local idx
+    if idx=$(find_host_index "$name"); then
+        HOST_ADDRS[$idx]="$addr"
+        HOST_PATHS[$idx]="$path"
+        save_hosts
+        success "Updated host '$name': $addr → $path"
+    else
+        HOST_NAMES+=("$name")
+        HOST_ADDRS+=("$addr")
+        HOST_PATHS+=("$path")
+        save_hosts
+        success "Added host '$name': $addr → $path"
+    fi
+}
+
+# ─── remove-host subcommand ─────────────────────────────────────────────────
+
+cmd_remove_host() {
+    ensure_config_dir
+    load_hosts
+
+    if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
+        error "No hosts configured"
+    fi
+
+    local name=""
+    shift_args=("$@")
+    if [[ ${#shift_args[@]} -ge 1 ]]; then
+        name="${shift_args[0]}"
+    else
+        # Interactive: show list, ask which to remove
+        echo -e "${BOLD}Remove a remote host${NC}"
+        echo ""
+        for i in "${!HOST_NAMES[@]}"; do
+            echo "  $((i + 1)). ${HOST_NAMES[$i]}  (${HOST_ADDRS[$i]} → ${HOST_PATHS[$i]})"
+        done
+        echo ""
+        read -rp "Enter host name or number to remove: " input
+
+        # If input is a number, resolve to name
+        if [[ "$input" =~ ^[0-9]+$ ]]; then
+            local idx=$((input - 1))
+            if [[ $idx -lt 0 || $idx -ge ${#HOST_NAMES[@]} ]]; then
+                error "Invalid number: $input"
+            fi
+            name="${HOST_NAMES[$idx]}"
+        else
+            name="$input"
+        fi
+    fi
+
+    [[ -z "$name" ]] && error "No host specified"
+
+    local idx
+    if idx=$(find_host_index "$name"); then
+        local removed_addr="${HOST_ADDRS[$idx]}"
+        # Remove from arrays by rebuilding
+        local new_names=() new_addrs=() new_paths=()
+        for i in "${!HOST_NAMES[@]}"; do
+            if [[ $i -ne $idx ]]; then
+                new_names+=("${HOST_NAMES[$i]}")
+                new_addrs+=("${HOST_ADDRS[$i]}")
+                new_paths+=("${HOST_PATHS[$i]}")
+            fi
+        done
+        HOST_NAMES=("${new_names[@]}")
+        HOST_ADDRS=("${new_addrs[@]}")
+        HOST_PATHS=("${new_paths[@]}")
+        save_hosts
+        success "Removed host '$name' ($removed_addr)"
+    else
+        error "Host '$name' not found"
+    fi
+}
+
+# ─── list-hosts subcommand ──────────────────────────────────────────────────
+
+cmd_list_hosts() {
+    ensure_config_dir
+    load_hosts
+
+    if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
+        echo "No hosts configured. Add one with:"
+        echo "  paste-image-remote add-host"
+        exit 0
+    fi
+
+    echo -e "${BOLD}Configured hosts:${NC}"
+    echo ""
+    for i in "${!HOST_NAMES[@]}"; do
+        echo "  ${HOST_NAMES[$i]}  →  ${HOST_ADDRS[$i]}:${HOST_PATHS[$i]}"
+    done
+    echo ""
+    echo "${#HOST_NAMES[@]} host(s) configured."
+}
+
+# ─── Host selection (single = auto, multiple = prompt) ──────────────────────
+
+# Sets SELECTED_HOST and SELECTED_PATH
+select_host() {
+    local cli_host="$1"
+    local cli_path="$2"
+
+    # CLI flag overrides everything
+    if [[ -n "$cli_host" ]]; then
+        SELECTED_HOST="$cli_host"
+        SELECTED_PATH="${cli_path:-$DEFAULT_REMOTE_PATH}"
+        return
+    fi
+
+    # Env var override
+    if [[ -n "$SSH_IMAGE_HOST" ]]; then
+        SELECTED_HOST="$SSH_IMAGE_HOST"
+        SELECTED_PATH="${SSH_IMAGE_PATH:-$DEFAULT_REMOTE_PATH}"
+        return
+    fi
+
+    ensure_config_dir
+    load_hosts
+
+    if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
+        error "No hosts configured. Run 'paste-image-remote add-host' first, or use -h flag."
+    elif [[ ${#HOST_NAMES[@]} -eq 1 ]]; then
+        SELECTED_HOST="${HOST_ADDRS[0]}"
+        SELECTED_PATH="${HOST_PATHS[0]}"
+        info "Using host '${HOST_NAMES[0]}' (${SELECTED_HOST})"
+    else
+        echo -e "${BOLD}Select a host:${NC}"
+        echo ""
+        for i in "${!HOST_NAMES[@]}"; do
+            echo "  $((i + 1)). ${HOST_NAMES[$i]}  (${HOST_ADDRS[$i]})"
+        done
+        echo ""
+        read -rp "Host number [1-${#HOST_NAMES[@]}]: " choice
+
+        if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
+            error "Invalid selection"
+        fi
+
+        local idx=$((choice - 1))
+        if [[ $idx -lt 0 || $idx -ge ${#HOST_NAMES[@]} ]]; then
+            error "Invalid selection: $choice"
+        fi
+
+        SELECTED_HOST="${HOST_ADDRS[$idx]}"
+        SELECTED_PATH="${HOST_PATHS[$idx]}"
+        info "Using host '${HOST_NAMES[$idx]}' (${SELECTED_HOST})"
+    fi
+}
+
+# ─── Clipboard helpers ──────────────────────────────────────────────────────
+
 detect_clipboard_tool() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
         if command -v pngpaste &> /dev/null; then
             echo "pngpaste"
         else
-            error "pngpaste not found. Install with: brew install pngpaste"
+            error "pngpaste not found. Run 'paste-image-remote install' to set up."
         fi
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        # Linux
         if command -v xclip &> /dev/null; then
             echo "xclip"
         else
-            error "xclip not found. Install with: apt install xclip (or equivalent)"
+            error "xclip not found. Run 'paste-image-remote install' to set up."
         fi
     else
         error "Unsupported OS: $OSTYPE"
     fi
 }
 
-# Save clipboard image to file
 save_clipboard_image() {
     local output_file="$1"
     local tool
@@ -170,7 +449,6 @@ save_clipboard_image() {
             if ! xclip -selection clipboard -t image/png -o > "$output_file" 2>/dev/null; then
                 error "No image in clipboard or xclip failed"
             fi
-            # Check if file is empty
             if [[ ! -s "$output_file" ]]; then
                 rm -f "$output_file"
                 error "No image in clipboard"
@@ -179,7 +457,6 @@ save_clipboard_image() {
     esac
 }
 
-# Copy text to clipboard
 copy_to_clipboard() {
     local text="$1"
 
@@ -190,14 +467,110 @@ copy_to_clipboard() {
     fi
 }
 
-# Main execution
-main() {
+# ─── usage ───────────────────────────────────────────────────────────────────
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") <command> [options]
+
+Paste clipboard images to a remote server for use with Claude Code over SSH.
+
+Commands:
+    (default)          Paste clipboard image to remote host
+    install            Install dependencies and add script to PATH
+    add-host           Add or update a remote host
+    remove-host        Remove a remote host
+    list-hosts         List configured hosts
+
+Paste options:
+    -h, --host HOST    SSH host (overrides configured hosts)
+    -p, --path PATH    Remote directory (default: $DEFAULT_REMOTE_PATH)
+    -c, --cleanup MIN  Cleanup delay in minutes (default: $DEFAULT_CLEANUP_MINUTES, 0=never)
+    -n, --name NAME    Custom filename (default: timestamp-based)
+    --no-cleanup       Don't schedule cleanup
+    --help             Show this help
+
+Host management:
+    $(basename "$0") add-host [NAME USER@HOST [PATH]]
+    $(basename "$0") remove-host [NAME]
+    $(basename "$0") list-hosts
+
+Environment variables (override configured hosts):
+    SSH_IMAGE_HOST     SSH host
+    SSH_IMAGE_PATH     Remote directory
+    SSH_IMAGE_CLEANUP  Cleanup delay in minutes
+
+Examples:
+    $(basename "$0") install
+    $(basename "$0") add-host work user@server.com /home/user/images
+    $(basename "$0") add-host                       # interactive
+    $(basename "$0")                                # paste image
+    $(basename "$0") -h user@server.com             # paste with explicit host
+EOF
+    exit 0
+}
+
+# ─── paste (default command) ─────────────────────────────────────────────────
+
+cmd_paste() {
+    local cli_host="" cli_path="" custom_name=""
+    local cleanup_minutes="$DEFAULT_CLEANUP_MINUTES"
+
+    # Load settings
+    if [[ -f "$SETTINGS_FILE" ]]; then
+        source "$SETTINGS_FILE"
+        cleanup_minutes="${CLEANUP_MINUTES:-$DEFAULT_CLEANUP_MINUTES}"
+    fi
+
+    # Env var override for cleanup
+    cleanup_minutes="${SSH_IMAGE_CLEANUP:-$cleanup_minutes}"
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--host)
+                cli_host="$2"
+                shift 2
+                ;;
+            -p|--path)
+                cli_path="$2"
+                shift 2
+                ;;
+            -c|--cleanup)
+                cleanup_minutes="$2"
+                shift 2
+                ;;
+            -n|--name)
+                custom_name="$2"
+                shift 2
+                ;;
+            --no-cleanup)
+                cleanup_minutes=0
+                shift
+                ;;
+            --help)
+                usage
+                ;;
+            *)
+                error "Unknown option: $1\nRun '$(basename "$0") --help' for usage."
+                ;;
+        esac
+    done
+
+    # Select host
+    select_host "$cli_host" "$cli_path"
+
+    # If -p was passed, it overrides the host's configured path
+    if [[ -n "$cli_path" ]]; then
+        SELECTED_PATH="$cli_path"
+    fi
+
     # Generate filename
     local timestamp
     timestamp=$(date +%Y%m%d-%H%M%S)
-    local filename="${CUSTOM_NAME:-clipboard-$timestamp}.png"
+    local filename="${custom_name:-clipboard-$timestamp}.png"
     local local_temp="/tmp/$filename"
-    local remote_file="$REMOTE_PATH/$filename"
+    local remote_file="$SELECTED_PATH/$filename"
 
     # Step 1: Save clipboard image to local temp file
     info "Saving clipboard image..."
@@ -208,20 +581,19 @@ main() {
     success "Saved image ($filesize)"
 
     # Step 2: Create remote directory if needed and copy file
-    info "Uploading to $REMOTE_HOST:$remote_file..."
-    ssh "$REMOTE_HOST" "mkdir -p '$REMOTE_PATH'" || error "Failed to create remote directory"
-    scp -q "$local_temp" "$REMOTE_HOST:$remote_file" || error "Failed to upload file"
+    info "Uploading to $SELECTED_HOST:$remote_file..."
+    ssh "$SELECTED_HOST" "mkdir -p '$SELECTED_PATH'" || error "Failed to create remote directory"
+    scp -q "$local_temp" "$SELECTED_HOST:$remote_file" || error "Failed to upload file"
     success "Uploaded"
 
     # Step 3: Clean up local temp file
     rm -f "$local_temp"
 
     # Step 4: Schedule remote cleanup
-    if [[ "$CLEANUP_MINUTES" -gt 0 ]]; then
-        local cleanup_seconds=$((CLEANUP_MINUTES * 60))
-        info "Scheduling cleanup in $CLEANUP_MINUTES minutes..."
-        # Run cleanup in background on remote, detached from SSH session
-        ssh "$REMOTE_HOST" "nohup bash -c 'sleep $cleanup_seconds && rm -f \"$remote_file\"' >/dev/null 2>&1 &" || warn "Failed to schedule cleanup"
+    if [[ "$cleanup_minutes" -gt 0 ]]; then
+        local cleanup_seconds=$((cleanup_minutes * 60))
+        info "Scheduling cleanup in $cleanup_minutes minutes..."
+        ssh "$SELECTED_HOST" "nohup bash -c 'sleep $cleanup_seconds && rm -f \"$remote_file\"' >/dev/null 2>&1 &" || warn "Failed to schedule cleanup"
         success "Cleanup scheduled"
     fi
 
@@ -234,9 +606,36 @@ main() {
     echo ""
     echo "Paste into Claude Code with Ctrl+V (or Cmd+V)"
 
-    if [[ "$CLEANUP_MINUTES" -gt 0 ]]; then
-        echo -e "${YELLOW}Note:${NC} File will be deleted in $CLEANUP_MINUTES minutes"
+    if [[ "$cleanup_minutes" -gt 0 ]]; then
+        echo -e "${YELLOW}Note:${NC} File will be deleted in $cleanup_minutes minutes"
     fi
 }
 
-main
+# ─── main dispatch ───────────────────────────────────────────────────────────
+
+case "${1:-}" in
+    install)
+        cmd_install
+        ;;
+    add-host)
+        shift
+        cmd_add_host "$@"
+        ;;
+    remove-host)
+        shift
+        cmd_remove_host "$@"
+        ;;
+    list-hosts)
+        cmd_list_hosts
+        ;;
+    --help)
+        usage
+        ;;
+    ""|--*|-*)
+        # Default: paste command (pass all args through)
+        cmd_paste "$@"
+        ;;
+    *)
+        error "Unknown command: $1\nRun '$(basename "$0") --help' for usage."
+        ;;
+esac
