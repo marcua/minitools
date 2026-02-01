@@ -1,4 +1,4 @@
-# SSH Image Paste for Claude Code
+# pir — Paste Image Remote
 
 Paste clipboard images to a remote server for use with Claude Code over SSH.
 
@@ -8,7 +8,7 @@ When using Claude Code over SSH, you can't paste images directly with Ctrl+V bec
 
 ## The Solution
 
-This tool runs on your **local machine** and:
+`pir` runs on your **local machine** and:
 
 1. Grabs the image from your clipboard
 2. SCPs it to the remote server
@@ -19,8 +19,7 @@ This tool runs on your **local machine** and:
 ## Installation
 
 ```bash
-# Clone or download, then run:
-./paste-image-remote install
+./pir install
 ```
 
 That's it. The installer:
@@ -30,38 +29,38 @@ That's it. The installer:
 - Adds the install directory to your PATH if needed
 - Creates the config directory
 
-You can re-run `paste-image-remote install` at any time -- it's idempotent.
+You can re-run `pir install` at any time -- it's idempotent.
 
 ## Quick Start
 
 ```bash
 # 1. Install
-./paste-image-remote install
+./pir install
 
 # 2. Add your remote host
-paste-image-remote add-host
+pir add-host
 
 # 3. Copy an image to your clipboard, then:
-paste-image-remote
+pir
 
 # 4. Paste into Claude Code with Ctrl+V / Cmd+V
 ```
 
 ## Managing Hosts
 
-The tool supports multiple remote hosts. If only one host is configured, it's used automatically. If multiple are configured, you'll be prompted to pick one.
+`pir` supports multiple remote hosts. If only one host is configured, it's used automatically. If multiple are configured, you'll be prompted to pick one.
 
 ### Add a host
 
 Interactive:
 ```bash
-paste-image-remote add-host
+pir add-host
 ```
 
 Or inline:
 ```bash
-paste-image-remote add-host work user@work-server.com /home/user/images
-paste-image-remote add-host home user@home-server.com
+pir add-host work user@work-server.com /home/user/images
+pir add-host home user@home-server.com
 ```
 
 The third argument (remote path) is optional and defaults to `/tmp/claude-images`.
@@ -70,25 +69,25 @@ The third argument (remote path) is optional and defaults to `/tmp/claude-images
 
 Run `add-host` again with the same name -- it will ask to update:
 ```bash
-paste-image-remote add-host work user@new-server.com /new/path
+pir add-host work user@new-server.com /new/path
 ```
 
 ### Remove a host
 
 Interactive (shows a numbered list):
 ```bash
-paste-image-remote remove-host
+pir remove-host
 ```
 
 Or by name:
 ```bash
-paste-image-remote remove-host work
+pir remove-host work
 ```
 
 ### List hosts
 
 ```bash
-paste-image-remote list-hosts
+pir list-hosts
 ```
 
 ## Usage
@@ -97,7 +96,7 @@ paste-image-remote list-hosts
 
 ```bash
 # Just run it -- the sole host is selected automatically
-paste-image-remote
+pir
 ```
 
 ### Multiple hosts configured
@@ -108,14 +107,14 @@ paste-image-remote
 #     1. work  (user@work-server.com)
 #     2. home  (user@home-server.com)
 #   Host number [1-2]:
-paste-image-remote
+pir
 ```
 
 ### Override host via flags
 
 ```bash
-paste-image-remote -h user@server.com
-paste-image-remote -h user@server.com -p /custom/path
+pir -h user@server.com
+pir -h user@server.com -p /custom/path
 ```
 
 ## Commands
@@ -139,21 +138,11 @@ paste-image-remote -h user@server.com -p /custom/path
 | `--no-cleanup` | Don't schedule cleanup |
 | `--help` | Show help |
 
-## Environment Variables
-
-These override configured hosts when set:
-
-| Variable | Description |
-|----------|-------------|
-| `SSH_IMAGE_HOST` | SSH host |
-| `SSH_IMAGE_PATH` | Remote directory |
-| `SSH_IMAGE_CLEANUP` | Cleanup delay in minutes |
-
 ## Configuration
 
-Host data is stored in `~/.config/paste-image-remote/hosts` (tab-separated). You can edit it directly if you prefer, but the `add-host` / `remove-host` commands are easier.
+Host data is stored in `~/.config/pir/hosts` (tab-separated). You can edit it directly if you prefer, but the `add-host` / `remove-host` commands are easier.
 
-Global settings live in `~/.config/paste-image-remote/settings`:
+Global settings live in `~/.config/pir/settings`:
 
 ```bash
 CLEANUP_MINUTES=5
@@ -161,14 +150,14 @@ CLEANUP_MINUTES=5
 
 ## Keyboard Shortcut (Recommended)
 
-For quick access, bind the tool to a keyboard shortcut.
+For quick access, bind `pir` to a keyboard shortcut.
 
 ### macOS (with Automator)
 
 1. Open Automator
 2. Create a new "Quick Action"
 3. Add "Run Shell Script" action
-4. Enter: `/usr/local/bin/paste-image-remote`
+4. Enter: `/usr/local/bin/pir`
 5. Save as "Paste Image Remote"
 6. Go to System Preferences > Keyboard > Shortcuts > Services
 7. Assign a shortcut (e.g., Cmd+Shift+V)
@@ -178,14 +167,14 @@ For quick access, bind the tool to a keyboard shortcut.
 ```bash
 # Settings > Keyboard > Custom Shortcuts
 # Name: Paste Image Remote
-# Command: /home/user/.local/bin/paste-image-remote
+# Command: /home/user/.local/bin/pir
 # Shortcut: Super+Shift+V
 ```
 
 ### Linux (i3/sway)
 
 ```
-bindsym $mod+Shift+v exec paste-image-remote
+bindsym $mod+Shift+v exec pir
 ```
 
 ## How It Works
@@ -213,13 +202,13 @@ bindsym $mod+Shift+v exec paste-image-remote
 ## Troubleshooting
 
 ### "pngpaste not found" / "xclip not found"
-Run `paste-image-remote install` to automatically install dependencies.
+Run `pir install` to automatically install dependencies.
 
 ### "No image in clipboard"
 Make sure you've copied an image, not a file. Use Cmd+Shift+4 (macOS) or a screenshot tool.
 
 ### "No hosts configured"
-Run `paste-image-remote add-host` to configure a remote host.
+Run `pir add-host` to configure a remote host.
 
 ### "Failed to upload file"
 Check your SSH connection and permissions on the remote path.

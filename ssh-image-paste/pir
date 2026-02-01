@@ -1,13 +1,14 @@
 #!/bin/bash
 #
-# paste-image-remote: Paste clipboard image to remote server for Claude Code
+# pir: Paste Image Remote — paste clipboard images to a remote server
+#      for use with Claude Code over SSH
 #
 # Usage:
-#   paste-image-remote                   Paste clipboard image to remote host
-#   paste-image-remote install           Install dependencies and add to PATH
-#   paste-image-remote add-host          Add or update a remote host
-#   paste-image-remote remove-host       Remove a remote host
-#   paste-image-remote list-hosts        List configured hosts
+#   pir                   Paste clipboard image to remote host
+#   pir install           Install dependencies and add to PATH
+#   pir add-host          Add or update a remote host
+#   pir remove-host       Remove a remote host
+#   pir list-hosts        List configured hosts
 #
 # This tool solves the problem of pasting images into Claude Code when
 # connected over SSH. It:
@@ -24,7 +25,7 @@ DEFAULT_REMOTE_PATH="/tmp/claude-images"
 DEFAULT_CLEANUP_MINUTES=5
 
 # Config directory and files
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/paste-image-remote"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pir"
 HOSTS_FILE="$CONFIG_DIR/hosts"
 SETTINGS_FILE="$CONFIG_DIR/settings"
 
@@ -107,7 +108,7 @@ find_host_index() {
 # ─── install subcommand ─────────────────────────────────────────────────────
 
 cmd_install() {
-    echo -e "${BOLD}paste-image-remote installer${NC}"
+    echo -e "${BOLD}pir installer${NC}"
     echo ""
 
     # 1. Install clipboard dependency
@@ -164,7 +165,7 @@ cmd_install() {
 
     mkdir -p "$install_dir"
 
-    local install_dest="$install_dir/paste-image-remote"
+    local install_dest="$install_dir/pir"
 
     # 3. Copy script (skip if already running from install location)
     if [[ "$script_source" == "$install_dest" ]]; then
@@ -192,7 +193,7 @@ cmd_install() {
             success "PATH entry already in $shell_rc (restart your shell)"
         else
             echo "" >> "$shell_rc"
-            echo "# Added by paste-image-remote installer" >> "$shell_rc"
+            echo "# Added by pir installer" >> "$shell_rc"
             echo "$export_line" >> "$shell_rc"
             success "Added $install_dir to PATH in $shell_rc"
             warn "Run 'source $shell_rc' or open a new terminal for the change to take effect"
@@ -208,9 +209,9 @@ cmd_install() {
     echo ""
     if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
         echo -e "No hosts configured yet. Add one now with:"
-        echo -e "  ${BOLD}paste-image-remote add-host${NC}"
+        echo -e "  ${BOLD}pir add-host${NC}"
     else
-        echo -e "You have ${#HOST_NAMES[@]} host(s) configured. Run ${BOLD}paste-image-remote list-hosts${NC} to see them."
+        echo -e "You have ${#HOST_NAMES[@]} host(s) configured. Run ${BOLD}pir list-hosts${NC} to see them."
     fi
 
     echo ""
@@ -347,7 +348,7 @@ cmd_list_hosts() {
 
     if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
         echo "No hosts configured. Add one with:"
-        echo "  paste-image-remote add-host"
+        echo "  pir add-host"
         exit 0
     fi
 
@@ -374,18 +375,11 @@ select_host() {
         return
     fi
 
-    # Env var override
-    if [[ -n "$SSH_IMAGE_HOST" ]]; then
-        SELECTED_HOST="$SSH_IMAGE_HOST"
-        SELECTED_PATH="${SSH_IMAGE_PATH:-$DEFAULT_REMOTE_PATH}"
-        return
-    fi
-
     ensure_config_dir
     load_hosts
 
     if [[ ${#HOST_NAMES[@]} -eq 0 ]]; then
-        error "No hosts configured. Run 'paste-image-remote add-host' first, or use -h flag."
+        error "No hosts configured. Run 'pir add-host' first, or use -h flag."
     elif [[ ${#HOST_NAMES[@]} -eq 1 ]]; then
         SELECTED_HOST="${HOST_ADDRS[0]}"
         SELECTED_PATH="${HOST_PATHS[0]}"
@@ -421,13 +415,13 @@ detect_clipboard_tool() {
         if command -v pngpaste &> /dev/null; then
             echo "pngpaste"
         else
-            error "pngpaste not found. Run 'paste-image-remote install' to set up."
+            error "pngpaste not found. Run 'pir install' to set up."
         fi
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         if command -v xclip &> /dev/null; then
             echo "xclip"
         else
-            error "xclip not found. Run 'paste-image-remote install' to set up."
+            error "xclip not found. Run 'pir install' to set up."
         fi
     else
         error "Unsupported OS: $OSTYPE"
@@ -471,9 +465,10 @@ copy_to_clipboard() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") <command> [options]
+Usage: pir <command> [options]
 
-Paste clipboard images to a remote server for use with Claude Code over SSH.
+Paste Image Remote — paste clipboard images to a remote server for use
+with Claude Code over SSH.
 
 Commands:
     (default)          Paste clipboard image to remote host
@@ -491,21 +486,16 @@ Paste options:
     --help             Show this help
 
 Host management:
-    $(basename "$0") add-host [NAME USER@HOST [PATH]]
-    $(basename "$0") remove-host [NAME]
-    $(basename "$0") list-hosts
-
-Environment variables (override configured hosts):
-    SSH_IMAGE_HOST     SSH host
-    SSH_IMAGE_PATH     Remote directory
-    SSH_IMAGE_CLEANUP  Cleanup delay in minutes
+    pir add-host [NAME USER@HOST [PATH]]
+    pir remove-host [NAME]
+    pir list-hosts
 
 Examples:
-    $(basename "$0") install
-    $(basename "$0") add-host work user@server.com /home/user/images
-    $(basename "$0") add-host                       # interactive
-    $(basename "$0")                                # paste image
-    $(basename "$0") -h user@server.com             # paste with explicit host
+    pir install
+    pir add-host work user@server.com /home/user/images
+    pir add-host                       # interactive
+    pir                                # paste image
+    pir -h user@server.com             # paste with explicit host
 EOF
     exit 0
 }
@@ -521,9 +511,6 @@ cmd_paste() {
         source "$SETTINGS_FILE"
         cleanup_minutes="${CLEANUP_MINUTES:-$DEFAULT_CLEANUP_MINUTES}"
     fi
-
-    # Env var override for cleanup
-    cleanup_minutes="${SSH_IMAGE_CLEANUP:-$cleanup_minutes}"
 
     # Parse flags
     while [[ $# -gt 0 ]]; do
@@ -552,7 +539,7 @@ cmd_paste() {
                 usage
                 ;;
             *)
-                error "Unknown option: $1\nRun '$(basename "$0") --help' for usage."
+                error "Unknown option: $1\nRun 'pir --help' for usage."
                 ;;
         esac
     done
@@ -636,6 +623,6 @@ case "${1:-}" in
         cmd_paste "$@"
         ;;
     *)
-        error "Unknown command: $1\nRun '$(basename "$0") --help' for usage."
+        error "Unknown command: $1\nRun 'pir --help' for usage."
         ;;
 esac
