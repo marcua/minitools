@@ -2712,24 +2712,6 @@
                             textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
                         }
                     });
-
-                    // Debounced autosave on input
-                    textarea.addEventListener('input', () => {
-                        const notesEl = textarea.closest('.todo-notes');
-                        const todoId = parseInt(notesEl.dataset.todoId);
-                        clearTimeout(textarea._autosaveTimer);
-                        textarea._autosaveTimer = setTimeout(() => {
-                            this.autosaveNotes(textarea, todoId);
-                        }, 1000);
-                    });
-
-                    // Immediate save on blur
-                    textarea.addEventListener('blur', () => {
-                        const notesEl = textarea.closest('.todo-notes');
-                        const todoId = parseInt(notesEl.dataset.todoId);
-                        clearTimeout(textarea._autosaveTimer);
-                        this.autosaveNotes(textarea, todoId);
-                    });
                 });
             },
 
@@ -2852,7 +2834,6 @@
                     if (editForm && !editForm.classList.contains('hidden')) {
                         const textarea = editForm.querySelector('.notes-textarea');
                         const todoId = parseInt(notesEl.dataset.todoId);
-                        clearTimeout(textarea._autosaveTimer);
                         this.autosaveNotes(textarea, todoId);
                     }
                 }
@@ -2871,12 +2852,7 @@
                 const isEditing = !editForm.classList.contains('hidden');
 
                 if (isEditing) {
-                    // Cancel edit - save notes (autosaved), restore title only
-                    const textarea = editForm.querySelector('.notes-textarea');
-                    const todoId = parseInt(notesEl.dataset.todoId);
-                    clearTimeout(textarea._autosaveTimer);
-                    this.autosaveNotes(textarea, todoId);
-
+                    // Cancel edit, restore original values
                     const titleInput = editForm.querySelector('.title-edit-input');
                     titleInput.value = notesEl.dataset.title;
                     editForm.classList.add('hidden');
@@ -3059,7 +3035,6 @@
                     if (textarea) {
                         const notesEl = textarea.closest('.todo-notes');
                         const todoId = parseInt(notesEl.dataset.todoId);
-                        clearTimeout(textarea._autosaveTimer);
                         this.autosaveNotes(textarea, todoId);
                     }
                 });

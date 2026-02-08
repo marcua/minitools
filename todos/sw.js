@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todos-v20';
+const CACHE_NAME = 'todos-v21';
 const ASSETS = [
     './',
     './index.html',
