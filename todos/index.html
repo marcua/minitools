@@ -1832,7 +1832,18 @@
                     if (e.target.id === 'modal-overlay') this.closeModal();
                 });
 
-                window.addEventListener('hashchange', () => this.handleRoute());
+                window.addEventListener('hashchange', () => {
+                    this.saveAllOpenNotes();
+                    this.handleRoute();
+                });
+
+                window.addEventListener('beforeunload', (e) => {
+                    // Check for any open edit forms with notes
+                    const openEditors = document.querySelectorAll('.todo-edit-form:not(.hidden)');
+                    if (openEditors.length > 0) {
+                        this.saveAllOpenNotes();
+                    }
+                });
             },
 
             async handleSetup() {
@@ -2692,6 +2703,15 @@
                             }
                         }
                     });
+
+                    // Pre-fill empty notes with checklist prefix on focus
+                    textarea.addEventListener('focus', () => {
+                        if (!textarea.value.trim()) {
+                            textarea.value = '- [ ] ';
+                            // Place cursor at end
+                            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+                        }
+                    });
                 });
             },
 
@@ -2806,6 +2826,18 @@
 
             toggleNotes(item) {
                 const notesEl = item.querySelector('.todo-notes');
+                const isExpanded = notesEl.classList.contains('expanded');
+
+                // Save notes before collapsing if in edit mode
+                if (isExpanded) {
+                    const editForm = notesEl.querySelector('.todo-edit-form');
+                    if (editForm && !editForm.classList.contains('hidden')) {
+                        const textarea = editForm.querySelector('.notes-textarea');
+                        const todoId = parseInt(notesEl.dataset.todoId);
+                        this.autosaveNotes(textarea, todoId);
+                    }
+                }
+
                 notesEl.classList.toggle('expanded');
             },
 
@@ -2976,6 +3008,36 @@
                 } catch (e) {
                     console.error('Save notes error:', e);
                 }
+            },
+
+            async autosaveNotes(textarea, todoId) {
+                const notesEl = textarea.closest('.todo-notes');
+                const item = textarea.closest('.todo-item');
+                const notes = textarea.value;
+
+                await this.saveNotes(todoId, notes);
+
+                // Update preview in view mode
+                const viewMode = notesEl.querySelector('.todo-view-mode');
+                if (viewMode) {
+                    viewMode.innerHTML = this.renderNotesPreview(notes, todoId);
+                }
+
+                // Update checklist indicator
+                if (item) {
+                    this.updateChecklistIndicator(item, notes);
+                }
+            },
+
+            saveAllOpenNotes() {
+                document.querySelectorAll('.todo-edit-form:not(.hidden)').forEach(editForm => {
+                    const textarea = editForm.querySelector('.notes-textarea');
+                    if (textarea) {
+                        const notesEl = textarea.closest('.todo-notes');
+                        const todoId = parseInt(notesEl.dataset.todoId);
+                        this.autosaveNotes(textarea, todoId);
+                    }
+                });
             },
 
             async addTodo() {
@@ -3214,6 +3276,7 @@
             },
 
             goBack() {
+                this.saveAllOpenNotes();
                 this.currentListId = null;
                 window.location.hash = '';
                 localStorage.setItem('todos_last_hash', '');
