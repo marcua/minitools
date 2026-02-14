@@ -1316,6 +1316,10 @@
             <polyline points="3 6 5 6 21 6"></polyline>
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
         </symbol>
+        <symbol id="icon-duplicate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </symbol>
         <symbol id="icon-drag" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="9" cy="6" r="1.5"></circle>
             <circle cx="15" cy="6" r="1.5"></circle>
@@ -2556,6 +2560,9 @@
                                 <button class="todo-action-btn" data-action="notes" title="Notes">
                                     <svg><use href="#icon-notes"/></svg>
                                 </button>
+                                ${!todo.completed ? `<button class="todo-action-btn" data-action="duplicate" title="Duplicate">
+                                    <svg><use href="#icon-duplicate"/></svg>
+                                </button>` : ''}
                                 <button class="todo-action-btn delete" data-action="delete" title="Delete">
                                     <svg><use href="#icon-trash"/></svg>
                                 </button>
@@ -2647,6 +2654,7 @@
 
                         if (action === 'toggle') this.toggleTodo(id, actionEl);
                         else if (action === 'delete') this.deleteTodo(id);
+                        else if (action === 'duplicate') this.duplicateTodo(id);
                         else if (action === 'schedule') this.showScheduleModal(id, item);
                         else if (action === 'notes') this.toggleNotes(item);
                         else if (action === 'toggle-check') {
@@ -3257,6 +3265,26 @@
                     await this.loadTodos();
                 } catch (e) {
                     console.error('Delete todo error:', e);
+                }
+            },
+
+            async duplicateTodo(id) {
+                try {
+                    const rows = await DB.query(`SELECT * FROM todo_list_item WHERE id = ${id}`);
+                    if (!rows.length) return;
+                    const todo = rows[0];
+
+                    // Shift existing items down to make room at position 0
+                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${todo.list_id}`);
+
+                    await DB.query(`
+                        INSERT INTO todo_list_item (list_id, title, notes, position, completed)
+                        VALUES (${todo.list_id}, '${this.escapeSQL(todo.title)}', '${this.escapeSQL(todo.notes || '')}', 0, 0)
+                    `);
+
+                    await this.loadTodos();
+                } catch (e) {
+                    console.error('Duplicate todo error:', e);
                 }
             },
 
