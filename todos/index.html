@@ -3270,16 +3270,16 @@
 
             async duplicateTodo(id) {
                 try {
-                    const rows = await DB.query(`SELECT * FROM todo_list_item WHERE id = ${id}`);
-                    if (!rows.length) return;
-                    const todo = rows[0];
+                    const result = await DB.query(`SELECT list_id, title, notes FROM todo_list_item WHERE id = ${id}`);
+                    if (!result.rows?.length) return;
+                    const [listId, title, notes] = result.rows[0];
 
                     // Shift existing items down to make room at position 0
-                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${todo.list_id}`);
+                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${listId}`);
 
                     await DB.query(`
                         INSERT INTO todo_list_item (list_id, title, notes, position, completed)
-                        VALUES (${todo.list_id}, '${this.escapeSQL(todo.title)}', '${this.escapeSQL(todo.notes || '')}', 0, 0)
+                        VALUES (${listId}, '${this.escapeSQL(title)}', '${this.escapeSQL(notes || '')}', 0, 0)
                     `);
 
                     await this.loadTodos();
