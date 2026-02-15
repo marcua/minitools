@@ -1,0 +1,1768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#f5f5f0">
+  <title>Timely</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <style>
+    :root {
+      --ink: #2c2c2c;
+      --ink-light: #666;
+      --ink-faint: #ccc;
+      --paper: #f5f5f0;
+      --paper-dark: #e8e8e3;
+      --accent: #4a7c59;
+      --accent-light: #6a9c79;
+      --danger: #c44;
+      --warning: #e67700;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Typography */
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 500;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      transition: background 0.2s, transform 0.1s;
+      min-height: 48px;
+      touch-action: manipulation;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: var(--paper-dark);
+      color: var(--ink);
+      border: 1px solid var(--ink-faint);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+    }
+
+    .btn-small {
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      min-height: 40px;
+    }
+
+    .btn-icon {
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      border-radius: 50%;
+    }
+
+    .btn-large {
+      padding: 1rem 2rem;
+      font-size: 1.25rem;
+      min-height: 56px;
+    }
+
+    /* Form elements */
+    input, textarea {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 1px solid var(--ink-faint);
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+      min-height: 48px;
+    }
+
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+      color: var(--ink-light);
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    /* Screens */
+    .screen {
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .screen-centered {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .screen-content {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      border-bottom: 1px solid var(--ink-faint);
+      background: var(--paper);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+    }
+
+    /* Cards */
+    .card {
+      background: white;
+      border: 1px solid var(--ink-faint);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .card:active {
+      border-color: var(--accent);
+    }
+
+    .card-title {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .card-subtitle {
+      color: var(--ink-light);
+      font-size: 0.875rem;
+    }
+
+    /* Step items */
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: white;
+      border: 1px solid var(--ink-faint);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+    }
+
+    .step-item.step-off {
+      opacity: 0.5;
+      background: var(--paper-dark);
+    }
+
+    .step-checkbox {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    .step-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .step-name {
+      font-weight: 500;
+    }
+
+    .step-duration {
+      font-size: 0.875rem;
+      color: var(--ink-light);
+    }
+
+    .step-drag-handle {
+      cursor: grab;
+      padding: 0.5rem;
+      color: var(--ink-light);
+      font-size: 1.25rem;
+      touch-action: none;
+    }
+
+    .step-item.dragging {
+      opacity: 0.5;
+      border-color: var(--accent);
+    }
+
+    .step-item.drag-over {
+      border-color: var(--accent);
+      border-style: dashed;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--ink-light);
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Timer screen */
+    .timer-screen {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: var(--accent);
+      color: white;
+    }
+
+    .timer-header {
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .timer-step-label {
+      font-size: 0.875rem;
+      opacity: 0.8;
+    }
+
+    .timer-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .timer-step-name {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .timer-display {
+      font-size: 5rem;
+      font-weight: 300;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 1rem;
+    }
+
+    .timer-total-remaining {
+      font-size: 1rem;
+      opacity: 0.8;
+      margin-bottom: 2rem;
+    }
+
+    .timer-controls {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .timer-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      border: 2px solid white;
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timer-btn:active {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .timer-progress {
+      width: 100%;
+      padding: 0 1rem 1rem;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: white;
+      transition: width 0.25s linear;
+    }
+
+    /* Alarm screen */
+    .alarm-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: var(--warning);
+      color: white;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .alarm-icon {
+      font-size: 5rem;
+      margin-bottom: 1rem;
+      animation: shake 0.5s infinite;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: rotate(-5deg); }
+      50% { transform: rotate(5deg); }
+    }
+
+    .alarm-message {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .alarm-next-step {
+      font-size: 1.25rem;
+      opacity: 0.9;
+      margin-bottom: 2rem;
+    }
+
+    .alarm-btn {
+      background: white;
+      color: var(--warning);
+      font-size: 1.25rem;
+      padding: 1rem 3rem;
+    }
+
+    /* Complete screen */
+    .complete-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: var(--accent);
+      color: white;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .complete-icon {
+      font-size: 5rem;
+      margin-bottom: 1rem;
+    }
+
+    .complete-message {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .complete-time {
+      font-size: 1.25rem;
+      opacity: 0.9;
+      margin-bottom: 2rem;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 1rem;
+    }
+
+    .modal {
+      background: var(--paper);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 400px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--ink-faint);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--ink-light);
+      padding: 0.25rem;
+    }
+
+    .modal-body {
+      padding: 1rem;
+    }
+
+    .modal-footer {
+      padding: 1rem;
+      border-top: 1px solid var(--ink-faint);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
+    /* Routine list */
+    .routine-list {
+      padding: 1rem;
+    }
+
+    .add-routine-btn {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    /* Routine detail */
+    .routine-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      border-bottom: 1px solid var(--ink-faint);
+      background: var(--paper);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .routine-title {
+      flex: 1;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .routine-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .routine-summary {
+      padding: 1rem;
+      background: white;
+      border-bottom: 1px solid var(--ink-faint);
+    }
+
+    .steps-container {
+      padding: 1rem;
+    }
+
+    .steps-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .play-btn {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      font-size: 2rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .edit-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    /* Settings */
+    .settings-btn {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      color: var(--ink);
+    }
+
+    /* Toggle switch */
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .toggle {
+      position: relative;
+      width: 52px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--ink-faint);
+      border-radius: 28px;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: var(--accent);
+    }
+
+    .toggle input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+
+    /* Utility */
+    .text-muted {
+      color: var(--ink-light);
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .mb-1 { margin-bottom: 0.5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: 1.5rem; }
+    .mt-2 { margin-top: 1rem; }
+
+    /* Error styling */
+    .error-message {
+      background: #fee;
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      padding: 0.75rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+
+    /* Logo */
+    .logo {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .app-name {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Setup screen -->
+    <div id="setup-screen" class="screen screen-centered hidden">
+      <div class="screen-content">
+        <div class="logo">⏱️</div>
+        <div class="app-name">Timely</div>
+        <form id="setup-form">
+          <div class="form-group">
+            <label for="db-url">Database URL</label>
+            <input type="url" id="db-url" placeholder="https://host/entity/database" required>
+          </div>
+          <div class="form-group">
+            <label for="db-token">API token</label>
+            <input type="password" id="db-token" placeholder="Enter your API token" required>
+          </div>
+          <button type="submit" class="btn" style="width: 100%">Connect</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Error screen -->
+    <div id="error-screen" class="screen screen-centered hidden">
+      <div class="screen-content">
+        <div class="logo">⚠️</div>
+        <h2>Connection error</h2>
+        <p id="error-message" class="text-muted mb-3">Unable to connect to database</p>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <button id="retry-btn" class="btn">Try again</button>
+          <button id="change-db-btn" class="btn btn-secondary">Use different database</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Routines list screen -->
+    <div id="routines-screen" class="screen hidden">
+      <div class="header">
+        <span class="header-title">Timely</span>
+        <button id="settings-btn" class="settings-btn" title="Settings">⚙️</button>
+      </div>
+      <div class="routine-list" id="routine-list">
+        <!-- Routines rendered here -->
+      </div>
+      <button id="add-routine-btn" class="btn add-routine-btn">+</button>
+    </div>
+
+    <!-- Routine detail screen -->
+    <div id="routine-screen" class="screen hidden">
+      <div class="routine-header">
+        <button id="routine-back-btn" class="back-btn">←</button>
+        <span class="routine-title" id="routine-title">Routine</span>
+        <div class="routine-actions">
+          <button id="edit-routine-btn" class="btn btn-small btn-secondary">Edit</button>
+        </div>
+      </div>
+      <div class="routine-summary" id="routine-summary">
+        <!-- Summary rendered here -->
+      </div>
+      <div class="steps-container">
+        <div class="steps-header">
+          <h3>Steps</h3>
+          <span class="text-muted" id="steps-count">0 steps</span>
+        </div>
+        <div id="steps-list">
+          <!-- Steps rendered here -->
+        </div>
+      </div>
+      <button id="play-btn" class="btn play-btn">▶</button>
+    </div>
+
+    <!-- Edit routine screen -->
+    <div id="edit-routine-screen" class="screen hidden">
+      <div class="routine-header">
+        <button id="edit-back-btn" class="back-btn">←</button>
+        <span class="routine-title">Edit routine</span>
+        <div class="routine-actions">
+          <button id="delete-routine-btn" class="btn btn-small btn-danger">Delete</button>
+        </div>
+      </div>
+      <div class="steps-container">
+        <div class="form-group">
+          <label for="edit-routine-name">Routine name</label>
+          <input type="text" id="edit-routine-name" placeholder="Enter routine name">
+        </div>
+        <div class="steps-header">
+          <h3>Steps</h3>
+          <button id="add-step-btn" class="btn btn-small btn-secondary">+ Add step</button>
+        </div>
+        <div id="edit-steps-list">
+          <!-- Editable steps rendered here -->
+        </div>
+        <div class="edit-actions">
+          <button id="save-routine-btn" class="btn" style="flex:1">Save changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timer screen -->
+    <div id="timer-screen" class="timer-screen hidden">
+      <div class="timer-header">
+        <span class="timer-step-label" id="timer-step-label">Step 1 of 5</span>
+        <button id="timer-cancel-btn" class="timer-btn" style="width:40px;height:40px;font-size:1rem;">✕</button>
+      </div>
+      <div class="timer-content">
+        <div class="timer-step-name" id="timer-step-name">Step name</div>
+        <div class="timer-display" id="timer-display">00:00</div>
+        <div class="timer-total-remaining" id="timer-total-remaining">Total: 15:00 remaining</div>
+        <div class="timer-controls">
+          <button id="timer-pause-btn" class="timer-btn">⏸</button>
+          <button id="timer-skip-btn" class="timer-btn">⏭</button>
+        </div>
+      </div>
+      <div class="timer-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="timer-progress-fill" style="width: 100%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alarm screen -->
+    <div id="alarm-screen" class="alarm-screen hidden">
+      <div class="alarm-icon">🔔</div>
+      <div class="alarm-message" id="alarm-message">Time's up!</div>
+      <div class="alarm-next-step" id="alarm-next-step">Next: Step 2</div>
+      <button id="alarm-continue-btn" class="btn alarm-btn">Continue</button>
+    </div>
+
+    <!-- Complete screen -->
+    <div id="complete-screen" class="complete-screen hidden">
+      <div class="complete-icon">✓</div>
+      <div class="complete-message">Routine complete!</div>
+      <div class="complete-time" id="complete-time">Total time: 15:00</div>
+      <button id="complete-done-btn" class="btn" style="background:white;color:var(--accent);">Done</button>
+    </div>
+
+    <!-- Modal overlay -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal" id="modal">
+        <div class="modal-header">
+          <span class="modal-title" id="modal-title">Modal</span>
+          <button class="modal-close" id="modal-close">×</button>
+        </div>
+        <div class="modal-body" id="modal-body">
+          <!-- Modal content -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Alarm sound (short beep, base64 encoded)
+    const ALARM_SOUND_BASE64 = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGQ+KEN2q9HNhEwxMFCIu9fAcj8mKk17rczHgEYrKUl4ps7EfEEoJUZxo8vEfEAoJEVuns3DeT8oI0VuoMvDfD8nI0ZuoMvDfD8nJEZuoMvCfEAnI0ZuoMrDfEAnI0VuoMrDfEAnI0ZvoMrDfEAnI0VuoMrDfEAnI0ZvoMrDfUAnI0ZuoMrDfEAnI0ZvoMrDfEAnI0ZuoMrDfUAnJEZuoMrDfEAnI0ZuoMrDfEAnI0ZvoMrDfEAnI0ZuoMrDfUAnI0ZuoMrDfEAnI0ZvoMrDfEAnI0ZuoMrDfEAnI0ZvoMrDfEEnI0ZuoMrDfEAnI0ZuoMrDfEEnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfUAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfUAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfEAnI0ZuoMrDfA==';
+
+    // Audio element for alarm
+    const alarmSound = new Audio(ALARM_SOUND_BASE64);
+    alarmSound.volume = 1.0;
+
+    // Wake lock reference
+    let wakeLock = null;
+
+    // Alarm interval
+    let alarmInterval = null;
+
+    // Warm up audio on first interaction (required for mobile browsers)
+    function warmUpAudio() {
+      alarmSound.play().then(() => {
+        alarmSound.pause();
+        alarmSound.currentTime = 0;
+      }).catch(() => {});
+    }
+
+    document.addEventListener('touchstart', warmUpAudio, { once: true });
+    document.addEventListener('click', warmUpAudio, { once: true });
+
+    // Wake lock functions
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+          });
+        } catch (err) {
+          console.log('Wake lock request failed:', err.message);
+        }
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (wakeLock !== null) {
+        try {
+          await wakeLock.release();
+          wakeLock = null;
+        } catch (err) {
+          console.log('Wake lock release failed:', err.message);
+        }
+      }
+    }
+
+    // Re-acquire wake lock when page becomes visible
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && App.timerRunning) {
+        await requestWakeLock();
+      }
+    });
+
+    // Alarm functions
+    function startAlarm() {
+      playAlarmSound();
+      alarmInterval = setInterval(playAlarmSound, 1500);
+    }
+
+    function stopAlarm() {
+      if (alarmInterval) {
+        clearInterval(alarmInterval);
+        alarmInterval = null;
+      }
+    }
+
+    function playAlarmSound() {
+      alarmSound.currentTime = 0;
+      alarmSound.play().catch(e => console.log('Alarm sound failed:', e));
+    }
+
+    // SQL/HTML escaping
+    function escapeSQL(str) {
+      if (!str) return '';
+      return str.replace(/'/g, "''");
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Format duration
+    function formatDuration(minutes) {
+      if (minutes < 1) {
+        return `${Math.round(minutes * 60)}s`;
+      } else if (minutes === Math.floor(minutes)) {
+        return `${minutes} min`;
+      } else {
+        return `${minutes} min`;
+      }
+    }
+
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Database layer
+    const DB = {
+      config: null,
+
+      init() {
+        const saved = localStorage.getItem('timely_config');
+        if (saved) {
+          this.config = JSON.parse(saved);
+          return true;
+        }
+        return false;
+      },
+
+      saveConfig(url, token) {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/').filter(p => p);
+
+        // Handle both /entity/database and /v1/entity/database formats
+        let entity, database;
+        if (pathParts[0] === 'v1') {
+          entity = pathParts[1];
+          database = pathParts[2];
+        } else {
+          entity = pathParts[0];
+          database = pathParts[1];
+        }
+
+        const baseUrl = urlObj.origin;
+        this.config = { baseUrl, entity, database, token };
+        localStorage.setItem('timely_config', JSON.stringify(this.config));
+      },
+
+      clearConfig() {
+        this.config = null;
+        localStorage.removeItem('timely_config');
+      },
+
+      async query(sql) {
+        const { baseUrl, entity, database, token } = this.config;
+        const url = `${baseUrl}/v1/${entity}/${database}/query`;
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'text/plain'
+          },
+          body: sql
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Database error: ${text}`);
+        }
+
+        return response.json();
+      },
+
+      async runMigrations() {
+        // Create migrations table
+        await this.query(`CREATE TABLE IF NOT EXISTS _migrations (
+          version INTEGER PRIMARY KEY,
+          applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        const result = await this.query('SELECT MAX(version) as version FROM _migrations');
+        let currentVersion = result.rows?.[0]?.[0] || 0;
+
+        const migrations = [
+          // Migration 0: Create routines table
+          `CREATE TABLE IF NOT EXISTS routines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            position INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )`,
+          // Migration 1: Create routine_steps table
+          `CREATE TABLE IF NOT EXISTS routine_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            routine_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            duration_minutes REAL NOT NULL DEFAULT 1,
+            default_on INTEGER DEFAULT 1,
+            position INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (routine_id) REFERENCES routines(id) ON DELETE CASCADE
+          )`
+        ];
+
+        // Auto-repair if version is corrupted
+        if (currentVersion > migrations.length) {
+          await this.query('DELETE FROM _migrations');
+          currentVersion = 0;
+        }
+
+        // Run pending migrations
+        for (let i = currentVersion; i < migrations.length; i++) {
+          try {
+            await this.query(migrations[i]);
+          } catch (e) {
+            // Ignore "duplicate column" or "already exists" errors
+            if (!e.message.includes('duplicate') && !e.message.includes('already exists')) {
+              console.error('Migration error:', e);
+            }
+          }
+          await this.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
+        }
+      }
+    };
+
+    // App state and logic
+    const App = {
+      currentRoutineId: null,
+      currentRoutine: null,
+      currentSteps: [],
+      runSteps: [], // Steps for current run (with toggled states)
+      editSteps: [], // Steps being edited
+      timerRunning: false,
+      timerPaused: false,
+      timerInterval: null,
+      currentStepIndex: 0,
+      stepEndTime: null,
+      stepTotalSeconds: 0,
+      totalRemainingSeconds: 0,
+      routineStartTime: null,
+
+      async init() {
+        this.bindEvents();
+
+        if (DB.init()) {
+          try {
+            await DB.runMigrations();
+            this.showScreen('routines');
+            await this.loadRoutines();
+            this.restoreLastView();
+          } catch (e) {
+            this.showError(e.message);
+          }
+        } else {
+          this.showScreen('setup');
+        }
+      },
+
+      bindEvents() {
+        // Setup form
+        document.getElementById('setup-form').addEventListener('submit', (e) => {
+          e.preventDefault();
+          this.handleSetup();
+        });
+
+        // Error screen
+        document.getElementById('retry-btn').addEventListener('click', () => this.handleRetry());
+        document.getElementById('change-db-btn').addEventListener('click', () => this.showScreen('setup'));
+
+        // Routines screen
+        document.getElementById('add-routine-btn').addEventListener('click', () => this.showAddRoutineModal());
+        document.getElementById('settings-btn').addEventListener('click', () => this.showSettingsModal());
+
+        // Routine detail screen
+        document.getElementById('routine-back-btn').addEventListener('click', () => this.goToRoutines());
+        document.getElementById('edit-routine-btn').addEventListener('click', () => this.showEditScreen());
+        document.getElementById('play-btn').addEventListener('click', () => this.startRoutine());
+
+        // Edit routine screen
+        document.getElementById('edit-back-btn').addEventListener('click', () => this.exitEditScreen());
+        document.getElementById('add-step-btn').addEventListener('click', () => this.addEditStep());
+        document.getElementById('save-routine-btn').addEventListener('click', () => this.saveRoutine());
+        document.getElementById('delete-routine-btn').addEventListener('click', () => this.confirmDeleteRoutine());
+
+        // Timer screen
+        document.getElementById('timer-cancel-btn').addEventListener('click', () => this.cancelTimer());
+        document.getElementById('timer-pause-btn').addEventListener('click', () => this.togglePause());
+        document.getElementById('timer-skip-btn').addEventListener('click', () => this.skipStep());
+
+        // Alarm screen
+        document.getElementById('alarm-continue-btn').addEventListener('click', () => this.continueFromAlarm());
+
+        // Complete screen
+        document.getElementById('complete-done-btn').addEventListener('click', () => this.finishRoutine());
+
+        // Modal
+        document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
+        document.getElementById('modal-overlay').addEventListener('click', (e) => {
+          if (e.target === document.getElementById('modal-overlay')) {
+            this.closeModal();
+          }
+        });
+      },
+
+      showScreen(screen) {
+        document.querySelectorAll('#app > div:not(#modal-overlay)').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`${screen}-screen`).classList.remove('hidden');
+
+        // Save last view (but not setup, error, timer, alarm, complete screens)
+        if (['routines', 'routine'].includes(screen)) {
+          localStorage.setItem('timely_last_screen', screen);
+          if (screen === 'routine' && this.currentRoutineId) {
+            localStorage.setItem('timely_last_routine', this.currentRoutineId);
+          }
+        }
+      },
+
+      restoreLastView() {
+        const lastScreen = localStorage.getItem('timely_last_screen');
+        const lastRoutine = localStorage.getItem('timely_last_routine');
+
+        if (lastScreen === 'routine' && lastRoutine) {
+          this.openRoutine(parseInt(lastRoutine));
+        }
+      },
+
+      showError(message) {
+        document.getElementById('error-message').textContent = message;
+        this.showScreen('error');
+      },
+
+      async handleSetup() {
+        const url = document.getElementById('db-url').value;
+        const token = document.getElementById('db-token').value;
+
+        try {
+          DB.saveConfig(url, token);
+          await DB.runMigrations();
+          this.showScreen('routines');
+          await this.loadRoutines();
+        } catch (e) {
+          this.showError(e.message);
+        }
+      },
+
+      async handleRetry() {
+        try {
+          await DB.runMigrations();
+          this.showScreen('routines');
+          await this.loadRoutines();
+        } catch (e) {
+          this.showError(e.message);
+        }
+      },
+
+      // Routines list
+      async loadRoutines() {
+        try {
+          const result = await DB.query('SELECT id, name, position FROM routines ORDER BY position ASC, id ASC');
+          this.renderRoutines(result.rows || []);
+        } catch (e) {
+          console.error('Failed to load routines:', e);
+        }
+      },
+
+      renderRoutines(routines) {
+        const container = document.getElementById('routine-list');
+
+        if (routines.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">⏱️</div>
+              <h3>No routines yet</h3>
+              <p>Tap + to create your first routine</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = routines.map(([id, name]) => `
+          <div class="card" data-id="${id}">
+            <div class="card-title">${escapeHtml(name)}</div>
+          </div>
+        `).join('');
+
+        // Bind click events
+        container.querySelectorAll('.card').forEach(card => {
+          card.addEventListener('click', () => {
+            this.openRoutine(parseInt(card.dataset.id));
+          });
+        });
+      },
+
+      showAddRoutineModal() {
+        document.getElementById('modal-title').textContent = 'New routine';
+        document.getElementById('modal-body').innerHTML = `
+          <div class="form-group">
+            <label for="new-routine-name">Routine name</label>
+            <input type="text" id="new-routine-name" placeholder="e.g., Morning routine" autofocus>
+          </div>
+          <div class="modal-footer" style="padding: 0; border: none; margin-top: 1rem;">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+            <button class="btn" onclick="App.createRoutine()">Create</button>
+          </div>
+        `;
+        document.getElementById('modal-overlay').classList.remove('hidden');
+        setTimeout(() => document.getElementById('new-routine-name').focus(), 100);
+      },
+
+      async createRoutine() {
+        const name = document.getElementById('new-routine-name').value.trim();
+        if (!name) return;
+
+        try {
+          // Get max position
+          const posResult = await DB.query('SELECT MAX(position) FROM routines');
+          const maxPos = posResult.rows?.[0]?.[0] || 0;
+
+          await DB.query(`INSERT INTO routines (name, position) VALUES ('${escapeSQL(name)}', ${maxPos + 1})`);
+          this.closeModal();
+          await this.loadRoutines();
+        } catch (e) {
+          console.error('Failed to create routine:', e);
+        }
+      },
+
+      showSettingsModal() {
+        document.getElementById('modal-title').textContent = 'Settings';
+        document.getElementById('modal-body').innerHTML = `
+          <p class="text-muted mb-2">Connected to: ${escapeHtml(DB.config.entity)}/${escapeHtml(DB.config.database)}</p>
+          <div class="modal-footer" style="padding: 0; border: none; margin-top: 1rem;">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+            <button class="btn btn-danger" onclick="App.disconnect()">Disconnect</button>
+          </div>
+        `;
+        document.getElementById('modal-overlay').classList.remove('hidden');
+      },
+
+      disconnect() {
+        DB.clearConfig();
+        localStorage.removeItem('timely_last_screen');
+        localStorage.removeItem('timely_last_routine');
+        this.closeModal();
+        this.showScreen('setup');
+      },
+
+      closeModal() {
+        document.getElementById('modal-overlay').classList.add('hidden');
+      },
+
+      // Routine detail
+      async openRoutine(id) {
+        this.currentRoutineId = id;
+
+        try {
+          // Load routine
+          const routineResult = await DB.query(`SELECT id, name FROM routines WHERE id = ${id}`);
+          if (!routineResult.rows || routineResult.rows.length === 0) {
+            this.goToRoutines();
+            return;
+          }
+
+          this.currentRoutine = {
+            id: routineResult.rows[0][0],
+            name: routineResult.rows[0][1]
+          };
+
+          // Load steps
+          const stepsResult = await DB.query(`
+            SELECT id, name, duration_minutes, default_on, position
+            FROM routine_steps
+            WHERE routine_id = ${id}
+            ORDER BY position ASC, id ASC
+          `);
+
+          this.currentSteps = (stepsResult.rows || []).map(([id, name, duration, defaultOn, position]) => ({
+            id, name, duration_minutes: duration, default_on: defaultOn, position
+          }));
+
+          // Initialize run steps with default states
+          this.runSteps = this.currentSteps.map(step => ({
+            ...step,
+            enabled: step.default_on === 1
+          }));
+
+          this.renderRoutineDetail();
+          this.showScreen('routine');
+        } catch (e) {
+          console.error('Failed to load routine:', e);
+        }
+      },
+
+      renderRoutineDetail() {
+        document.getElementById('routine-title').textContent = this.currentRoutine.name;
+
+        // Calculate totals
+        const enabledSteps = this.runSteps.filter(s => s.enabled);
+        const totalMinutes = enabledSteps.reduce((sum, s) => sum + s.duration_minutes, 0);
+
+        document.getElementById('routine-summary').innerHTML = `
+          <strong>${enabledSteps.length}</strong> of ${this.runSteps.length} steps selected &middot;
+          <strong>${formatDuration(totalMinutes)}</strong> total
+        `;
+
+        document.getElementById('steps-count').textContent = `${this.runSteps.length} steps`;
+
+        // Render steps
+        const container = document.getElementById('steps-list');
+
+        if (this.runSteps.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <p>No steps yet. Tap Edit to add steps.</p>
+            </div>
+          `;
+          document.getElementById('play-btn').style.display = 'none';
+          return;
+        }
+
+        container.innerHTML = this.runSteps.map((step, index) => `
+          <div class="step-item ${step.enabled ? '' : 'step-off'}" data-index="${index}">
+            <input type="checkbox" class="step-checkbox" ${step.enabled ? 'checked' : ''}>
+            <div class="step-info">
+              <div class="step-name">${escapeHtml(step.name)}</div>
+              <div class="step-duration">${formatDuration(step.duration_minutes)}</div>
+            </div>
+          </div>
+        `).join('');
+
+        // Bind checkbox events
+        container.querySelectorAll('.step-checkbox').forEach((checkbox, index) => {
+          checkbox.addEventListener('change', () => {
+            this.runSteps[index].enabled = checkbox.checked;
+            this.renderRoutineDetail();
+          });
+        });
+
+        // Show/hide play button
+        const hasEnabledSteps = this.runSteps.some(s => s.enabled);
+        document.getElementById('play-btn').style.display = hasEnabledSteps ? 'flex' : 'none';
+      },
+
+      goToRoutines() {
+        this.currentRoutineId = null;
+        this.currentRoutine = null;
+        this.currentSteps = [];
+        this.runSteps = [];
+        this.showScreen('routines');
+        this.loadRoutines();
+      },
+
+      // Edit screen
+      showEditScreen() {
+        this.editSteps = this.currentSteps.map(step => ({ ...step }));
+        document.getElementById('edit-routine-name').value = this.currentRoutine.name;
+        this.renderEditSteps();
+        this.showScreen('edit-routine');
+      },
+
+      renderEditSteps() {
+        const container = document.getElementById('edit-steps-list');
+
+        if (this.editSteps.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <p>No steps yet. Tap "Add step" to get started.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = this.editSteps.map((step, index) => `
+          <div class="step-item" data-index="${index}">
+            <span class="step-drag-handle">⋮⋮</span>
+            <div class="step-info" style="flex:1;">
+              <input type="text" class="step-name-input" value="${escapeHtml(step.name)}" placeholder="Step name" style="margin-bottom:0.5rem;">
+              <div style="display:flex;gap:0.5rem;align-items:center;">
+                <input type="number" class="step-duration-input" value="${step.duration_minutes}" min="0.1" step="0.5" style="width:80px;">
+                <span class="text-muted">min</span>
+                <label class="toggle-container" style="margin-left:auto;">
+                  <span class="text-muted" style="font-size:0.875rem;">On by default</span>
+                  <label class="toggle">
+                    <input type="checkbox" class="step-default-input" ${step.default_on ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </label>
+              </div>
+            </div>
+            <button class="btn btn-small btn-danger" onclick="App.removeEditStep(${index})" style="padding:0.5rem;">✕</button>
+          </div>
+        `).join('');
+
+        // Bind input events
+        container.querySelectorAll('.step-item').forEach((item, index) => {
+          const nameInput = item.querySelector('.step-name-input');
+          const durationInput = item.querySelector('.step-duration-input');
+          const defaultInput = item.querySelector('.step-default-input');
+
+          nameInput.addEventListener('input', () => {
+            this.editSteps[index].name = nameInput.value;
+          });
+
+          durationInput.addEventListener('input', () => {
+            this.editSteps[index].duration_minutes = parseFloat(durationInput.value) || 1;
+          });
+
+          defaultInput.addEventListener('change', () => {
+            this.editSteps[index].default_on = defaultInput.checked ? 1 : 0;
+          });
+
+          // Drag and drop
+          const handle = item.querySelector('.step-drag-handle');
+          this.setupDragAndDrop(handle, item, index);
+        });
+      },
+
+      setupDragAndDrop(handle, item, index) {
+        let startY = 0;
+        let currentY = 0;
+        let dragging = false;
+
+        const onStart = (e) => {
+          e.preventDefault();
+          dragging = true;
+          startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+          item.classList.add('dragging');
+        };
+
+        const onMove = (e) => {
+          if (!dragging) return;
+          currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+          const diff = currentY - startY;
+
+          // Find which item we're over
+          const items = Array.from(document.querySelectorAll('#edit-steps-list .step-item'));
+          items.forEach((otherItem, otherIndex) => {
+            if (otherIndex === index) return;
+            const rect = otherItem.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+
+            if (currentY > rect.top && currentY < rect.bottom) {
+              otherItem.classList.add('drag-over');
+            } else {
+              otherItem.classList.remove('drag-over');
+            }
+          });
+        };
+
+        const onEnd = (e) => {
+          if (!dragging) return;
+          dragging = false;
+          item.classList.remove('dragging');
+
+          // Find target position
+          const items = Array.from(document.querySelectorAll('#edit-steps-list .step-item'));
+          let targetIndex = index;
+
+          items.forEach((otherItem, otherIndex) => {
+            if (otherItem.classList.contains('drag-over')) {
+              targetIndex = otherIndex;
+              otherItem.classList.remove('drag-over');
+            }
+          });
+
+          if (targetIndex !== index) {
+            // Reorder
+            const [removed] = this.editSteps.splice(index, 1);
+            this.editSteps.splice(targetIndex, 0, removed);
+            this.renderEditSteps();
+          }
+        };
+
+        handle.addEventListener('touchstart', onStart, { passive: false });
+        handle.addEventListener('mousedown', onStart);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchend', onEnd);
+        document.addEventListener('mouseup', onEnd);
+      },
+
+      addEditStep() {
+        this.editSteps.push({
+          id: null,
+          name: '',
+          duration_minutes: 1,
+          default_on: 1,
+          position: this.editSteps.length
+        });
+        this.renderEditSteps();
+
+        // Focus the new input
+        setTimeout(() => {
+          const inputs = document.querySelectorAll('.step-name-input');
+          inputs[inputs.length - 1]?.focus();
+        }, 100);
+      },
+
+      removeEditStep(index) {
+        this.editSteps.splice(index, 1);
+        this.renderEditSteps();
+      },
+
+      async saveRoutine() {
+        const name = document.getElementById('edit-routine-name').value.trim();
+        if (!name) {
+          alert('Please enter a routine name');
+          return;
+        }
+
+        // Filter out empty steps
+        const validSteps = this.editSteps.filter(s => s.name.trim());
+
+        try {
+          // Update routine name
+          await DB.query(`UPDATE routines SET name = '${escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentRoutineId}`);
+
+          // Delete all existing steps
+          await DB.query(`DELETE FROM routine_steps WHERE routine_id = ${this.currentRoutineId}`);
+
+          // Insert new steps
+          for (let i = 0; i < validSteps.length; i++) {
+            const step = validSteps[i];
+            await DB.query(`
+              INSERT INTO routine_steps (routine_id, name, duration_minutes, default_on, position)
+              VALUES (${this.currentRoutineId}, '${escapeSQL(step.name)}', ${step.duration_minutes}, ${step.default_on}, ${i})
+            `);
+          }
+
+          // Reload and go back
+          await this.openRoutine(this.currentRoutineId);
+        } catch (e) {
+          console.error('Failed to save routine:', e);
+          alert('Failed to save routine');
+        }
+      },
+
+      exitEditScreen() {
+        this.editSteps = [];
+        this.openRoutine(this.currentRoutineId);
+      },
+
+      confirmDeleteRoutine() {
+        document.getElementById('modal-title').textContent = 'Delete routine?';
+        document.getElementById('modal-body').innerHTML = `
+          <p>Are you sure you want to delete "${escapeHtml(this.currentRoutine.name)}"? This cannot be undone.</p>
+          <div class="modal-footer" style="padding: 0; border: none; margin-top: 1rem;">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="App.deleteRoutine()">Delete</button>
+          </div>
+        `;
+        document.getElementById('modal-overlay').classList.remove('hidden');
+      },
+
+      async deleteRoutine() {
+        try {
+          await DB.query(`DELETE FROM routine_steps WHERE routine_id = ${this.currentRoutineId}`);
+          await DB.query(`DELETE FROM routines WHERE id = ${this.currentRoutineId}`);
+          this.closeModal();
+          this.goToRoutines();
+        } catch (e) {
+          console.error('Failed to delete routine:', e);
+        }
+      },
+
+      // Timer functionality
+      async startRoutine() {
+        // Get enabled steps
+        const enabledSteps = this.runSteps.filter(s => s.enabled);
+        if (enabledSteps.length === 0) return;
+
+        this.runSteps = enabledSteps;
+        this.currentStepIndex = 0;
+        this.timerRunning = true;
+        this.timerPaused = false;
+        this.routineStartTime = Date.now();
+
+        // Calculate total time
+        this.totalRemainingSeconds = this.runSteps.reduce((sum, s) => sum + s.duration_minutes * 60, 0);
+
+        await requestWakeLock();
+        this.startStep();
+      },
+
+      startStep() {
+        const step = this.runSteps[this.currentStepIndex];
+        this.stepTotalSeconds = step.duration_minutes * 60;
+        this.stepEndTime = Date.now() + (this.stepTotalSeconds * 1000);
+
+        // Update UI
+        document.getElementById('timer-step-label').textContent =
+          `Step ${this.currentStepIndex + 1} of ${this.runSteps.length}`;
+        document.getElementById('timer-step-name').textContent = step.name;
+        document.getElementById('timer-pause-btn').textContent = '⏸';
+
+        this.showScreen('timer');
+        this.updateTimerDisplay();
+
+        // Start interval
+        this.timerInterval = setInterval(() => this.updateTimerDisplay(), 250);
+      },
+
+      updateTimerDisplay() {
+        if (this.timerPaused) return;
+
+        const now = Date.now();
+        const remainingMs = Math.max(0, this.stepEndTime - now);
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+        // Update step timer
+        document.getElementById('timer-display').textContent = formatTime(remainingSeconds);
+
+        // Update progress bar
+        const progress = remainingSeconds / this.stepTotalSeconds;
+        document.getElementById('timer-progress-fill').style.width = `${progress * 100}%`;
+
+        // Update total remaining
+        const stepsRemaining = this.runSteps.slice(this.currentStepIndex + 1);
+        const futureSeconds = stepsRemaining.reduce((sum, s) => sum + s.duration_minutes * 60, 0);
+        const totalRemaining = remainingSeconds + futureSeconds;
+        document.getElementById('timer-total-remaining').textContent =
+          `Total: ${formatTime(totalRemaining)} remaining`;
+
+        // Check if step is complete
+        if (remainingMs <= 0) {
+          this.stepComplete();
+        }
+      },
+
+      stepComplete() {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+
+        // Check if routine is complete
+        if (this.currentStepIndex >= this.runSteps.length - 1) {
+          this.routineComplete();
+          return;
+        }
+
+        // Show alarm
+        const nextStep = this.runSteps[this.currentStepIndex + 1];
+        document.getElementById('alarm-message').textContent =
+          `${this.runSteps[this.currentStepIndex].name} complete!`;
+        document.getElementById('alarm-next-step').textContent = `Next: ${nextStep.name}`;
+
+        this.showScreen('alarm');
+        startAlarm();
+      },
+
+      continueFromAlarm() {
+        stopAlarm();
+        this.currentStepIndex++;
+        this.startStep();
+      },
+
+      routineComplete() {
+        stopAlarm();
+        releaseWakeLock();
+        this.timerRunning = false;
+
+        // Calculate total time
+        const totalMs = Date.now() - this.routineStartTime;
+        const totalSeconds = Math.round(totalMs / 1000);
+
+        document.getElementById('complete-time').textContent =
+          `Total time: ${formatTime(totalSeconds)}`;
+
+        this.showScreen('complete');
+
+        // Play completion sound
+        playAlarmSound();
+      },
+
+      finishRoutine() {
+        this.openRoutine(this.currentRoutineId);
+      },
+
+      togglePause() {
+        if (this.timerPaused) {
+          // Resume
+          const elapsed = this.pausedAt - this.stepEndTime;
+          this.stepEndTime = Date.now() - elapsed;
+          this.timerPaused = false;
+          document.getElementById('timer-pause-btn').textContent = '⏸';
+          requestWakeLock();
+        } else {
+          // Pause
+          this.pausedAt = Date.now();
+          this.timerPaused = true;
+          document.getElementById('timer-pause-btn').textContent = '▶';
+          releaseWakeLock();
+        }
+      },
+
+      skipStep() {
+        // Skip to end of current step
+        this.stepEndTime = Date.now();
+      },
+
+      cancelTimer() {
+        document.getElementById('modal-title').textContent = 'Cancel routine?';
+        document.getElementById('modal-body').innerHTML = `
+          <p>Are you sure you want to stop this routine?</p>
+          <div class="modal-footer" style="padding: 0; border: none; margin-top: 1rem;">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Keep going</button>
+            <button class="btn btn-danger" onclick="App.confirmCancelTimer()">Stop</button>
+          </div>
+        `;
+        document.getElementById('modal-overlay').classList.remove('hidden');
+      },
+
+      confirmCancelTimer() {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+        this.timerRunning = false;
+        this.timerPaused = false;
+        stopAlarm();
+        releaseWakeLock();
+        this.closeModal();
+        this.openRoutine(this.currentRoutineId);
+      }
+    };
+
+    // Service worker registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(err => {
+        console.log('Service worker registration failed:', err);
+      });
+    }
+
+    // Initialize app
+    document.addEventListener('DOMContentLoaded', () => App.init());
+  </script>
+</body>
+</html>
