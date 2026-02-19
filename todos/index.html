@@ -737,11 +737,13 @@
             display: flex;
             gap: 4px;
             opacity: 0;
+            pointer-events: none;
             transition: opacity var(--duration-fast);
         }
 
         .todo-item:hover .todo-actions {
             opacity: 1;
+            pointer-events: auto;
         }
 
         .todo-action-btn {
@@ -2554,11 +2556,11 @@
                                 ${indicatorsHtml}
                             </div>
                             <div class="todo-actions">
-                                <button class="todo-action-btn" data-action="schedule" title="Schedule">
-                                    <svg><use href="#icon-clock"/></svg>
-                                </button>
                                 <button class="todo-action-btn" data-action="notes" title="Notes">
                                     <svg><use href="#icon-notes"/></svg>
+                                </button>
+                                <button class="todo-action-btn" data-action="schedule" title="Schedule">
+                                    <svg><use href="#icon-clock"/></svg>
                                 </button>
                                 ${!todo.completed ? `<button class="todo-action-btn" data-action="duplicate" title="Duplicate">
                                     <svg><use href="#icon-duplicate"/></svg>
