@@ -660,7 +660,8 @@
             word-break: break-word;
             color: var(--ink);
             transition: all var(--duration-normal);
-            cursor: pointer;
+            user-select: text;
+            cursor: text;
         }
 
         .drag-handle {
@@ -2555,7 +2556,7 @@
                             <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" data-action="toggle">
                                 <svg><use href="#icon-check"/></svg>
                             </div>
-                            <div class="todo-content" data-action="notes">
+                            <div class="todo-content" data-action="expand-notes">
                                 <div class="todo-title">${this.escapeHtml(todo.title)}</div>
                                 ${indicatorsHtml}
                             </div>
@@ -2663,6 +2664,7 @@
                         else if (action === 'duplicate') this.duplicateTodo(id);
                         else if (action === 'schedule') this.showScheduleModal(id, item);
                         else if (action === 'notes') this.toggleNotes(item);
+                        else if (action === 'expand-notes') this.expandNotes(item);
                         else if (action === 'toggle-check') {
                             e.stopPropagation();
                             const lineIdx = parseInt(actionEl.dataset.line);
@@ -2862,6 +2864,13 @@
                     useEl.setAttribute('href', isNowExpanded ? '#icon-chevron' : '#icon-notes');
                     notesBtn.classList.toggle('expanded', isNowExpanded);
                     notesBtn.title = isNowExpanded ? 'Minimize' : 'Notes';
+                }
+            },
+
+            expandNotes(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                if (!notesEl.classList.contains('expanded')) {
+                    this.toggleNotes(item);
                 }
             },
 
