@@ -660,8 +660,7 @@
             word-break: break-word;
             color: var(--ink);
             transition: all var(--duration-normal);
-            user-select: text;
-            cursor: text;
+            cursor: pointer;
         }
 
         .drag-handle {
@@ -772,6 +771,11 @@
         .todo-action-btn svg {
             width: 16px;
             height: 16px;
+            transition: transform var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .todo-action-btn.expanded svg {
+            transform: rotate(180deg);
         }
 
         /* Notes Section */
@@ -2551,7 +2555,7 @@
                             <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" data-action="toggle">
                                 <svg><use href="#icon-check"/></svg>
                             </div>
-                            <div class="todo-content">
+                            <div class="todo-content" data-action="notes">
                                 <div class="todo-title">${this.escapeHtml(todo.title)}</div>
                                 ${indicatorsHtml}
                             </div>
@@ -2624,7 +2628,7 @@
 
             renderNotesPreview(notes, todoId) {
                 if (!notes || !notes.trim()) {
-                    return '<div class="notes-preview empty">No notes yet</div>';
+                    return '<div class="notes-preview empty" data-action="toggle-edit">No notes yet</div>';
                 }
 
                 const lines = notes.split('\n');
@@ -2849,6 +2853,16 @@
                 }
 
                 notesEl.classList.toggle('expanded');
+
+                // Swap notes icon to minimize icon when expanded
+                const notesBtn = item.querySelector('.todo-actions [data-action="notes"]');
+                if (notesBtn) {
+                    const isNowExpanded = notesEl.classList.contains('expanded');
+                    const useEl = notesBtn.querySelector('use');
+                    useEl.setAttribute('href', isNowExpanded ? '#icon-chevron' : '#icon-notes');
+                    notesBtn.classList.toggle('expanded', isNowExpanded);
+                    notesBtn.title = isNowExpanded ? 'Minimize' : 'Notes';
+                }
             },
 
             toggleEditMode(item) {
