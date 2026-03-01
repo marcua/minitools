@@ -2629,7 +2629,7 @@
 
             renderNotesPreview(notes, todoId) {
                 if (!notes || !notes.trim()) {
-                    return '<div class="notes-preview empty" data-action="toggle-edit">No notes yet</div>';
+                    return '<div class="notes-preview empty" data-action="edit-notes">No notes yet</div>';
                 }
 
                 const lines = notes.split('\n');
@@ -2669,6 +2669,8 @@
                             e.stopPropagation();
                             const lineIdx = parseInt(actionEl.dataset.line);
                             this.toggleChecklistItem(item, lineIdx);
+                        } else if (action === 'edit-notes') {
+                            this.toggleEditMode(item, 'notes');
                         } else if (action === 'toggle-edit') {
                             this.toggleEditMode(item);
                         } else if (action === 'save-edit') {
@@ -2874,7 +2876,7 @@
                 }
             },
 
-            toggleEditMode(item) {
+            toggleEditMode(item, focusField = 'title') {
                 const notesEl = item.querySelector('.todo-notes');
                 const editForm = notesEl.querySelector('.todo-edit-form');
                 const viewMode = notesEl.querySelector('.todo-view-mode');
@@ -2900,7 +2902,11 @@
                     editBtn.classList.add('hidden');
                     cancelBtn.classList.remove('hidden');
                     saveBtn.classList.remove('hidden');
-                    editForm.querySelector('.title-edit-input').focus();
+                    if (focusField === 'notes') {
+                        editForm.querySelector('.notes-textarea').focus();
+                    } else {
+                        editForm.querySelector('.title-edit-input').focus();
+                    }
                 }
             },
 
