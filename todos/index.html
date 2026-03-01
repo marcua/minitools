@@ -774,6 +774,15 @@
             height: 16px;
         }
 
+        .todo-action-btn[data-action="notes"] svg {
+            transform: rotate(-90deg);
+            transition: transform var(--duration-fast) var(--ease-out-expo);
+        }
+
+        .todo-action-btn[data-action="notes"].expanded svg {
+            transform: rotate(0deg);
+        }
+
         /* Notes Section */
         .todo-notes {
             padding: 0 0 16px 38px;
@@ -2551,13 +2560,13 @@
                             <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" data-action="toggle">
                                 <svg><use href="#icon-check"/></svg>
                             </div>
-                            <div class="todo-content">
+                            <div class="todo-content" data-action="expand-notes">
                                 <div class="todo-title">${this.escapeHtml(todo.title)}</div>
                                 ${indicatorsHtml}
                             </div>
                             <div class="todo-actions">
-                                <button class="todo-action-btn" data-action="notes" title="Notes">
-                                    <svg><use href="#icon-notes"/></svg>
+                                <button class="todo-action-btn" data-action="notes" title="Expand">
+                                    <svg><use href="#icon-chevron"/></svg>
                                 </button>
                                 <button class="todo-action-btn" data-action="schedule" title="Schedule">
                                     <svg><use href="#icon-clock"/></svg>
@@ -2624,7 +2633,7 @@
 
             renderNotesPreview(notes, todoId) {
                 if (!notes || !notes.trim()) {
-                    return '<div class="notes-preview empty">No notes yet</div>';
+                    return '<div class="notes-preview empty" data-action="edit-notes">No notes yet</div>';
                 }
 
                 const lines = notes.split('\n');
@@ -2659,10 +2668,13 @@
                         else if (action === 'duplicate') this.duplicateTodo(id);
                         else if (action === 'schedule') this.showScheduleModal(id, item);
                         else if (action === 'notes') this.toggleNotes(item);
+                        else if (action === 'expand-notes') this.expandNotes(item);
                         else if (action === 'toggle-check') {
                             e.stopPropagation();
                             const lineIdx = parseInt(actionEl.dataset.line);
                             this.toggleChecklistItem(item, lineIdx);
+                        } else if (action === 'edit-notes') {
+                            this.toggleEditMode(item, 'notes');
                         } else if (action === 'toggle-edit') {
                             this.toggleEditMode(item);
                         } else if (action === 'save-edit') {
@@ -2849,9 +2861,24 @@
                 }
 
                 notesEl.classList.toggle('expanded');
+
+                // Toggle chevron direction
+                const notesBtn = item.querySelector('.todo-actions [data-action="notes"]');
+                if (notesBtn) {
+                    const isNowExpanded = notesEl.classList.contains('expanded');
+                    notesBtn.classList.toggle('expanded', isNowExpanded);
+                    notesBtn.title = isNowExpanded ? 'Minimize' : 'Expand';
+                }
             },
 
-            toggleEditMode(item) {
+            expandNotes(item) {
+                const notesEl = item.querySelector('.todo-notes');
+                if (!notesEl.classList.contains('expanded')) {
+                    this.toggleNotes(item);
+                }
+            },
+
+            toggleEditMode(item, focusField = 'title') {
                 const notesEl = item.querySelector('.todo-notes');
                 const editForm = notesEl.querySelector('.todo-edit-form');
                 const viewMode = notesEl.querySelector('.todo-view-mode');
@@ -2877,7 +2904,11 @@
                     editBtn.classList.add('hidden');
                     cancelBtn.classList.remove('hidden');
                     saveBtn.classList.remove('hidden');
-                    editForm.querySelector('.title-edit-input').focus();
+                    if (focusField === 'notes') {
+                        editForm.querySelector('.notes-textarea').focus();
+                    } else {
+                        editForm.querySelector('.title-edit-input').focus();
+                    }
                 }
             },
 
