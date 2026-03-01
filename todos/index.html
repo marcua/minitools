@@ -772,11 +772,15 @@
         .todo-action-btn svg {
             width: 16px;
             height: 16px;
+        }
+
+        .todo-action-btn[data-action="notes"] svg {
+            transform: rotate(-90deg);
             transition: transform var(--duration-fast) var(--ease-out-expo);
         }
 
-        .todo-action-btn.expanded svg {
-            transform: rotate(180deg);
+        .todo-action-btn[data-action="notes"].expanded svg {
+            transform: rotate(0deg);
         }
 
         /* Notes Section */
@@ -2561,8 +2565,8 @@
                                 ${indicatorsHtml}
                             </div>
                             <div class="todo-actions">
-                                <button class="todo-action-btn" data-action="notes" title="Notes">
-                                    <svg><use href="#icon-notes"/></svg>
+                                <button class="todo-action-btn" data-action="notes" title="Expand">
+                                    <svg><use href="#icon-chevron"/></svg>
                                 </button>
                                 <button class="todo-action-btn" data-action="schedule" title="Schedule">
                                     <svg><use href="#icon-clock"/></svg>
@@ -2858,14 +2862,12 @@
 
                 notesEl.classList.toggle('expanded');
 
-                // Swap notes icon to minimize icon when expanded
+                // Toggle chevron direction
                 const notesBtn = item.querySelector('.todo-actions [data-action="notes"]');
                 if (notesBtn) {
                     const isNowExpanded = notesEl.classList.contains('expanded');
-                    const useEl = notesBtn.querySelector('use');
-                    useEl.setAttribute('href', isNowExpanded ? '#icon-chevron' : '#icon-notes');
                     notesBtn.classList.toggle('expanded', isNowExpanded);
-                    notesBtn.title = isNowExpanded ? 'Minimize' : 'Notes';
+                    notesBtn.title = isNowExpanded ? 'Minimize' : 'Expand';
                 }
             },
 
