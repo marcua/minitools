@@ -594,7 +594,13 @@
             padding: 4px;
         }
 
-        .todo-item:hover .drag-handle {
+        @media (hover: hover) {
+            .todo-item:hover .drag-handle {
+                opacity: 1;
+            }
+        }
+
+        .todo-item:has(.todo-notes.expanded) .drag-handle {
             opacity: 1;
         }
 
@@ -741,7 +747,14 @@
             transition: opacity var(--duration-fast);
         }
 
-        .todo-item:hover .todo-actions {
+        @media (hover: hover) {
+            .todo-item:hover .todo-actions {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        .todo-item:has(.todo-notes.expanded) .todo-actions {
             opacity: 1;
             pointer-events: auto;
         }
