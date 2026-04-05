@@ -1,7 +1,8 @@
-const CACHE_NAME = 'todos-v28';
+const CACHE_NAME = 'todos-v29';
 const ASSETS = [
     './',
     './index.html',
+    './ayb.js',
     './manifest.json',
     './icon.svg'
 ];
@@ -31,8 +32,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // API requests (ayb queries) - network only
-    if (url.pathname.includes('/v1/') && url.pathname.includes('/query')) {
+    // API requests (ayb queries) and OAuth - network only
+    if ((url.pathname.includes('/v1/') && url.pathname.includes('/query')) ||
+        url.pathname.includes('/oauth/')) {
         event.respondWith(fetch(event.request));
         return;
     }
