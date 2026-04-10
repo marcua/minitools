@@ -56,6 +56,10 @@
             padding: 0;
         }
 
+        dialog {
+            margin: auto;
+        }
+
         body {
             font-family: var(--font-body);
             background-color: var(--paper);
@@ -1153,17 +1157,9 @@
             <h1>Streaks</h1>
             <p>Connect to your ayb database to get started.</p>
 
-            <form id="setup-form">
-                <label for="db-url">Database URL</label>
-                <input type="url" id="db-url" placeholder="https://host/entity/database" required>
-
-                <label for="api-token">API token</label>
-                <input type="text" id="api-token" placeholder="Your API token" required>
-
-                <div class="btn-group btn-group-right">
-                    <button type="submit" class="btn">Connect</button>
-                </div>
-            </form>
+            <div class="btn-group btn-group-right">
+                <button class="btn" id="setup-btn">Connect</button>
+            </div>
         </div>
     </div>
 
@@ -1292,15 +1288,11 @@
         <div id="popover-content"></div>
     </div>
 
+    <script src="ayb.js"></script>
     <script>
         // ============ Configuration ============
         const APP_NAME = 'streaks';
-
-        // ============ SQL Utilities ============
-        function escapeSQL(str) {
-            if (str === null || str === undefined) return '';
-            return String(str).replace(/'/g, "''");
-        }
+        let ayb = null;
 
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
@@ -1391,74 +1383,8 @@
             return Math.floor(diff / (1000 * 60 * 60 * 24));
         }
 
-        // ============ Database ============
-        const DB = {
-            config: null,
-
-            init() {
-                const saved = localStorage.getItem(`${APP_NAME}_config`);
-                if (saved) {
-                    this.config = JSON.parse(saved);
-                    return true;
-                }
-                return false;
-            },
-
-            saveConfig(url, token) {
-                const urlObj = new URL(url);
-                const pathParts = urlObj.pathname.split('/').filter(p => p);
-
-                let baseUrl, entity, database;
-
-                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
-                    // Format: https://host/v1/entity/database
-                    entity = pathParts[1];
-                    database = pathParts[2];
-                    baseUrl = urlObj.origin;
-                } else if (pathParts.length >= 2) {
-                    // Format: https://host/entity/database
-                    entity = pathParts[0];
-                    database = pathParts[1];
-                    baseUrl = urlObj.origin;
-                } else {
-                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
-                }
-
-                this.config = { baseUrl, entity, database, token };
-                localStorage.setItem(`${APP_NAME}_config`, JSON.stringify(this.config));
-            },
-
-            clearConfig() {
-                this.config = null;
-                localStorage.removeItem(`${APP_NAME}_config`);
-            },
-
-            async query(sql) {
-                if (!this.config) throw new Error('Database not configured');
-
-                const { baseUrl, entity, database, token } = this.config;
-                const url = `${baseUrl}/v1/${entity}/${database}/query`;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'text/plain'
-                    },
-                    body: sql
-                });
-
-                if (!response.ok) {
-                    const text = await response.text();
-                    throw new Error(`Query failed: ${text}`);
-                }
-
-                return response.json();
-            }
-        };
-
         // ============ Migrations ============
-        const migrations = [
+        const streaksMigrations = [
             // v0: Initial schema
             `CREATE TABLE IF NOT EXISTS goals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1485,43 +1411,10 @@
             `ALTER TABLE completions ADD COLUMN checked INTEGER NOT NULL DEFAULT 1`
         ];
 
-        async function runMigrations() {
-            // Create migrations table
-            await DB.query(`CREATE TABLE IF NOT EXISTS _migrations (
-                version INTEGER PRIMARY KEY,
-                applied_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )`);
-
-            // Get current version
-            const result = await DB.query('SELECT MAX(version) as version FROM _migrations');
-            let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
-
-            // Auto-repair if version is invalid
-            if (currentVersion > migrations.length) {
-                await DB.query('DELETE FROM _migrations');
-                currentVersion = 0;
-            }
-
-            // Run pending migrations
-            for (let i = currentVersion; i < migrations.length; i++) {
-                try {
-                    await DB.query(migrations[i]);
-                } catch (e) {
-                    // Ignore "already exists" errors for idempotency
-                    const msg = e.message.toLowerCase();
-                    if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
-                        throw e;
-                    }
-                }
-                // Use INSERT OR REPLACE to handle re-running migrations
-                await DB.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
-            }
-        }
-
         // ============ Goals CRUD ============
         async function getGoals(includeArchived = false) {
             const where = includeArchived ? '' : 'WHERE archived = 0';
-            const result = await DB.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
+            const result = await ayb.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
             return result.rows ? result.rows.map(row => ({
                 id: Number(row[0]),
                 name: row[1],
@@ -1534,31 +1427,31 @@
         }
 
         async function createGoal(name, frequency) {
-            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPosResult = await ayb.query('SELECT MAX(position) FROM goals WHERE archived = 0');
             const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
 
-            await DB.query(`INSERT INTO goals (name, frequency, position) VALUES (
-                '${escapeSQL(name)}', '${escapeSQL(frequency)}', ${maxPos + 1}
+            await ayb.query(`INSERT INTO goals (name, frequency, position) VALUES (
+                '${AybClient.escapeSQL(name)}', '${AybClient.escapeSQL(frequency)}', ${maxPos + 1}
             )`);
         }
 
         async function updateGoal(id, name, frequency) {
-            await DB.query(`UPDATE goals SET
-                name = '${escapeSQL(name)}',
-                frequency = '${escapeSQL(frequency)}',
+            await ayb.query(`UPDATE goals SET
+                name = '${AybClient.escapeSQL(name)}',
+                frequency = '${AybClient.escapeSQL(frequency)}',
                 updated_at = CURRENT_TIMESTAMP
                 WHERE id = ${id}`);
         }
 
         async function archiveGoal(id) {
-            await DB.query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+            await ayb.query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
         }
 
         async function unarchiveGoal(id) {
-            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPosResult = await ayb.query('SELECT MAX(position) FROM goals WHERE archived = 0');
             const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
 
-            await DB.query(`UPDATE goals SET
+            await ayb.query(`UPDATE goals SET
                 archived = 0,
                 position = ${maxPos + 1},
                 updated_at = CURRENT_TIMESTAMP
@@ -1567,14 +1460,14 @@
 
         async function reorderGoals(orderedIds) {
             for (let i = 0; i < orderedIds.length; i++) {
-                await DB.query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
+                await ayb.query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
             }
         }
 
         // ============ Completions CRUD ============
         async function getCompletionsForDate(dateStr) {
             const utcDate = localToUTC(dateStr);
-            const result = await DB.query(`SELECT c.*, g.name, g.frequency FROM completions c
+            const result = await ayb.query(`SELECT c.*, g.name, g.frequency FROM completions c
                 JOIN goals g ON c.goal_id = g.id
                 WHERE c.date = '${utcDate}'`);
             return result.rows ? result.rows.map(row => ({
@@ -1594,25 +1487,25 @@
             const utcDate = localToUTC(dateStr);
 
             // Check if checked completion exists
-            const existing = await DB.query(`SELECT id, checked FROM completions
+            const existing = await ayb.query(`SELECT id, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
 
             if (existing.rows && existing.rows.length > 0) {
                 const isChecked = Number(existing.rows[0][1]);
                 if (isChecked) {
                     // Unchecking: delete the completion entirely
-                    await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    await ayb.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                     return false;
                 } else {
                     // Has note but unchecked, now checking it
-                    await DB.query(`UPDATE completions SET checked = 1, updated_at = CURRENT_TIMESTAMP
+                    await ayb.query(`UPDATE completions SET checked = 1, updated_at = CURRENT_TIMESTAMP
                         WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                     return true;
                 }
             } else {
                 // Create new checked completion
-                const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
-                await DB.query(`INSERT INTO completions (goal_id, date, note, checked)
+                const noteValue = note ? `'${AybClient.escapeSQL(note)}'` : 'NULL';
+                await ayb.query(`INSERT INTO completions (goal_id, date, note, checked)
                     VALUES (${goalId}, '${utcDate}', ${noteValue}, 1)`);
                 return true;
             }
@@ -1621,23 +1514,23 @@
         async function updateCompletionNote(goalId, dateStr, note) {
             const utcDate = localToUTC(dateStr);
             // Check if record exists
-            const existing = await DB.query(`SELECT id, checked FROM completions
+            const existing = await ayb.query(`SELECT id, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
 
             if (existing.rows && existing.rows.length > 0) {
                 // Update existing record
                 if (note) {
-                    await DB.query(`UPDATE completions SET
-                        note = '${escapeSQL(note)}',
+                    await ayb.query(`UPDATE completions SET
+                        note = '${AybClient.escapeSQL(note)}',
                         updated_at = CURRENT_TIMESTAMP
                         WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                 } else {
                     // If clearing note and not checked, delete record
                     const isChecked = Number(existing.rows[0][1]);
                     if (!isChecked) {
-                        await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                        await ayb.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
                     } else {
-                        await DB.query(`UPDATE completions SET
+                        await ayb.query(`UPDATE completions SET
                             note = NULL,
                             updated_at = CURRENT_TIMESTAMP
                             WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
@@ -1645,15 +1538,15 @@
                 }
             } else if (note) {
                 // Create new record with note (unchecked)
-                await DB.query(`INSERT INTO completions (goal_id, date, note, checked)
-                    VALUES (${goalId}, '${utcDate}', '${escapeSQL(note)}', 0)`);
+                await ayb.query(`INSERT INTO completions (goal_id, date, note, checked)
+                    VALUES (${goalId}, '${utcDate}', '${AybClient.escapeSQL(note)}', 0)`);
             }
         }
 
         async function getCompletionsForYear(year) {
             const startDate = `${year}-01-01`;
             const endDate = `${year}-12-31`;
-            const result = await DB.query(`SELECT goal_id, date, note, checked FROM completions
+            const result = await ayb.query(`SELECT goal_id, date, note, checked FROM completions
                 WHERE date >= '${startDate}' AND date <= '${endDate}'
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
@@ -1665,7 +1558,7 @@
         }
 
         async function getYearsWithData() {
-            const result = await DB.query(`SELECT DISTINCT substr(date, 1, 4) as year
+            const result = await ayb.query(`SELECT DISTINCT substr(date, 1, 4) as year
                 FROM completions ORDER BY year DESC`);
             return result.rows ? result.rows.map(row => parseInt(row[0])) : [];
         }
@@ -1691,22 +1584,16 @@
         }
 
         // ============ Setup Screen ============
-        document.getElementById('setup-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const url = document.getElementById('db-url').value.trim();
-            const token = document.getElementById('api-token').value.trim();
-
-            try {
-                DB.saveConfig(url, token);
-                await tryConnect();
-            } catch (e) {
-                showError(e.message);
-            }
+        document.getElementById('setup-btn').addEventListener('click', () => {
+            createServerSelectionModal({
+                appName: 'Streaks',
+                queryPermissionLevel: 'read-write',
+            });
         });
 
         async function tryConnect() {
             try {
-                await runMigrations();
+                await runMigrations(ayb, 'streaks', streaksMigrations);
                 await handleRoute();
             } catch (e) {
                 console.error('Connection error:', e);
@@ -1733,9 +1620,8 @@
         });
 
         document.getElementById('change-db-btn').addEventListener('click', () => {
-            // Clear form fields so user can enter new credentials
-            document.getElementById('db-url').value = '';
-            document.getElementById('api-token').value = '';
+            ayb.disconnect();
+            ayb = null;
             showScreen('setup-screen');
         });
 
@@ -2540,8 +2426,24 @@
                 }
             }
 
-            // Check for stored config
-            if (DB.init()) {
+            // Migrate localStorage key from old format
+            const oldConfig = localStorage.getItem(`${APP_NAME}_config`);
+            if (oldConfig && !localStorage.getItem('ayb_Streaks')) {
+                localStorage.setItem('ayb_Streaks', oldConfig);
+                localStorage.removeItem(`${APP_NAME}_config`);
+            }
+
+            // Restore OAuth session or handle callback
+            try {
+                ayb = await restoreOAuth({
+                    appName: 'Streaks',
+                    queryPermissionLevel: 'read-write',
+                });
+            } catch (e) {
+                console.error('OAuth restore error:', e);
+            }
+
+            if (ayb && ayb.isConnected()) {
                 // Restore last hash before connecting
                 const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
                 if (lastHash) {
