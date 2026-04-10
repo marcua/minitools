@@ -1987,7 +1987,7 @@
             } else if (goal.frequency === 'weekly') {
                 // 52 cells
                 for (let week = 1; week <= 52; week++) {
-                    const weekDate = new Date(year, 0, (week - 1) * 7 + 4);
+                    const weekDate = new Date(year, 0, (week - 1) * 7 + 1);
                     const isFuture = weekDate > today;
 
                     // Check if any date in this week is completed, collect notes
@@ -2017,7 +2017,7 @@
                         'streak-cell',
                         isChecked ? 'filled' : '',
                         !isChecked && hasNote ? 'has-note' : '',
-                        isFuture ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
+                        isFuture && !isChecked ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
                     ].filter(Boolean).join(' ');
 
                     const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
@@ -2029,7 +2029,7 @@
             } else {
                 // Monthly - 12 cells
                 for (let month = 0; month < 12; month++) {
-                    const monthDate = new Date(year, month, 15);
+                    const monthDate = new Date(year, month, 1);
                     const isFuture = monthDate > today;
 
                     // Check if any date in this month is completed, collect notes
@@ -2059,7 +2059,7 @@
                         'streak-cell',
                         isChecked ? 'filled' : '',
                         !isChecked && hasNote ? 'has-note' : '',
-                        isFuture ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
+                        isFuture && !isChecked ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
                     ].filter(Boolean).join(' ');
 
                     const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
