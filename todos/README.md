@@ -2,18 +2,22 @@
 
 ## Architecture Overview
 
-Single-file PWA at `index.html` with a service worker at `sw.js`. Uses an external ayb database via REST API.
+Single-file PWA at `index.html` with a service worker at `sw.js`. Uses the [ayb.js](https://github.com/marcua/ayb) client library (`ayb.js`, vendored) for OAuth authentication and database queries via the ayb REST API.
 
 ## Key Components
 
-### DB Object - Database abstraction
-- `DB.config` - stored credentials (baseUrl, entity, database, token)
-- `DB.query(sql)` - executes SQL against ayb API
-- `DB.saveConfig(url, token)` - parses URL and saves to localStorage
-- `DB.runMigrations()` - runs schema migrations with version tracking
+### ayb.js Library - Database and auth layer
+- `ayb` (global) - `AybOAuth` instance created via `restoreOAuth()` at startup
+- `ayb.query(sql)` - executes SQL against ayb API
+- `ayb.isConnected()` / `ayb.getConnectionInfo()` - connection state
+- `ayb.disconnect()` - clears saved credentials
+- `AybClient.escapeSQL(str)` - static method for SQL string escaping
+- `restoreOAuth(options)` - restores OAuth session or handles callback
+- `createServerSelectionModal(options)` - shows server selection UI for OAuth
+- `runMigrations(client, appId, migrations)` - runs schema migrations with version tracking in `_ayb_migrations` table
 
 ### App Object - UI and business logic
-- `App.init()` → `tryConnect()` → `handleRoute()` → `loadLists()` or `openList()`
+- `App.init()` → `restoreOAuth()` → `tryConnect()` → `handleRoute()` → `loadLists()` or `openList()`
 - Hash-based routing: `#list/{id}` for todo lists
 - `showScreen(name)` - switches between `setup`, `error`, `lists`, `todo` screens
 
@@ -24,7 +28,7 @@ todo_list (id, name, position)
 todo_list_item (id, list_id, title, notes, position, completed, completed_at,
                 remind_at, recurrence_type, recurrence_value, parent_id,
                 created_at, updated_at)
-_migrations (version)
+_ayb_migrations (app_id, version, applied_at)
 ```
 
 ## Recurring Todos Model
@@ -41,7 +45,7 @@ _migrations (version)
 **MUST bump `CACHE_NAME` in `sw.js` after every change** (e.g., `todos-v15` → `todos-v16`). Users won't see changes otherwise.
 
 ### 2. SQL String Escaping
-- Use `this.escapeSQL(str)` for user input in queries (escapes single quotes)
+- Use `AybClient.escapeSQL(str)` for user input in queries (escapes single quotes, handles null/undefined)
 - Use `this.escapeHtml(str)` for display
 
 ### 3. Timezone Handling
@@ -54,14 +58,18 @@ _migrations (version)
 - Compare Date objects directly in JS (they compare as UTC timestamps)
 
 ### 5. Migrations
-- Add new migrations to the `migrations` array in `DB.runMigrations()`
+- Add new migrations to the `todoMigrations` array (top of script)
+- Migrations are run via `runMigrations(ayb, 'todos', todoMigrations)` from ayb.js
+- State tracked in `_ayb_migrations` table with `app_id = 'todos'`
 - Migrations are idempotent - errors for "duplicate column" or "already exists" are caught
-- Auto-repair logic resets if `version > migrations.length`
+- Corrupted state (version > migrations.length) throws an error
 
-### 6. Credential Preservation
-- Never clear localStorage on connection failure
-- Show error screen with retry option instead
-- Only clear old credentials on successful new connection
+### 6. Authentication
+- Uses OAuth 2.0 with PKCE via ayb.js `AybOAuth` class
+- `restoreOAuth()` at startup handles both OAuth callback and session restore
+- `createServerSelectionModal()` shows server picker for new connections
+- Credentials stored in localStorage under key `ayb_Todos`
+- Never clear credentials on connection failure; show error screen with retry instead
 
 ### 7. Modal Pattern
 ```javascript
@@ -91,7 +99,7 @@ this.showModal(`
 
 ## Common Workflow
 
-1. Make changes to `index.html`
+1. Make changes to `index.html` (or `ayb.js` if updating the vendored library)
 2. Bump cache version in `sw.js`
 3. Commit and push to feature branch
 4. User refreshes twice (first loads new SW, second activates it)

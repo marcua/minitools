@@ -20,6 +20,12 @@
             padding: 0;
         }
 
+        /* Restore browser default centering for <dialog> elements
+           (used by ayb.js createServerSelectionModal) */
+        dialog {
+            margin: auto;
+        }
+
         :root {
             --paper: #FAF9F7;
             --paper-shadow: #F0EEEA;
@@ -1398,14 +1404,6 @@
             <div class="setup-content">
                 <h2>Todos</h2>
                 <p class="subtitle">Connect to your ayb database to get started</p>
-                <div class="form-group">
-                    <label for="ayb-url">Database URL</label>
-                    <input type="url" id="ayb-url" placeholder="https://example.com/user/database">
-                </div>
-                <div class="form-group">
-                    <label for="ayb-token">API Token</label>
-                    <input type="password" id="ayb-token" placeholder="Your API token">
-                </div>
                 <div id="setup-error" class="error-msg hidden"></div>
                 <button class="btn" id="setup-btn">Connect</button>
             </div>
@@ -1528,137 +1526,44 @@
         <div class="modal" id="modal-content"></div>
     </div>
 
+    <script src="ayb.js"></script>
     <script>
         // ============================================
-        // Database Layer
+        // Database Layer (powered by ayb.js)
         // ============================================
-        const DB = {
-            config: null,
+        let ayb = null;
 
-            init() {
-                const saved = localStorage.getItem('ayb_config');
-                if (saved) {
-                    this.config = JSON.parse(saved);
-                    return true;
-                }
-                return false;
-            },
-
-            saveConfig(url, token) {
-                const urlObj = new URL(url);
-                const pathParts = urlObj.pathname.split('/').filter(p => p);
-
-                let baseUrl, entity, database;
-
-                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
-                    entity = pathParts[1];
-                    database = pathParts[2];
-                    baseUrl = urlObj.origin;
-                } else if (pathParts.length >= 2) {
-                    entity = pathParts[0];
-                    database = pathParts[1];
-                    baseUrl = urlObj.origin;
-                } else {
-                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
-                }
-
-                this.config = { baseUrl, entity, database, token };
-                localStorage.setItem('ayb_config', JSON.stringify(this.config));
-            },
-
-            clearConfig() {
-                this.config = null;
-                localStorage.removeItem('ayb_config');
-            },
-
-            async query(sql) {
-                if (!this.config) throw new Error('Database not configured');
-
-                const { baseUrl, entity, database, token } = this.config;
-                const url = `${baseUrl}/v1/${entity}/${database}/query`;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'text/plain'
-                    },
-                    body: sql
-                });
-
-                if (!response.ok) {
-                    const text = await response.text();
-                    throw new Error(`Query failed: ${text}`);
-                }
-
-                return response.json();
-            },
-
-            async runMigrations() {
-                await this.query(`
-                    CREATE TABLE IF NOT EXISTS _migrations (
-                        version INTEGER PRIMARY KEY,
-                        applied_at TEXT DEFAULT CURRENT_TIMESTAMP
-                    )
-                `);
-
-                const result = await this.query('SELECT MAX(version) as version FROM _migrations');
-                let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
-
-                const migrations = [
-                    `CREATE TABLE IF NOT EXISTS todo_list (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                    )`,
-                    `CREATE TABLE IF NOT EXISTS todo_list_item (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        list_id INTEGER NOT NULL,
-                        title TEXT NOT NULL,
-                        notes TEXT DEFAULT '',
-                        completed INTEGER DEFAULT 0,
-                        position INTEGER DEFAULT 0,
-                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (list_id) REFERENCES todo_list(id) ON DELETE CASCADE
-                    )`,
-                    // Migration 3: Add completed_at timestamp
-                    `ALTER TABLE todo_list_item ADD COLUMN completed_at TEXT DEFAULT NULL`,
-                    // Migration 4: Add remind_at for "remind me on" feature
-                    `ALTER TABLE todo_list_item ADD COLUMN remind_at TEXT DEFAULT NULL`,
-                    // Migration 5: Add recurrence fields
-                    `ALTER TABLE todo_list_item ADD COLUMN recurrence_type TEXT DEFAULT NULL`,
-                    // Migration 6: Add recurrence_value (e.g., "monday,wednesday" or "15" for day of month)
-                    `ALTER TABLE todo_list_item ADD COLUMN recurrence_value TEXT DEFAULT NULL`,
-                    // Migration 7: Add parent_id for tracking which recurring item spawned this
-                    `ALTER TABLE todo_list_item ADD COLUMN parent_id INTEGER DEFAULT NULL`,
-                    // Migration 8: Add position column to todo_list for drag-and-drop ordering
-                    `ALTER TABLE todo_list ADD COLUMN position INTEGER DEFAULT 0`
-                ];
-
-                // Fix corrupted migration state (version higher than actual migrations)
-                if (currentVersion > migrations.length) {
-                    // Reset and re-run all migrations (they're idempotent or will be caught)
-                    await this.query(`DELETE FROM _migrations`);
-                    currentVersion = 0;
-                }
-
-                for (let i = currentVersion; i < migrations.length; i++) {
-                    try {
-                        await this.query(migrations[i]);
-                    } catch (e) {
-                        // Ignore "duplicate column" or "table already exists" errors
-                        const msg = e.message.toLowerCase();
-                        if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
-                            throw e;
-                        }
-                    }
-                    // Use INSERT OR REPLACE to handle re-running migrations
-                    await this.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
-                }
-            }
-        };
+        const todoMigrations = [
+            `CREATE TABLE IF NOT EXISTS todo_list (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS todo_list_item (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                notes TEXT DEFAULT '',
+                completed INTEGER DEFAULT 0,
+                position INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (list_id) REFERENCES todo_list(id) ON DELETE CASCADE
+            )`,
+            // Migration 3: Add completed_at timestamp
+            `ALTER TABLE todo_list_item ADD COLUMN completed_at TEXT DEFAULT NULL`,
+            // Migration 4: Add remind_at for "remind me on" feature
+            `ALTER TABLE todo_list_item ADD COLUMN remind_at TEXT DEFAULT NULL`,
+            // Migration 5: Add recurrence fields
+            `ALTER TABLE todo_list_item ADD COLUMN recurrence_type TEXT DEFAULT NULL`,
+            // Migration 6: Add recurrence_value (e.g., "monday,wednesday" or "15" for day of month)
+            `ALTER TABLE todo_list_item ADD COLUMN recurrence_value TEXT DEFAULT NULL`,
+            // Migration 7: Add parent_id for tracking which recurring item spawned this
+            `ALTER TABLE todo_list_item ADD COLUMN parent_id INTEGER DEFAULT NULL`,
+            // Migration 8: Add position column to todo_list for drag-and-drop ordering
+            `ALTER TABLE todo_list ADD COLUMN position INTEGER DEFAULT 0`
+        ];
 
         // ============================================
         // App State & UI
@@ -1684,7 +1589,23 @@
                 this.bindEvents();
                 this.initInstallPrompt();
 
-                if (DB.init()) {
+                // Migrate localStorage key from old format
+                const oldConfig = localStorage.getItem('ayb_config');
+                if (oldConfig && !localStorage.getItem('ayb_Todos')) {
+                    localStorage.setItem('ayb_Todos', oldConfig);
+                    localStorage.removeItem('ayb_config');
+                }
+
+                try {
+                    ayb = await restoreOAuth({
+                        appName: 'Todos',
+                        queryPermissionLevel: 'read-write',
+                    });
+                } catch (e) {
+                    console.error('OAuth restore error:', e);
+                }
+
+                if (ayb && ayb.isConnected()) {
                     await this.tryConnect();
                 } else {
                     this.showScreen('setup');
@@ -1693,7 +1614,7 @@
 
             async tryConnect() {
                 try {
-                    await DB.runMigrations();
+                    await runMigrations(ayb, 'todos', todoMigrations);
                     await this.handleRoute();
                 } catch (e) {
                     console.error('Connection error:', e);
@@ -1725,10 +1646,8 @@
             },
 
             reconnectWithNewDatabase() {
-                // Don't clear config yet - only clear on successful new connection
-                // Clear form fields so user can enter new credentials
-                document.getElementById('ayb-url').value = '';
-                document.getElementById('ayb-token').value = '';
+                ayb.disconnect();
+                ayb = null;
                 this.showScreen('setup');
             },
 
@@ -1822,9 +1741,6 @@
 
             bindEvents() {
                 document.getElementById('setup-btn').addEventListener('click', () => this.handleSetup());
-                document.getElementById('ayb-token').addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this.handleSetup();
-                });
 
                 // Connection error screen buttons
                 document.getElementById('retry-btn').addEventListener('click', () => this.retryConnection());
@@ -1874,46 +1790,11 @@
                 });
             },
 
-            async handleSetup() {
-                const url = document.getElementById('ayb-url').value.trim();
-                const token = document.getElementById('ayb-token').value.trim();
-                const errorEl = document.getElementById('setup-error');
-
-                if (!url || !token) {
-                    errorEl.textContent = 'Please enter both URL and token';
-                    errorEl.classList.remove('hidden');
-                    return;
-                }
-
-                // Save old config in case new connection fails
-                const oldConfig = DB.config ? { ...DB.config } : null;
-
-                try {
-                    errorEl.classList.add('hidden');
-                    document.getElementById('setup-btn').disabled = true;
-                    document.getElementById('setup-btn').textContent = 'Connecting...';
-
-                    DB.saveConfig(url, token);
-                    await DB.runMigrations();
-
-                    // Success - new config is already saved
-                    this.showScreen('lists');
-                    await this.loadLists();
-                } catch (e) {
-                    console.error('Setup error:', e);
-                    errorEl.textContent = e.message;
-                    errorEl.classList.remove('hidden');
-                    // Restore old config so user doesn't lose their credentials
-                    if (oldConfig) {
-                        DB.config = oldConfig;
-                        localStorage.setItem('ayb_config', JSON.stringify(oldConfig));
-                    } else {
-                        DB.clearConfig();
-                    }
-                } finally {
-                    document.getElementById('setup-btn').disabled = false;
-                    document.getElementById('setup-btn').textContent = 'Connect';
-                }
+            handleSetup() {
+                createServerSelectionModal({
+                    appName: 'Todos',
+                    queryPermissionLevel: 'read-write',
+                });
             },
 
             async loadLists() {
@@ -1924,7 +1805,7 @@
                     // Try query with position column (after migration 8)
                     let result;
                     try {
-                        result = await DB.query(`
+                        result = await ayb.query(`
                             SELECT l.id, l.name, l.position,
                                    COUNT(i.id) as total,
                                    SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
@@ -1935,7 +1816,7 @@
                         `);
                     } catch (posErr) {
                         // Fallback for databases without position column yet
-                        result = await DB.query(`
+                        result = await ayb.query(`
                             SELECT l.id, l.name, 0 as position,
                                    COUNT(i.id) as total,
                                    SUM(CASE WHEN i.completed = 0 THEN 1 ELSE 0 END) as pending
@@ -2111,7 +1992,7 @@
             async updateListPositions(order) {
                 try {
                     for (const item of order) {
-                        await DB.query(`UPDATE todo_list SET position = ${item.position}, updated_at = CURRENT_TIMESTAMP WHERE id = ${item.id}`);
+                        await ayb.query(`UPDATE todo_list SET position = ${item.position}, updated_at = CURRENT_TIMESTAMP WHERE id = ${item.id}`);
                     }
                 } catch (e) {
                     console.error('Update list positions error:', e);
@@ -2143,7 +2024,7 @@
                 if (!name) return;
 
                 try {
-                    await DB.query(`INSERT INTO todo_list (name) VALUES ('${this.escapeSQL(name)}')`);
+                    await ayb.query(`INSERT INTO todo_list (name) VALUES ('${AybClient.escapeSQL(name)}')`);
                     this.closeModal();
                     await this.loadLists();
                 } catch (e) {
@@ -2173,7 +2054,7 @@
 
                 try {
                     // Get active recurring templates (not completed, has recurrence_type, no parent_id)
-                    const result = await DB.query(`
+                    const result = await ayb.query(`
                         SELECT id, title, notes, recurrence_type, recurrence_value
                         FROM todo_list_item
                         WHERE list_id = ${this.currentListId}
@@ -2197,7 +2078,7 @@
                         // Check if there's already a spawned copy that's either:
                         // 1. Incomplete (not yet done), OR
                         // 2. Created today (already done today, don't spawn again)
-                        const existsResult = await DB.query(`
+                        const existsResult = await ayb.query(`
                             SELECT id FROM todo_list_item
                             WHERE parent_id = ${id}
                               AND (completed = 0 OR created_at >= '${todayStart}')
@@ -2206,10 +2087,10 @@
                         if (existsResult.rows?.length > 0) continue;
 
                         // Spawn new item at position 0
-                        await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
-                        await DB.query(`
+                        await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
+                        await ayb.query(`
                             INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
-                            VALUES (${this.currentListId}, '${this.escapeSQL(title)}', '${this.escapeSQL(notes || '')}', 0, 0, ${id})
+                            VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}', '${AybClient.escapeSQL(notes || '')}', 0, 0, ${id})
                         `);
                     }
                 } catch (e) {
@@ -2275,7 +2156,7 @@
                 if (!this.currentListId) return;
 
                 try {
-                    const listResult = await DB.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
+                    const listResult = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
                     if (listResult.rows?.length) {
                         document.getElementById('list-title').textContent = listResult.rows[0][0];
                     }
@@ -2288,12 +2169,12 @@
 
                     // Build search clause if searching
                     const searchClause = this.searchTerm
-                        ? ` AND (LOWER(title) LIKE '%${this.escapeSQL(this.searchTerm)}%' OR LOWER(notes) LIKE '%${this.escapeSQL(this.searchTerm)}%')`
+                        ? ` AND (LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')`
                         : '';
 
                     // Load active items (not completed) - no pagination needed
                     if (!loadMoreCompleted) {
-                        const activeResult = await DB.query(`
+                        const activeResult = await ayb.query(`
                             SELECT id, title, notes, completed, position,
                                    created_at, updated_at, completed_at,
                                    remind_at, recurrence_type, recurrence_value, parent_id
@@ -2306,7 +2187,7 @@
                     }
 
                     // Load completed items with pagination
-                    const completedResult = await DB.query(`
+                    const completedResult = await ayb.query(`
                         SELECT id, title, notes, completed, position,
                                created_at, updated_at, completed_at,
                                remind_at, recurrence_type, recurrence_value, parent_id
@@ -2351,10 +2232,6 @@
                     recurrence_value: row[10],
                     parent_id: row[11]
                 };
-            },
-
-            escapeSQL(str) {
-                return str.replace(/'/g, "''").toLowerCase();
             },
 
             renderTodos(todos) {
@@ -2855,7 +2732,7 @@
 
                 for (let i = 0; i < items.length; i++) {
                     const id = parseInt(items[i].dataset.id);
-                    await DB.query(`UPDATE todo_list_item SET position = ${i} WHERE id = ${id}`);
+                    await ayb.query(`UPDATE todo_list_item SET position = ${i} WHERE id = ${id}`);
                 }
             },
 
@@ -2941,9 +2818,9 @@
                 }
 
                 try {
-                    await DB.query(`UPDATE todo_list_item SET
-                        title = '${this.escapeSQL(newTitle)}',
-                        notes = '${this.escapeSQL(newNotes)}',
+                    await ayb.query(`UPDATE todo_list_item SET
+                        title = '${AybClient.escapeSQL(newTitle)}',
+                        notes = '${AybClient.escapeSQL(newNotes)}',
                         updated_at = CURRENT_TIMESTAMP
                         WHERE id = ${todoId}`);
 
@@ -3058,7 +2935,7 @@
 
             async saveNotes(todoId, notes) {
                 try {
-                    await DB.query(`UPDATE todo_list_item SET notes = '${this.escapeSQL(notes)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${todoId}`);
+                    await ayb.query(`UPDATE todo_list_item SET notes = '${AybClient.escapeSQL(notes)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${todoId}`);
                 } catch (e) {
                     console.error('Save notes error:', e);
                 }
@@ -3101,11 +2978,11 @@
 
                 try {
                     // Shift existing items down to make room at position 0
-                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
+                    await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
 
-                    await DB.query(`
+                    await ayb.query(`
                         INSERT INTO todo_list_item (list_id, title, position, completed)
-                        VALUES (${this.currentListId}, '${this.escapeSQL(title)}', 0, 0)
+                        VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}', 0, 0)
                     `);
 
                     input.value = '';
@@ -3123,7 +3000,7 @@
                 }
 
                 try {
-                    await DB.query(`UPDATE todo_list_item SET
+                    await ayb.query(`UPDATE todo_list_item SET
                         completed = CASE WHEN completed = 1 THEN 0 ELSE 1 END,
                         completed_at = CASE WHEN completed = 1 THEN NULL ELSE CURRENT_TIMESTAMP END,
                         updated_at = CURRENT_TIMESTAMP
@@ -3140,7 +3017,7 @@
 
             async showScheduleModal(id, item) {
                 // Get current values from the item data
-                const result = await DB.query(`SELECT remind_at, recurrence_type, recurrence_value FROM todo_list_item WHERE id = ${id}`);
+                const result = await ayb.query(`SELECT remind_at, recurrence_type, recurrence_value FROM todo_list_item WHERE id = ${id}`);
                 const row = result.rows?.[0] || [];
                 const currentRemindAt = row[0] || '';
                 const currentRecurrenceType = row[1] || '';
@@ -3228,7 +3105,7 @@
 
             async clearSchedule(id) {
                 try {
-                    await DB.query(`UPDATE todo_list_item SET remind_at = NULL, recurrence_type = NULL, recurrence_value = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+                    await ayb.query(`UPDATE todo_list_item SET remind_at = NULL, recurrence_type = NULL, recurrence_value = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
                     this.closeModal();
                     await this.loadTodos();
                 } catch (e) {
@@ -3285,10 +3162,10 @@
                         remindAtUTC = `'${localDate.toISOString().slice(0, 19)}'`;
                     }
 
-                    const recTypeSQL = recurrenceType ? `'${this.escapeSQL(recurrenceType)}'` : 'NULL';
-                    const recValueSQL = recurrenceValue ? `'${this.escapeSQL(recurrenceValue)}'` : 'NULL';
+                    const recTypeSQL = recurrenceType ? `'${AybClient.escapeSQL(recurrenceType)}'` : 'NULL';
+                    const recValueSQL = recurrenceValue ? `'${AybClient.escapeSQL(recurrenceValue)}'` : 'NULL';
 
-                    await DB.query(`UPDATE todo_list_item SET
+                    await ayb.query(`UPDATE todo_list_item SET
                         remind_at = ${remindAtUTC},
                         recurrence_type = ${recTypeSQL},
                         recurrence_value = ${recValueSQL},
@@ -3307,7 +3184,7 @@
                 if (!confirm('Delete this item?')) return;
 
                 try {
-                    await DB.query(`DELETE FROM todo_list_item WHERE id = ${id}`);
+                    await ayb.query(`DELETE FROM todo_list_item WHERE id = ${id}`);
                     await this.loadTodos();
                 } catch (e) {
                     console.error('Delete todo error:', e);
@@ -3316,17 +3193,17 @@
 
             async duplicateTodo(id) {
                 try {
-                    const result = await DB.query(`SELECT list_id, title, notes, position FROM todo_list_item WHERE id = ${id}`);
+                    const result = await ayb.query(`SELECT list_id, title, notes, position FROM todo_list_item WHERE id = ${id}`);
                     if (!result.rows?.length) return;
                     const [listId, title, notes, position] = result.rows[0];
                     const newPosition = Number(position) + 1;
 
                     // Shift items below the original down to make room
-                    await DB.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${listId} AND position >= ${newPosition}`);
+                    await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${listId} AND position >= ${newPosition}`);
 
-                    await DB.query(`
+                    await ayb.query(`
                         INSERT INTO todo_list_item (list_id, title, notes, position, completed)
-                        VALUES (${listId}, '${this.escapeSQL(title)}', '${this.escapeSQL(notes || '')}', ${newPosition}, 0)
+                        VALUES (${listId}, '${AybClient.escapeSQL(title)}', '${AybClient.escapeSQL(notes || '')}', ${newPosition}, 0)
                     `);
 
                     await this.loadTodos();
@@ -3394,7 +3271,7 @@
                 }
 
                 try {
-                    await DB.query(`UPDATE todo_list SET name = '${this.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
+                    await ayb.query(`UPDATE todo_list SET name = '${AybClient.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
                     title.textContent = name;
                 } catch (e) {
                     console.error('Save list name error:', e);
@@ -3432,8 +3309,8 @@
 
             async confirmDeleteList() {
                 try {
-                    await DB.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
-                    await DB.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
+                    await ayb.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
+                    await ayb.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
                     this.closeModal();
                     this.goBack();
                 } catch (e) {
@@ -3445,7 +3322,7 @@
             showSettings() {
                 this.showModal(`
                     <h2>Settings</h2>
-                    <p style="color: var(--ink-light); margin-bottom: 20px; font-size: 0.9rem;">Connected to: ${this.escapeHtml(DB.config?.baseUrl || 'Unknown')}</p>
+                    <p style="color: var(--ink-light); margin-bottom: 20px; font-size: 0.9rem;">Connected to: ${this.escapeHtml(ayb?.getConnectionInfo()?.databaseUrl || 'Unknown')}</p>
                     <div class="modal-actions">
                         <button class="btn btn-secondary" onclick="App.disconnect()">Disconnect</button>
                         <button class="btn" onclick="App.closeModal()">Close</button>
@@ -3456,10 +3333,9 @@
             disconnect() {
                 if (!confirm('Disconnect from database? Your data will remain on the server.')) return;
 
-                DB.clearConfig();
+                ayb.disconnect();
+                ayb = null;
                 this.closeModal();
-                document.getElementById('ayb-url').value = '';
-                document.getElementById('ayb-token').value = '';
                 this.showScreen('setup');
             },
 
@@ -3475,11 +3351,6 @@
             escapeHtml(str) {
                 if (!str) return '';
                 return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            },
-
-            escapeSQL(str) {
-                if (!str) return '';
-                return str.replace(/'/g, "''");
             },
 
             formatShortDate(date) {
