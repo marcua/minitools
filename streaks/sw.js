@@ -1,8 +1,8 @@
-const CACHE_NAME = 'streaks-v25';
+const CACHE_NAME = 'streaks-v26';
 const ASSETS = [
     './',
     './index.html',
-    './ayb.js',
+    'https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.js',
     './manifest.json',
     './icon.svg'
 ];
