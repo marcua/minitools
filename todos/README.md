@@ -2,11 +2,11 @@
 
 ## Architecture Overview
 
-Single-file PWA at `index.html` with a service worker at `sw.js`. Uses the [ayb.js](https://github.com/marcua/ayb) client library (`ayb.js`, vendored) for OAuth authentication and database queries via the ayb REST API.
+Single-file PWA at `index.html` with a service worker at `sw.js`. Uses the [@aybdb/client](https://www.npmjs.com/package/@aybdb/client) library (loaded via jsDelivr CDN) for OAuth authentication and database queries via the ayb REST API.
 
 ## Key Components
 
-### ayb.js Library - Database and auth layer
+### @aybdb/client Library - Database and auth layer
 - `ayb` (global) - `AybOAuth` instance created via `restoreOAuth()` at startup
 - `ayb.query(sql)` - executes SQL against ayb API
 - `ayb.isConnected()` / `ayb.getConnectionInfo()` - connection state
@@ -59,13 +59,13 @@ _ayb_migrations (app_id, version, applied_at)
 
 ### 5. Migrations
 - Add new migrations to the `todoMigrations` array (top of script)
-- Migrations are run via `runMigrations(ayb, 'todos', todoMigrations)` from ayb.js
+- Migrations are run via `runMigrations(ayb, 'todos', todoMigrations)` from @aybdb/client
 - State tracked in `_ayb_migrations` table with `app_id = 'todos'`
 - Migrations are idempotent - errors for "duplicate column" or "already exists" are caught
 - Corrupted state (version > migrations.length) throws an error
 
 ### 6. Authentication
-- Uses OAuth 2.0 with PKCE via ayb.js `AybOAuth` class
+- Uses OAuth 2.0 with PKCE via @aybdb/client `AybOAuth` class
 - `restoreOAuth()` at startup handles both OAuth callback and session restore
 - `createServerSelectionModal()` shows server picker for new connections
 - Credentials stored in localStorage under key `ayb_Todos`
@@ -99,7 +99,7 @@ this.showModal(`
 
 ## Common Workflow
 
-1. Make changes to `index.html` (or `ayb.js` if updating the vendored library)
+1. Make changes to `index.html`
 2. Bump cache version in `sw.js`
 3. Commit and push to feature branch
 4. User refreshes twice (first loads new SW, second activates it)
