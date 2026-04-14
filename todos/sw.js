@@ -1,8 +1,8 @@
-const CACHE_NAME = 'todos-v31';
+const CACHE_NAME = 'todos-v32';
 const ASSETS = [
     './',
     './index.html',
-    'https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.js',
+    'https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js',
     './manifest.json',
     './icon.svg'
 ];
