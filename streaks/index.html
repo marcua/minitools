@@ -56,6 +56,10 @@
             padding: 0;
         }
 
+        dialog {
+            margin: auto;
+        }
+
         body {
             font-family: var(--font-body);
             background-color: var(--paper);
@@ -430,6 +434,13 @@
             flex: 1;
         }
 
+        .checklist-name-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
         .checklist-name {
             font-family: var(--font-body);
             font-weight: 500;
@@ -486,6 +497,56 @@
         .note-placeholder {
             color: var(--ink-faint);
             font-style: italic;
+        }
+
+        .note-edit-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            color: var(--ink-faint);
+            cursor: pointer;
+            border-radius: 4px;
+            flex-shrink: 0;
+            transition: color var(--duration-fast), background var(--duration-fast);
+        }
+
+        .note-edit-icon:hover {
+            color: var(--signal);
+            background: var(--paper-warm);
+        }
+
+        .note-edit-icon svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .note-inline-editor {
+            margin-top: 12px;
+        }
+
+        .note-inline-editor textarea {
+            margin-bottom: 8px;
+            min-height: 60px;
+            background: var(--paper-warm);
+            font-size: 0.875rem;
+        }
+
+        .note-inline-editor textarea::placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        .note-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .note-actions .btn {
+            padding: 6px 12px;
+            font-size: 13px;
+            min-height: 32px;
         }
 
         /* Streak visualization */
@@ -570,6 +631,11 @@
         .streak-cell.missed {
             background: var(--paper-warm);
             border: 1px dashed var(--border);
+        }
+
+        .streak-cell.has-note {
+            background: var(--signal-light);
+            border: 1px solid var(--signal);
         }
 
         .streak-cell.today {
@@ -1024,11 +1090,16 @@
         /* Setup screen specifics */
         #setup-screen .container {
             max-width: 400px;
+            text-align: center;
         }
 
         #setup-screen p {
             color: var(--ink-secondary);
             margin-bottom: 1.5rem;
+        }
+
+        #setup-screen .btn-group {
+            justify-content: center;
         }
     </style>
 </head>
@@ -1091,17 +1162,9 @@
             <h1>Streaks</h1>
             <p>Connect to your ayb database to get started.</p>
 
-            <form id="setup-form">
-                <label for="db-url">Database URL</label>
-                <input type="url" id="db-url" placeholder="https://host/entity/database" required>
-
-                <label for="api-token">API token</label>
-                <input type="text" id="api-token" placeholder="Your API token" required>
-
-                <div class="btn-group btn-group-right">
-                    <button type="submit" class="btn">Connect</button>
-                </div>
-            </form>
+            <div class="btn-group">
+                <button class="btn" id="setup-btn">Connect</button>
+            </div>
         </div>
     </div>
 
@@ -1230,15 +1293,11 @@
         <div id="popover-content"></div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js"></script>
     <script>
         // ============ Configuration ============
         const APP_NAME = 'streaks';
-
-        // ============ SQL Utilities ============
-        function escapeSQL(str) {
-            if (str === null || str === undefined) return '';
-            return String(str).replace(/'/g, "''");
-        }
+        let ayb = null;
 
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
@@ -1329,74 +1388,8 @@
             return Math.floor(diff / (1000 * 60 * 60 * 24));
         }
 
-        // ============ Database ============
-        const DB = {
-            config: null,
-
-            init() {
-                const saved = localStorage.getItem(`${APP_NAME}_config`);
-                if (saved) {
-                    this.config = JSON.parse(saved);
-                    return true;
-                }
-                return false;
-            },
-
-            saveConfig(url, token) {
-                const urlObj = new URL(url);
-                const pathParts = urlObj.pathname.split('/').filter(p => p);
-
-                let baseUrl, entity, database;
-
-                if (pathParts.length >= 3 && pathParts[0] === 'v1') {
-                    // Format: https://host/v1/entity/database
-                    entity = pathParts[1];
-                    database = pathParts[2];
-                    baseUrl = urlObj.origin;
-                } else if (pathParts.length >= 2) {
-                    // Format: https://host/entity/database
-                    entity = pathParts[0];
-                    database = pathParts[1];
-                    baseUrl = urlObj.origin;
-                } else {
-                    throw new Error('Invalid URL format. Expected: https://host/entity/database');
-                }
-
-                this.config = { baseUrl, entity, database, token };
-                localStorage.setItem(`${APP_NAME}_config`, JSON.stringify(this.config));
-            },
-
-            clearConfig() {
-                this.config = null;
-                localStorage.removeItem(`${APP_NAME}_config`);
-            },
-
-            async query(sql) {
-                if (!this.config) throw new Error('Database not configured');
-
-                const { baseUrl, entity, database, token } = this.config;
-                const url = `${baseUrl}/v1/${entity}/${database}/query`;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'text/plain'
-                    },
-                    body: sql
-                });
-
-                if (!response.ok) {
-                    const text = await response.text();
-                    throw new Error(`Query failed: ${text}`);
-                }
-
-                return response.json();
-            }
-        };
-
         // ============ Migrations ============
-        const migrations = [
+        const streaksMigrations = [
             // v0: Initial schema
             `CREATE TABLE IF NOT EXISTS goals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1418,46 +1411,15 @@
                 UNIQUE(goal_id, date)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_completions_date ON completions(date)`,
-            `CREATE INDEX IF NOT EXISTS idx_completions_goal ON completions(goal_id)`
+            `CREATE INDEX IF NOT EXISTS idx_completions_goal ON completions(goal_id)`,
+            // v4: Add checked column to allow notes without completion
+            `ALTER TABLE completions ADD COLUMN checked INTEGER NOT NULL DEFAULT 1`
         ];
-
-        async function runMigrations() {
-            // Create migrations table
-            await DB.query(`CREATE TABLE IF NOT EXISTS _migrations (
-                version INTEGER PRIMARY KEY,
-                applied_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )`);
-
-            // Get current version
-            const result = await DB.query('SELECT MAX(version) as version FROM _migrations');
-            let currentVersion = parseInt(result.rows?.[0]?.[0], 10) || 0;
-
-            // Auto-repair if version is invalid
-            if (currentVersion > migrations.length) {
-                await DB.query('DELETE FROM _migrations');
-                currentVersion = 0;
-            }
-
-            // Run pending migrations
-            for (let i = currentVersion; i < migrations.length; i++) {
-                try {
-                    await DB.query(migrations[i]);
-                } catch (e) {
-                    // Ignore "already exists" errors for idempotency
-                    const msg = e.message.toLowerCase();
-                    if (!msg.includes('duplicate column') && !msg.includes('already exists')) {
-                        throw e;
-                    }
-                }
-                // Use INSERT OR REPLACE to handle re-running migrations
-                await DB.query(`INSERT OR REPLACE INTO _migrations (version) VALUES (${i + 1})`);
-            }
-        }
 
         // ============ Goals CRUD ============
         async function getGoals(includeArchived = false) {
             const where = includeArchived ? '' : 'WHERE archived = 0';
-            const result = await DB.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
+            const result = await ayb.query(`SELECT * FROM goals ${where} ORDER BY archived, position, id`);
             return result.rows ? result.rows.map(row => ({
                 id: Number(row[0]),
                 name: row[1],
@@ -1470,31 +1432,31 @@
         }
 
         async function createGoal(name, frequency) {
-            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPosResult = await ayb.query('SELECT MAX(position) FROM goals WHERE archived = 0');
             const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
 
-            await DB.query(`INSERT INTO goals (name, frequency, position) VALUES (
-                '${escapeSQL(name)}', '${escapeSQL(frequency)}', ${maxPos + 1}
+            await ayb.query(`INSERT INTO goals (name, frequency, position) VALUES (
+                '${AybClient.escapeSQL(name)}', '${AybClient.escapeSQL(frequency)}', ${maxPos + 1}
             )`);
         }
 
         async function updateGoal(id, name, frequency) {
-            await DB.query(`UPDATE goals SET
-                name = '${escapeSQL(name)}',
-                frequency = '${escapeSQL(frequency)}',
+            await ayb.query(`UPDATE goals SET
+                name = '${AybClient.escapeSQL(name)}',
+                frequency = '${AybClient.escapeSQL(frequency)}',
                 updated_at = CURRENT_TIMESTAMP
                 WHERE id = ${id}`);
         }
 
         async function archiveGoal(id) {
-            await DB.query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
+            await ayb.query(`UPDATE goals SET archived = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
         }
 
         async function unarchiveGoal(id) {
-            const maxPosResult = await DB.query('SELECT MAX(position) FROM goals WHERE archived = 0');
+            const maxPosResult = await ayb.query('SELECT MAX(position) FROM goals WHERE archived = 0');
             const maxPos = (maxPosResult.rows && maxPosResult.rows[0][0]) || 0;
 
-            await DB.query(`UPDATE goals SET
+            await ayb.query(`UPDATE goals SET
                 archived = 0,
                 position = ${maxPos + 1},
                 updated_at = CURRENT_TIMESTAMP
@@ -1503,14 +1465,14 @@
 
         async function reorderGoals(orderedIds) {
             for (let i = 0; i < orderedIds.length; i++) {
-                await DB.query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
+                await ayb.query(`UPDATE goals SET position = ${i} WHERE id = ${orderedIds[i]}`);
             }
         }
 
         // ============ Completions CRUD ============
         async function getCompletionsForDate(dateStr) {
             const utcDate = localToUTC(dateStr);
-            const result = await DB.query(`SELECT c.*, g.name, g.frequency FROM completions c
+            const result = await ayb.query(`SELECT c.*, g.name, g.frequency FROM completions c
                 JOIN goals g ON c.goal_id = g.id
                 WHERE c.date = '${utcDate}'`);
             return result.rows ? result.rows.map(row => ({
@@ -1520,54 +1482,88 @@
                 note: row[3],
                 created_at: row[4],
                 updated_at: row[5],
-                goal_name: row[6],
-                goal_frequency: row[7]
+                checked: Number(row[6]),
+                goal_name: row[7],
+                goal_frequency: row[8]
             })) : [];
         }
 
         async function toggleCompletion(goalId, dateStr, note = null) {
             const utcDate = localToUTC(dateStr);
 
-            // Check if already completed
-            const existing = await DB.query(`SELECT id FROM completions
+            // Check if checked completion exists
+            const existing = await ayb.query(`SELECT id, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
 
             if (existing.rows && existing.rows.length > 0) {
-                // Delete completion
-                await DB.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
-                return false;
+                const isChecked = Number(existing.rows[0][1]);
+                if (isChecked) {
+                    // Unchecking: delete the completion entirely
+                    await ayb.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    return false;
+                } else {
+                    // Has note but unchecked, now checking it
+                    await ayb.query(`UPDATE completions SET checked = 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    return true;
+                }
             } else {
-                // Create completion
-                const noteValue = note ? `'${escapeSQL(note)}'` : 'NULL';
-                await DB.query(`INSERT INTO completions (goal_id, date, note)
-                    VALUES (${goalId}, '${utcDate}', ${noteValue})`);
+                // Create new checked completion
+                const noteValue = note ? `'${AybClient.escapeSQL(note)}'` : 'NULL';
+                await ayb.query(`INSERT INTO completions (goal_id, date, note, checked)
+                    VALUES (${goalId}, '${utcDate}', ${noteValue}, 1)`);
                 return true;
             }
         }
 
         async function updateCompletionNote(goalId, dateStr, note) {
             const utcDate = localToUTC(dateStr);
-            await DB.query(`UPDATE completions SET
-                note = '${escapeSQL(note)}',
-                updated_at = CURRENT_TIMESTAMP
+            // Check if record exists
+            const existing = await ayb.query(`SELECT id, checked FROM completions
                 WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+
+            if (existing.rows && existing.rows.length > 0) {
+                // Update existing record
+                if (note) {
+                    await ayb.query(`UPDATE completions SET
+                        note = '${AybClient.escapeSQL(note)}',
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                } else {
+                    // If clearing note and not checked, delete record
+                    const isChecked = Number(existing.rows[0][1]);
+                    if (!isChecked) {
+                        await ayb.query(`DELETE FROM completions WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    } else {
+                        await ayb.query(`UPDATE completions SET
+                            note = NULL,
+                            updated_at = CURRENT_TIMESTAMP
+                            WHERE goal_id = ${goalId} AND date = '${utcDate}'`);
+                    }
+                }
+            } else if (note) {
+                // Create new record with note (unchecked)
+                await ayb.query(`INSERT INTO completions (goal_id, date, note, checked)
+                    VALUES (${goalId}, '${utcDate}', '${AybClient.escapeSQL(note)}', 0)`);
+            }
         }
 
         async function getCompletionsForYear(year) {
             const startDate = `${year}-01-01`;
             const endDate = `${year}-12-31`;
-            const result = await DB.query(`SELECT goal_id, date, note FROM completions
+            const result = await ayb.query(`SELECT goal_id, date, note, checked FROM completions
                 WHERE date >= '${startDate}' AND date <= '${endDate}'
                 ORDER BY date`);
             return result.rows ? result.rows.map(row => ({
                 goal_id: Number(row[0]),
                 date: row[1],
-                note: row[2]
+                note: row[2],
+                checked: Number(row[3])
             })) : [];
         }
 
         async function getYearsWithData() {
-            const result = await DB.query(`SELECT DISTINCT substr(date, 1, 4) as year
+            const result = await ayb.query(`SELECT DISTINCT substr(date, 1, 4) as year
                 FROM completions ORDER BY year DESC`);
             return result.rows ? result.rows.map(row => parseInt(row[0])) : [];
         }
@@ -1593,22 +1589,16 @@
         }
 
         // ============ Setup Screen ============
-        document.getElementById('setup-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const url = document.getElementById('db-url').value.trim();
-            const token = document.getElementById('api-token').value.trim();
-
-            try {
-                DB.saveConfig(url, token);
-                await tryConnect();
-            } catch (e) {
-                showError(e.message);
-            }
+        document.getElementById('setup-btn').addEventListener('click', () => {
+            createServerSelectionModal({
+                appName: 'Streaks',
+                queryPermissionLevel: 'read-write',
+            });
         });
 
         async function tryConnect() {
             try {
-                await runMigrations();
+                await runMigrations(ayb, 'streaks', streaksMigrations);
                 await handleRoute();
             } catch (e) {
                 console.error('Connection error:', e);
@@ -1635,9 +1625,8 @@
         });
 
         document.getElementById('change-db-btn').addEventListener('click', () => {
-            // Clear form fields so user can enter new credentials
-            document.getElementById('db-url').value = '';
-            document.getElementById('api-token').value = '';
+            ayb.disconnect();
+            ayb = null;
             showScreen('setup-screen');
         });
 
@@ -1677,21 +1666,32 @@
 
             container.innerHTML = applicableGoals.map(goal => {
                 const completion = completions.find(c => c.goal_id === goal.id);
-                const isCompleted = !!completion;
+                const isChecked = completion?.checked === 1;
+                const noteValue = completion?.note || '';
 
                 return `
-                    <div class="checklist-item ${isCompleted ? 'completed' : ''}" data-goal-id="${goal.id}">
-                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})" tabindex="0" role="checkbox" aria-checked="${isCompleted}" aria-label="${escapeHtml(goal.name)}">
-                            ${isCompleted ? '<svg><use href="#icon-check"/></svg>' : ''}
+                    <div class="checklist-item ${isChecked ? 'completed' : ''}" data-goal-id="${goal.id}">
+                        <div class="checklist-checkbox" onclick="toggleGoal(${goal.id})" tabindex="0" role="checkbox" aria-checked="${isChecked}" aria-label="${escapeHtml(goal.name)}">
+                            ${isChecked ? '<svg><use href="#icon-check"/></svg>' : ''}
                         </div>
                         <div class="checklist-content">
-                            <div class="checklist-name">${escapeHtml(goal.name)}</div>
-                            <div class="checklist-frequency">${goal.frequency}</div>
-                            ${isCompleted ? `
-                                <div class="note-display" onclick="editNote(${goal.id})">
-                                    ${completion.note ? renderMarkdown(completion.note) : '<span class="note-placeholder">Add note...</span>'}
+                            <div class="checklist-name-row">
+                                <div class="checklist-name">${escapeHtml(goal.name)}</div>
+                                <div class="note-edit-icon" onclick="startEditNote(${goal.id})" title="Add note">
+                                    <svg><use href="#icon-edit"/></svg>
                                 </div>
-                            ` : ''}
+                            </div>
+                            <div class="checklist-frequency">${goal.frequency}</div>
+                            <div class="note-display" onclick="startEditNote(${goal.id})" data-goal-id="${goal.id}" style="${noteValue ? '' : 'display: none;'}">
+                                ${noteValue ? renderMarkdown(noteValue) : ''}
+                            </div>
+                            <div class="note-inline-editor" data-goal-id="${goal.id}" style="display: none;">
+                                <textarea placeholder="Add note (markdown supported)..." data-original="${escapeHtml(noteValue)}">${escapeHtml(noteValue)}</textarea>
+                                <div class="note-actions" style="display: none;">
+                                    <button class="btn btn-secondary" onclick="cancelEditNote(${goal.id})">Cancel</button>
+                                    <button class="btn" onclick="saveNote(${goal.id})">Save</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1704,14 +1704,53 @@
             await refreshStreakCharts();
         };
 
-        window.editNote = async function(goalId) {
-            const completion = completions.find(c => c.goal_id === goalId);
-            const note = prompt('Note (markdown supported):', completion?.note || '');
-            if (note !== null) {
-                await updateCompletionNote(goalId, currentDate, note);
+        window.startEditNote = function(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
+            if (editor) {
+                if (display) display.style.display = 'none';
+                editor.style.display = 'block';
+                const textarea = editor.querySelector('textarea');
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                setupNoteInputListener(goalId);
+            }
+        };
+
+        window.cancelEditNote = function(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            const display = document.querySelector(`.note-display[data-goal-id="${goalId}"]`);
+            if (editor) {
+                const textarea = editor.querySelector('textarea');
+                const originalNote = textarea.dataset.original || '';
+                textarea.value = originalNote;
+                editor.querySelector('.note-actions').style.display = 'none';
+                editor.style.display = 'none';
+                // Only show display if there's a note
+                if (display) display.style.display = originalNote ? 'block' : 'none';
+            }
+        };
+
+        window.saveNote = async function(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            if (editor) {
+                const textarea = editor.querySelector('textarea');
+                await updateCompletionNote(goalId, currentDate, textarea.value);
                 await refreshChecklist();
             }
         };
+
+        function setupNoteInputListener(goalId) {
+            const editor = document.querySelector(`.note-inline-editor[data-goal-id="${goalId}"]`);
+            if (editor) {
+                const textarea = editor.querySelector('textarea');
+                const actions = editor.querySelector('.note-actions');
+                textarea.oninput = function() {
+                    const hasChanged = textarea.value !== (textarea.dataset.original || '');
+                    actions.style.display = hasChanged ? 'flex' : 'none';
+                };
+            }
+        }
 
         // Date picker
         document.getElementById('date-picker').addEventListener('change', (e) => {
@@ -1732,6 +1771,23 @@
             date.setDate(date.getDate() + 1);
             currentDate = getLocalDate(date);
             refreshChecklist();
+        });
+
+        // Auto-navigate to current day when tab regains focus after date change
+        let lastKnownDate = getLocalDate();
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                const today = getLocalDate();
+                if (today !== lastKnownDate) {
+                    lastKnownDate = today;
+                    // Only auto-navigate if we're on the main screen
+                    if (document.getElementById('main-screen').classList.contains('active')) {
+                        currentDate = today;
+                        await refreshChecklist();
+                        await refreshStreakCharts();
+                    }
+                }
+            }
         });
 
         // ============ Streak Charts ============
@@ -1798,68 +1854,78 @@
                     const isFuture = date > today;
                     const isToday = dateStr === todayStr;
                     const completion = completionMap[utcDate];
-                    const isFilled = !!completion;
+                    const isChecked = completion?.checked === 1;
+                    const hasNote = !!completion?.note;
 
                     if (!isFuture) total++;
-                    if (isFilled) count++;
+                    if (isChecked) count++;
 
                     const noteAttr = completion?.note ? `data-note="${escapeHtml(completion.note)}"` : '';
                     const classes = [
                         'streak-cell',
-                        isFilled ? 'filled' : '',
-                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : ''),
+                        isChecked ? 'filled' : '',
+                        !isChecked && hasNote ? 'has-note' : '',
+                        isFuture ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : ''),
                         isToday ? 'today' : ''
                     ].filter(Boolean).join(' ');
 
+                    const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
                     cells += `<div class="${classes}" data-date="${dateStr}" ${noteAttr}
                         onclick="showStreakPopover(event, this)"
                         title="${dateStr}"
-                        aria-label="${dateStr}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
+                        aria-label="${dateStr}: ${statusLabel}"></div>`;
                 }
             } else if (goal.frequency === 'weekly') {
                 // 52 cells
                 for (let week = 1; week <= 52; week++) {
-                    const weekDate = new Date(year, 0, (week - 1) * 7 + 4);
+                    const weekDate = new Date(year, 0, (week - 1) * 7 + 1);
                     const isFuture = weekDate > today;
 
                     // Check if any date in this week is completed, collect notes
-                    let isFilled = false;
+                    let isChecked = false;
+                    let hasNote = false;
                     let weekNotes = [];
                     for (let d = 0; d < 7; d++) {
                         const checkDate = new Date(year, 0, (week - 1) * 7 + d + 1);
                         const utcDate = localToUTC(getLocalDate(checkDate));
                         const completion = completionMap[utcDate];
                         if (completion) {
-                            isFilled = true;
-                            if (completion.note) weekNotes.push(completion.note);
+                            if (completion.checked === 1) isChecked = true;
+                            if (completion.note) {
+                                hasNote = true;
+                                weekNotes.push(completion.note);
+                            }
                         }
                     }
 
                     if (!isFuture) total++;
-                    if (isFilled) count++;
+                    if (isChecked) count++;
 
                     const weekStart = new Date(year, 0, (week - 1) * 7 + 1);
                     const weekLabel = `Week ${week} (${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
                     const noteAttr = weekNotes.length > 0 ? `data-note="${escapeHtml(weekNotes.join('\n\n'))}"` : '';
                     const classes = [
                         'streak-cell',
-                        isFilled ? 'filled' : '',
-                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : '')
+                        isChecked ? 'filled' : '',
+                        !isChecked && hasNote ? 'has-note' : '',
+                        isFuture && !isChecked ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
                     ].filter(Boolean).join(' ');
 
+                    const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
                     cells += `<div class="${classes}" data-date="${weekLabel}" ${noteAttr}
                         onclick="showStreakPopover(event, this)"
                         title="${weekLabel}"
-                        aria-label="${weekLabel}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
+                        aria-label="${weekLabel}: ${statusLabel}"></div>`;
                 }
             } else {
                 // Monthly - 12 cells
                 for (let month = 0; month < 12; month++) {
-                    const monthDate = new Date(year, month, 15);
+                    const monthDate = new Date(year, month, 1);
                     const isFuture = monthDate > today;
 
                     // Check if any date in this month is completed, collect notes
-                    let isFilled = false;
+                    let isChecked = false;
+                    let hasNote = false;
                     let monthNotes = [];
                     const daysInMonth = new Date(year, month + 1, 0).getDate();
                     for (let d = 1; d <= daysInMonth; d++) {
@@ -1867,26 +1933,31 @@
                         const utcDate = localToUTC(getLocalDate(checkDate));
                         const completion = completionMap[utcDate];
                         if (completion) {
-                            isFilled = true;
-                            if (completion.note) monthNotes.push(completion.note);
+                            if (completion.checked === 1) isChecked = true;
+                            if (completion.note) {
+                                hasNote = true;
+                                monthNotes.push(completion.note);
+                            }
                         }
                     }
 
                     if (!isFuture) total++;
-                    if (isFilled) count++;
+                    if (isChecked) count++;
 
                     const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                     const noteAttr = monthNotes.length > 0 ? `data-note="${escapeHtml(monthNotes.join('\n\n'))}"` : '';
                     const classes = [
                         'streak-cell',
-                        isFilled ? 'filled' : '',
-                        isFuture ? 'future' : (!isFilled && !isFuture ? 'missed' : '')
+                        isChecked ? 'filled' : '',
+                        !isChecked && hasNote ? 'has-note' : '',
+                        isFuture && !isChecked ? 'future' : (!isChecked && !hasNote && !isFuture ? 'missed' : '')
                     ].filter(Boolean).join(' ');
 
+                    const statusLabel = isChecked ? 'completed' : (hasNote ? 'note only' : (isFuture ? 'future' : 'not completed'));
                     cells += `<div class="${classes}" data-date="${monthName}" ${noteAttr}
                         onclick="showStreakPopover(event, this)"
                         title="${monthName}"
-                        aria-label="${monthName}: ${isFilled ? 'completed' : (isFuture ? 'future' : 'not completed')}"></div>`;
+                        aria-label="${monthName}: ${statusLabel}"></div>`;
                 }
             }
 
@@ -1908,6 +1979,7 @@
             const date = element.dataset.date;
             const note = element.dataset.note;
             const isFilled = element.classList.contains('filled');
+            const hasNoteOnly = element.classList.contains('has-note');
 
             const popover = document.getElementById('streak-popover');
             const dateEl = document.getElementById('popover-date');
@@ -1915,8 +1987,9 @@
 
             dateEl.textContent = date;
 
-            if (isFilled && note) {
-                contentEl.innerHTML = `<div class="streak-popover-note">${renderMarkdown(note)}</div>`;
+            if (note) {
+                const prefix = hasNoteOnly ? '<div class="streak-popover-empty">Not completed</div>' : '';
+                contentEl.innerHTML = `${prefix}<div class="streak-popover-note">${renderMarkdown(note)}</div>`;
             } else if (isFilled) {
                 contentEl.innerHTML = `<div class="streak-popover-empty">Completed (no note)</div>`;
             } else if (element.classList.contains('future')) {
@@ -2358,8 +2431,24 @@
                 }
             }
 
-            // Check for stored config
-            if (DB.init()) {
+            // Migrate localStorage key from old format
+            const oldConfig = localStorage.getItem(`${APP_NAME}_config`);
+            if (oldConfig && !localStorage.getItem('ayb_Streaks')) {
+                localStorage.setItem('ayb_Streaks', oldConfig);
+                localStorage.removeItem(`${APP_NAME}_config`);
+            }
+
+            // Restore OAuth session or handle callback
+            try {
+                ayb = await restoreOAuth({
+                    appName: 'Streaks',
+                    queryPermissionLevel: 'read-write',
+                });
+            } catch (e) {
+                console.error('OAuth restore error:', e);
+            }
+
+            if (ayb && ayb.isConnected()) {
                 // Restore last hash before connecting
                 const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
                 if (lastHash) {
