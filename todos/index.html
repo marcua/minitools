@@ -2152,8 +2152,64 @@
                 return false;
             },
 
+            captureEditState() {
+                const snapshots = [];
+                document.querySelectorAll('.todo-item').forEach(item => {
+                    const editForm = item.querySelector('.todo-edit-form');
+                    if (!editForm || editForm.classList.contains('hidden')) return;
+
+                    const titleInput = editForm.querySelector('.title-edit-input');
+                    const textarea = editForm.querySelector('.notes-textarea');
+                    const active = document.activeElement;
+                    let focusedField = null;
+                    if (active === titleInput) focusedField = 'title';
+                    else if (active === textarea) focusedField = 'notes';
+
+                    snapshots.push({
+                        id: parseInt(item.dataset.id),
+                        titleValue: titleInput.value,
+                        notesValue: textarea.value,
+                        focusedField,
+                        titleSelStart: titleInput.selectionStart,
+                        titleSelEnd: titleInput.selectionEnd,
+                        notesSelStart: textarea.selectionStart,
+                        notesSelEnd: textarea.selectionEnd,
+                        notesScrollTop: textarea.scrollTop,
+                    });
+                });
+                return snapshots;
+            },
+
+            restoreEditState(snapshots) {
+                snapshots.forEach(snap => {
+                    const item = document.querySelector(`.todo-item[data-id="${snap.id}"]`);
+                    if (!item) return;
+
+                    this.toggleEditMode(item, snap.focusedField || 'title');
+
+                    const editForm = item.querySelector('.todo-edit-form');
+                    if (!editForm) return;
+                    const titleInput = editForm.querySelector('.title-edit-input');
+                    const textarea = editForm.querySelector('.notes-textarea');
+
+                    titleInput.value = snap.titleValue;
+                    textarea.value = snap.notesValue;
+                    textarea.scrollTop = snap.notesScrollTop;
+
+                    if (snap.focusedField === 'title') {
+                        titleInput.focus();
+                        titleInput.setSelectionRange(snap.titleSelStart, snap.titleSelEnd);
+                    } else if (snap.focusedField === 'notes') {
+                        textarea.focus();
+                        textarea.setSelectionRange(snap.notesSelStart, snap.notesSelEnd);
+                    }
+                });
+            },
+
             async loadTodos(loadMoreCompleted = false) {
                 if (!this.currentListId) return;
+
+                const editSnapshots = this.captureEditState();
 
                 try {
                     const listResult = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
@@ -2212,6 +2268,7 @@
 
                     this.completedOffset += completedTodos.length;
                     this.renderTodos(this.allTodos);
+                    this.restoreEditState(editSnapshots);
                 } catch (e) {
                     console.error('Load todos error:', e);
                 }
