@@ -2223,9 +2223,12 @@
                         this.completedOffset = 0;
                     }
 
-                    // Build search clause if searching
+                    // Build search clause if searching; pin any items currently being edited
+                    // so search filters can't drop them out of the DOM and lose pending changes.
+                    const editingIds = editSnapshots.map(s => s.id).filter(Number.isInteger);
+                    const pinClause = editingIds.length ? ` OR id IN (${editingIds.join(',')})` : '';
                     const searchClause = this.searchTerm
-                        ? ` AND (LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')`
+                        ? ` AND ((LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')${pinClause})`
                         : '';
 
                     // Load active items (not completed) - no pagination needed
