@@ -2152,8 +2152,84 @@
                 return false;
             },
 
+            captureNotesState() {
+                const snapshots = [];
+                document.querySelectorAll('.todo-item').forEach(item => {
+                    const notesEl = item.querySelector('.todo-notes');
+                    if (!notesEl || !notesEl.classList.contains('expanded')) return;
+
+                    const id = parseInt(item.dataset.id);
+                    const editForm = notesEl.querySelector('.todo-edit-form');
+                    const isEditing = editForm && !editForm.classList.contains('hidden');
+
+                    if (!isEditing) {
+                        snapshots.push({ id, editing: false });
+                        return;
+                    }
+
+                    const titleInput = editForm.querySelector('.title-edit-input');
+                    const textarea = editForm.querySelector('.notes-textarea');
+                    const active = document.activeElement;
+                    let focusedField = null;
+                    if (active === titleInput) focusedField = 'title';
+                    else if (active === textarea) focusedField = 'notes';
+
+                    snapshots.push({
+                        id,
+                        editing: true,
+                        titleValue: titleInput.value,
+                        notesValue: textarea.value,
+                        focusedField,
+                        titleSelStart: titleInput.selectionStart,
+                        titleSelEnd: titleInput.selectionEnd,
+                        notesSelStart: textarea.selectionStart,
+                        notesSelEnd: textarea.selectionEnd,
+                        notesScrollTop: textarea.scrollTop,
+                    });
+                });
+                return snapshots;
+            },
+
+            restoreNotesState(snapshots) {
+                snapshots.forEach(snap => {
+                    const item = document.querySelector(`.todo-item[data-id="${snap.id}"]`);
+                    if (!item) return;
+
+                    const notesEl = item.querySelector('.todo-notes');
+                    if (notesEl) notesEl.classList.add('expanded');
+                    const notesBtn = item.querySelector('.todo-actions [data-action="notes"]');
+                    if (notesBtn) {
+                        notesBtn.classList.add('expanded');
+                        notesBtn.title = 'Minimize';
+                    }
+
+                    if (!snap.editing) return;
+
+                    this.toggleEditMode(item, snap.focusedField || 'title');
+
+                    const editForm = item.querySelector('.todo-edit-form');
+                    if (!editForm) return;
+                    const titleInput = editForm.querySelector('.title-edit-input');
+                    const textarea = editForm.querySelector('.notes-textarea');
+
+                    titleInput.value = snap.titleValue;
+                    textarea.value = snap.notesValue;
+                    textarea.scrollTop = snap.notesScrollTop;
+
+                    if (snap.focusedField === 'title') {
+                        titleInput.focus();
+                        titleInput.setSelectionRange(snap.titleSelStart, snap.titleSelEnd);
+                    } else if (snap.focusedField === 'notes') {
+                        textarea.focus();
+                        textarea.setSelectionRange(snap.notesSelStart, snap.notesSelEnd);
+                    }
+                });
+            },
+
             async loadTodos(loadMoreCompleted = false) {
                 if (!this.currentListId) return;
+
+                const notesSnapshots = this.captureNotesState();
 
                 try {
                     const listResult = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
@@ -2167,9 +2243,12 @@
                         this.completedOffset = 0;
                     }
 
-                    // Build search clause if searching
+                    // Build search clause if searching; pin any items currently being edited
+                    // so search filters can't drop them out of the DOM and lose pending changes.
+                    const editingIds = notesSnapshots.filter(s => s.editing).map(s => s.id).filter(Number.isInteger);
+                    const pinClause = editingIds.length ? ` OR id IN (${editingIds.join(',')})` : '';
                     const searchClause = this.searchTerm
-                        ? ` AND (LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')`
+                        ? ` AND ((LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')${pinClause})`
                         : '';
 
                     // Load active items (not completed) - no pagination needed
@@ -2212,6 +2291,7 @@
 
                     this.completedOffset += completedTodos.length;
                     this.renderTodos(this.allTodos);
+                    this.restoreNotesState(notesSnapshots);
                 } catch (e) {
                     console.error('Load todos error:', e);
                 }
