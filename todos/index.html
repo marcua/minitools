@@ -2185,6 +2185,16 @@
                     const item = document.querySelector(`.todo-item[data-id="${snap.id}"]`);
                     if (!item) return;
 
+                    // Re-expand the notes container; toggleEditMode only swaps the inner
+                    // form/view, it doesn't touch .expanded on the surrounding .todo-notes.
+                    const notesEl = item.querySelector('.todo-notes');
+                    if (notesEl) notesEl.classList.add('expanded');
+                    const notesBtn = item.querySelector('.todo-actions [data-action="notes"]');
+                    if (notesBtn) {
+                        notesBtn.classList.add('expanded');
+                        notesBtn.title = 'Minimize';
+                    }
+
                     this.toggleEditMode(item, snap.focusedField || 'title');
 
                     const editForm = item.querySelector('.todo-edit-form');
