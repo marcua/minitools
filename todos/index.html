@@ -2152,11 +2152,20 @@
                 return false;
             },
 
-            captureEditState() {
+            captureNotesState() {
                 const snapshots = [];
                 document.querySelectorAll('.todo-item').forEach(item => {
-                    const editForm = item.querySelector('.todo-edit-form');
-                    if (!editForm || editForm.classList.contains('hidden')) return;
+                    const notesEl = item.querySelector('.todo-notes');
+                    if (!notesEl || !notesEl.classList.contains('expanded')) return;
+
+                    const id = parseInt(item.dataset.id);
+                    const editForm = notesEl.querySelector('.todo-edit-form');
+                    const isEditing = editForm && !editForm.classList.contains('hidden');
+
+                    if (!isEditing) {
+                        snapshots.push({ id, editing: false });
+                        return;
+                    }
 
                     const titleInput = editForm.querySelector('.title-edit-input');
                     const textarea = editForm.querySelector('.notes-textarea');
@@ -2166,7 +2175,8 @@
                     else if (active === textarea) focusedField = 'notes';
 
                     snapshots.push({
-                        id: parseInt(item.dataset.id),
+                        id,
+                        editing: true,
                         titleValue: titleInput.value,
                         notesValue: textarea.value,
                         focusedField,
@@ -2180,13 +2190,11 @@
                 return snapshots;
             },
 
-            restoreEditState(snapshots) {
+            restoreNotesState(snapshots) {
                 snapshots.forEach(snap => {
                     const item = document.querySelector(`.todo-item[data-id="${snap.id}"]`);
                     if (!item) return;
 
-                    // Re-expand the notes container; toggleEditMode only swaps the inner
-                    // form/view, it doesn't touch .expanded on the surrounding .todo-notes.
                     const notesEl = item.querySelector('.todo-notes');
                     if (notesEl) notesEl.classList.add('expanded');
                     const notesBtn = item.querySelector('.todo-actions [data-action="notes"]');
@@ -2194,6 +2202,8 @@
                         notesBtn.classList.add('expanded');
                         notesBtn.title = 'Minimize';
                     }
+
+                    if (!snap.editing) return;
 
                     this.toggleEditMode(item, snap.focusedField || 'title');
 
@@ -2219,7 +2229,7 @@
             async loadTodos(loadMoreCompleted = false) {
                 if (!this.currentListId) return;
 
-                const editSnapshots = this.captureEditState();
+                const notesSnapshots = this.captureNotesState();
 
                 try {
                     const listResult = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
@@ -2235,7 +2245,7 @@
 
                     // Build search clause if searching; pin any items currently being edited
                     // so search filters can't drop them out of the DOM and lose pending changes.
-                    const editingIds = editSnapshots.map(s => s.id).filter(Number.isInteger);
+                    const editingIds = notesSnapshots.filter(s => s.editing).map(s => s.id).filter(Number.isInteger);
                     const pinClause = editingIds.length ? ` OR id IN (${editingIds.join(',')})` : '';
                     const searchClause = this.searchTerm
                         ? ` AND ((LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')${pinClause})`
@@ -2281,7 +2291,7 @@
 
                     this.completedOffset += completedTodos.length;
                     this.renderTodos(this.allTodos);
-                    this.restoreEditState(editSnapshots);
+                    this.restoreNotesState(notesSnapshots);
                 } catch (e) {
                     console.error('Load todos error:', e);
                 }
