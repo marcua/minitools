@@ -21,3 +21,4 @@ See [README.md](./README.md) for full developer guide including:
 - Use `AybClient.escapeSQL()` for SQL string escaping (static method from ayb.js).
 - The global `ayb` variable holds the `AybOAuth` instance; use `ayb.query()` for database calls.
 - Migrations use `runMigrations(ayb, 'todos', todoMigrations)` which tracks state in `_ayb_migrations` table.
+- `Perf` (off by default, toggled in Settings) times each interaction; see the Performance Instrumentation section of README.md.

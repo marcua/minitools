@@ -97,6 +97,54 @@ this.showModal(`
 - Updates `position` column in database
 - Both todo items and lists support reordering
 
+## Performance Instrumentation
+
+The `Perf` object (top of the script, above `App`) times every interaction that
+touches the list. It is **off by default**; turn it on from Settings (lists
+screen → gear icon) or with `Perf.enable()` in the console. The setting is
+stored in `localStorage` under `todos_perf`.
+
+When on:
+
+- `Perf.instrument(ayb)` wraps `ayb.query()`, so every round-trip is timed —
+  including the ones inside `processRecurrences()` and `updatePositions()`.
+- Each interaction (`toggle`, `add`, `delete`, `duplicate`, `save-edit`,
+  `toggle-check`, `save-schedule`, `reorder`, `search`, `load`, `open-list`) is
+  timed segment by segment: `captureNotesState`, `processRecurrences`,
+  `query:active`, `query:completed`, `html:*` (string building), `dom:*`
+  (`innerHTML` assignment), `bindTodoEvents`, `restoreNotesState`, plus `paint`.
+- Totals are measured across two `requestAnimationFrame`s, so browser layout and
+  paint show up instead of hiding behind our JS.
+- Results go to the console (`console.table`) and to an on-screen overlay — the
+  app usually runs as an installed PWA where there is no console.
+
+Useful entry points:
+
+- `Perf.report()` — JSON of the last 25 interactions
+- `Perf.copyReport()` — same, to the clipboard (the overlay's "Copy report" button)
+- `Perf.runs` — raw timing records
+- `Perf.clear()` / `Perf.disable()`
+
+### Interpreting the numbers
+
+The summary line splits wall time three ways:
+
+```
+toggle 486ms · queries 21ms (5) · js 175ms · paint 290ms · activeRows=199 ...
+```
+
+- **queries** high → network round-trips dominate. Note that every mutation
+  triggers a full `loadTodos()`, which issues at least 4 *sequential* queries
+  (list name, recurrence scan, active items, completed page).
+- **js / paint** high → the full re-render dominates. `renderTodos()` rebuilds
+  every item's HTML (including its hidden edit form, textarea, notes preview and
+  timestamps — roughly 4.7 KB of HTML per item) and reassigns `innerHTML` for
+  all three sections on every mutation. `htmlChars` and `domNodes` in the counts
+  show how big that gets.
+- Separately from these numbers, `.todo-item` carries
+  `animation-delay: index * 30ms`, so with 200 active items the list takes ~6 s
+  to finish visually settling after every re-render.
+
 ## Common Workflow
 
 1. Make changes to `index.html`
