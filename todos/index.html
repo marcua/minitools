@@ -1660,9 +1660,12 @@
             },
 
             // Begins timing an interaction. Segments and queries recorded until
-            // end() are attributed to it.
+            // end() are attributed to it. If a previous interaction is still
+            // open (e.g. a drag reorder whose UPDATE loop is still in flight),
+            // close it out first so its queries don't leak into this one.
             start(name) {
                 if (!this.enabled) return;
+                if (this.current) this.end();
                 this.current = { name, t0: performance.now(), segments: [], queries: [], counts: {} };
             },
 
@@ -1711,6 +1714,10 @@
                 client.query = async (sql, ...rest) => {
                     if (!this.enabled) return original(sql, ...rest);
 
+                    // Attribute to whichever interaction was open when the query
+                    // was issued, not when it resolved — otherwise a long tail of
+                    // in-flight queries lands on whatever interaction starts next.
+                    const run = this.current;
                     const t = performance.now();
                     let rows = null;
                     try {
@@ -1718,17 +1725,17 @@
                         rows = result?.rows?.length ?? 0;
                         return result;
                     } finally {
-                        this.recordQuery(sql, performance.now() - t, rows);
+                        this.recordQuery(sql, performance.now() - t, rows, run);
                     }
                 };
                 client.__perfWrapped = true;
                 return client;
             },
 
-            recordQuery(sql, ms, rows) {
+            recordQuery(sql, ms, rows, run = this.current) {
                 const entry = { sql: String(sql).replace(/\s+/g, ' ').trim().slice(0, 120), ms, rows };
-                if (this.current) {
-                    this.current.queries.push(entry);
+                if (run) {
+                    run.queries.push(entry);
                 } else {
                     // Fired outside a tracked interaction (e.g. migrations).
                     console.log(`[perf] query ${Math.round(ms)}ms rows=${rows} · ${entry.sql}`);
@@ -1759,10 +1766,16 @@
                 }));
             },
 
+            // JS time is what's left after the awaited queries. Clamped at 0: a
+            // run can still be waiting on a query issued before it started.
+            ownJsMs(run) {
+                return Math.max(0, run.jsMs - run.queryMs);
+            },
+
             summary(run) {
                 const counts = Object.entries(run.counts).map(([k, v]) => `${k}=${v}`).join(' ');
                 return `${run.name} ${Math.round(run.totalMs)}ms · queries ${Math.round(run.queryMs)}ms (${run.queries.length}) ` +
-                    `· js ${Math.round(run.jsMs - run.queryMs)}ms · paint ${Math.round(run.paintMs)}ms · ${counts}`;
+                    `· js ${Math.round(this.ownJsMs(run))}ms · paint ${Math.round(run.paintMs)}ms · ${counts}`;
             },
 
             log(run) {
@@ -1780,7 +1793,7 @@
                         name: run.name,
                         totalMs: Math.round(run.totalMs),
                         queryMs: Math.round(run.queryMs),
-                        jsMs: Math.round(run.jsMs - run.queryMs),
+                        jsMs: Math.round(this.ownJsMs(run)),
                         paintMs: Math.round(run.paintMs),
                         counts: run.counts,
                         segments: run.segments.map(s => [s.label, Math.round(s.ms)]),
