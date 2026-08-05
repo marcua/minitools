@@ -1880,6 +1880,12 @@
             loadingMoreCompleted: false,
             // For list drag-and-drop
             draggedList: null,
+            // List names by id, so opening a list doesn't need a round-trip for
+            // its title. Populated by loadLists() and by openList()'s fallback.
+            listNames: {},
+            // listId -> local date string already checked by processRecurrences().
+            // Deliberately in memory only: a cold app open always re-checks.
+            recurrencesCheckedFor: {},
 
             async init() {
                 this.bindEvents();
@@ -2079,6 +2085,12 @@
                     this.handleRoute();
                 });
 
+                // An installed PWA can sit open for days. Re-check recurrences
+                // when it comes back to the foreground on a new local day.
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') this.handleAppVisible();
+                });
+
                 window.addEventListener('beforeunload', (e) => {
                     // Check for any open edit forms with notes
                     const openEditors = document.querySelectorAll('.todo-edit-form:not(.hidden)');
@@ -2132,6 +2144,9 @@
                         total: row[3] || 0,
                         pending: row[4] || 0
                     }));
+
+                    // Opening a list can then set its title without a round-trip.
+                    lists.forEach(list => { this.listNames[list.id] = list.name; });
 
                     this.renderLists(lists);
                 } catch (e) {
@@ -2288,10 +2303,17 @@
             },
 
             async updateListPositions(order) {
+                if (!order.length) return;
+
                 try {
-                    for (const item of order) {
-                        await ayb.query(`UPDATE todo_list SET position = ${item.position}, updated_at = CURRENT_TIMESTAMP WHERE id = ${item.id}`);
-                    }
+                    // Same single-statement renumbering as todo items.
+                    const cases = order.map(item => `WHEN ${item.id} THEN ${item.position}`).join(' ');
+                    const ids = order.map(item => item.id).join(',');
+                    await ayb.query(`
+                        UPDATE todo_list SET position = CASE id ${cases} END,
+                                             updated_at = CURRENT_TIMESTAMP
+                        WHERE id IN (${ids})
+                    `);
                 } catch (e) {
                     console.error('Update list positions error:', e);
                     this.loadLists(); // Reload on error
@@ -2348,8 +2370,44 @@
                 document.getElementById('new-todo-input').focus();
             },
 
-            async processRecurrences() {
+            // Local date as YYYY-MM-DD, used to decide whether today's recurrences
+            // have already been processed for a list.
+            localDateKey(date = new Date()) {
+                const pad = n => String(n).padStart(2, '0');
+                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+            },
+
+            // Recurrences only need checking once per list per local day, not on
+            // every reload. The guard lives in memory, so opening (or reloading)
+            // the app always re-checks, including when the last list is restored
+            // from localStorage without navigating.
+            async processRecurrencesIfDue() {
                 if (!this.currentListId) return;
+                if (this.recurrencesCheckedFor[this.currentListId] === this.localDateKey()) return;
+
+                if (await this.processRecurrences()) {
+                    this.recurrencesCheckedFor[this.currentListId] = this.localDateKey();
+                }
+            },
+
+            // Forces the next load to re-check, for edits that can create or
+            // revive a template that is due today.
+            invalidateRecurrenceCheck() {
+                delete this.recurrencesCheckedFor[this.currentListId];
+            },
+
+            // The app came back to the foreground. If the local day rolled over
+            // while it was backgrounded, today's recurrences haven't spawned yet.
+            async handleAppVisible() {
+                if (!this.currentListId) return;
+                if (this.recurrencesCheckedFor[this.currentListId] === this.localDateKey()) return;
+                await this.loadTodos();
+            },
+
+            // Returns true when the check completed, so the caller only marks the
+            // day as done if nothing failed.
+            async processRecurrences() {
+                if (!this.currentListId) return false;
 
                 try {
                     // Get active recurring templates (not completed, has recurrence_type, no parent_id)
@@ -2363,38 +2421,51 @@
                     `);
 
                     Perf.count('recurringTemplates', result.rows?.length || 0);
-                    if (!result.rows?.length) return;
+                    if (!result.rows?.length) return true;
 
                     const today = new Date();
                     // Get start of today in local time, formatted for SQL comparison
                     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 19).replace('T', ' ');
 
-                    for (const row of result.rows) {
-                        const [id, title, notes, recType, recValue] = row;
+                    const due = result.rows.filter(([, , , recType, recValue]) => this.shouldSpawnToday(recType, recValue, today));
+                    Perf.count('recurrencesDue', due.length);
+                    if (!due.length) return true;
 
-                        // Check if we should spawn today
-                        if (!this.shouldSpawnToday(recType, recValue, today)) continue;
-
-                        // Check if there's already a spawned copy that's either:
-                        // 1. Incomplete (not yet done), OR
-                        // 2. Created today (already done today, don't spawn again)
-                        const existsResult = await ayb.query(`
-                            SELECT id FROM todo_list_item
-                            WHERE parent_id = ${id}
+                    // One query for every template at once: which already have a
+                    // spawned copy that is either incomplete (not yet done) or was
+                    // created today (already done today, don't spawn again). Fetch
+                    // the top position alongside it, since both are needed to spawn.
+                    const dueIds = due.map(row => row[0]);
+                    const [spawnedResult, positionResult] = await Promise.all([
+                        ayb.query(`
+                            SELECT DISTINCT parent_id FROM todo_list_item
+                            WHERE parent_id IN (${dueIds.join(',')})
                               AND (completed = 0 OR created_at >= '${todayStart}')
-                        `);
+                        `),
+                        ayb.query(`SELECT MIN(position) FROM todo_list_item WHERE list_id = ${this.currentListId}`),
+                    ]);
 
-                        if (existsResult.rows?.length > 0) continue;
+                    const alreadySpawned = new Set((spawnedResult.rows || []).map(row => Number(row[0])));
+                    const toSpawn = due.filter(row => !alreadySpawned.has(Number(row[0])));
+                    Perf.count('recurrencesSpawned', toSpawn.length);
+                    if (!toSpawn.length) return true;
 
-                        // Spawn new item at position 0
-                        await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
-                        await ayb.query(`
-                            INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
-                            VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}', '${AybClient.escapeSQL(notes || '')}', 0, 0, ${id})
-                        `);
-                    }
+                    // Spawn above the current top item, in one insert. Positions may
+                    // go negative; ordering is all that matters, and a drag reorder
+                    // renumbers from 0 anyway.
+                    const minPosition = Number(positionResult.rows?.[0]?.[0] ?? 0) || 0;
+                    const values = toSpawn.map(([id, title, notes], idx) =>
+                        `(${this.currentListId}, '${AybClient.escapeSQL(title)}', '${AybClient.escapeSQL(notes || '')}', ${minPosition - 1 - idx}, 0, ${id})`
+                    ).join(', ');
+
+                    await ayb.query(`
+                        INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
+                        VALUES ${values}
+                    `);
+                    return true;
                 } catch (e) {
                     console.error('Process recurrences error:', e);
+                    return false;
                 }
             },
 
@@ -2533,14 +2604,11 @@
                 const notesSnapshots = await Perf.span('captureNotesState', () => this.captureNotesState());
 
                 try {
-                    const listResult = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
-                    if (listResult.rows?.length) {
-                        document.getElementById('list-title').textContent = listResult.rows[0][0];
-                    }
-
-                    // Process recurring items first (only on initial load)
+                    // Recurrences can insert rows, so they have to settle before
+                    // the reads. Skipped entirely once the list has been checked
+                    // today, which is the common case on a mutation reload.
                     if (!loadMoreCompleted) {
-                        await Perf.span('processRecurrences', () => this.processRecurrences());
+                        await Perf.span('processRecurrences', () => this.processRecurrencesIfDue());
                         this.completedOffset = 0;
                     }
 
@@ -2552,24 +2620,19 @@
                         ? ` AND ((LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')${pinClause})`
                         : '';
 
-                    // Load active items (not completed) - no pagination needed
-                    if (!loadMoreCompleted) {
-                        const activeResult = await Perf.span('query:active', () => ayb.query(`
-                            SELECT id, title, notes, completed, position,
-                                   created_at, updated_at, completed_at,
-                                   remind_at, recurrence_type, recurrence_value, parent_id
-                            FROM todo_list_item
-                            WHERE list_id = ${this.currentListId} AND completed = 0${searchClause}
-                            ORDER BY position ASC, id ASC
-                        `));
+                    // Active items (not completed, no pagination needed), the page of
+                    // completed items, and the list title are independent, so they go
+                    // out together: one round-trip of latency instead of three.
+                    const activeQuery = loadMoreCompleted ? null : ayb.query(`
+                        SELECT id, title, notes, completed, position,
+                               created_at, updated_at, completed_at,
+                               remind_at, recurrence_type, recurrence_value, parent_id
+                        FROM todo_list_item
+                        WHERE list_id = ${this.currentListId} AND completed = 0${searchClause}
+                        ORDER BY position ASC, id ASC
+                    `);
 
-                        this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
-                        Perf.count('activeRows', this.allTodos.length);
-                        Perf.count('activeChars', this.payloadChars(activeResult.rows));
-                    }
-
-                    // Load completed items with pagination
-                    const completedResult = await Perf.span('query:completed', () => ayb.query(`
+                    const completedQuery = ayb.query(`
                         SELECT id, title, notes, completed, position,
                                created_at, updated_at, completed_at,
                                remind_at, recurrence_type, recurrence_value, parent_id
@@ -2577,7 +2640,19 @@
                         WHERE list_id = ${this.currentListId} AND completed = 1${searchClause}
                         ORDER BY completed_at DESC, id DESC
                         LIMIT ${this.completedPageSize + 1} OFFSET ${this.completedOffset}
-                    `));
+                    `);
+
+                    const [activeResult, completedResult] = await Perf.span('query:items', () => Promise.all([
+                        activeQuery,
+                        completedQuery,
+                        this.renderListTitle(),
+                    ]));
+
+                    if (!loadMoreCompleted) {
+                        this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
+                        Perf.count('activeRows', this.allTodos.length);
+                        Perf.count('activeChars', this.payloadChars(activeResult.rows));
+                    }
 
                     const completedRows = completedResult.rows || [];
                     // Check if there are more items
@@ -2601,6 +2676,23 @@
                     console.error('Load todos error:', e);
                 } finally {
                     Perf.end();
+                }
+            },
+
+            // Sets the header title from the cached list name, which loadLists()
+            // already fetched. Only a cold start straight into #list/{id} has to
+            // ask the server, and that request rides along with the item queries.
+            async renderListTitle() {
+                const cached = this.listNames[this.currentListId];
+                if (cached !== undefined) {
+                    document.getElementById('list-title').textContent = cached;
+                    return;
+                }
+
+                const result = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
+                if (result.rows?.length) {
+                    this.listNames[this.currentListId] = result.rows[0][0];
+                    document.getElementById('list-title').textContent = result.rows[0][0];
                 }
             },
 
@@ -3141,13 +3233,19 @@
             },
 
             async updatePositions(list) {
-                const items = Array.from(list.querySelectorAll('.todo-item'));
-                Perf.count('repositioned', items.length);
+                const ids = Array.from(list.querySelectorAll('.todo-item'))
+                    .map(item => parseInt(item.dataset.id))
+                    .filter(Number.isInteger);
+                Perf.count('repositioned', ids.length);
+                if (!ids.length) return;
 
-                for (let i = 0; i < items.length; i++) {
-                    const id = parseInt(items[i].dataset.id);
-                    await ayb.query(`UPDATE todo_list_item SET position = ${i} WHERE id = ${id}`);
-                }
+                // Renumber every item in one statement. One update per item meant
+                // one round-trip per item, so a single drag cost seconds.
+                const cases = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(' ');
+                await ayb.query(`
+                    UPDATE todo_list_item SET position = CASE id ${cases} END
+                    WHERE id IN (${ids.join(',')})
+                `);
             },
 
             toggleNotes(item) {
@@ -3402,12 +3500,13 @@
                 Perf.start('add');
 
                 try {
-                    // Shift existing items down to make room at position 0
-                    await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
-
+                    // Insert above the current top item rather than shifting every
+                    // other row down first, which cost a second round-trip and an
+                    // O(n) write. Positions may go negative; only ordering matters.
                     await ayb.query(`
                         INSERT INTO todo_list_item (list_id, title, position, completed)
-                        VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}', 0, 0)
+                        VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}',
+                                COALESCE((SELECT MIN(position) - 1 FROM todo_list_item WHERE list_id = ${this.currentListId}), 0), 0)
                     `);
 
                     input.value = '';
@@ -3420,6 +3519,10 @@
 
             async toggleTodo(id, checkboxEl) {
                 Perf.start('toggle');
+
+                // Un-completing a template makes it eligible to spawn again today.
+                const todo = this.allTodos.find(t => t.id === id);
+                if (todo?.recurrence_type && !todo.parent_id) this.invalidateRecurrenceCheck();
 
                 // Immediate visual feedback
                 if (checkboxEl) {
@@ -3603,6 +3706,9 @@
                         updated_at = CURRENT_TIMESTAMP
                         WHERE id = ${id}`);
 
+                    // A new or changed recurrence may be due today.
+                    this.invalidateRecurrenceCheck();
+
                     this.closeModal();
                     await this.loadTodos();
                 } catch (e) {
@@ -3708,6 +3814,7 @@
                 try {
                     await ayb.query(`UPDATE todo_list SET name = '${AybClient.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
                     title.textContent = name;
+                    this.listNames[this.currentListId] = name;
                 } catch (e) {
                     console.error('Save list name error:', e);
                 }
@@ -3746,6 +3853,8 @@
                 try {
                     await ayb.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
                     await ayb.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
+                    delete this.listNames[this.currentListId];
+                    delete this.recurrencesCheckedFor[this.currentListId];
                     this.closeModal();
                     this.goBack();
                 } catch (e) {

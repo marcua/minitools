@@ -35,9 +35,26 @@ _ayb_migrations (app_id, version, applied_at)
 
 - **Template**: item with `recurrence_type` set, `parent_id = NULL`
 - **Spawned copy**: item with `parent_id` pointing to template
-- `processRecurrences()` runs on list load, spawns copies for today
 - Templates with `completed = 1` are skipped (won't spawn new todos)
 - Supports multiple values: monthly `1, 15` or yearly `Jan 1, Jul 4`
+
+### When the check runs
+
+`processRecurrences()` used to run on *every* `loadTodos()`, including every
+toggle and add — two round-trips of latency each time. It now runs at most once
+per list per local day, gated by `processRecurrencesIfDue()`:
+
+- `recurrencesCheckedFor` maps `listId` → local date string.
+- It is **in memory only, deliberately**. A cold app open (including restoring
+  the last list from `todos_last_hash` without navigating) always re-checks.
+- A `visibilitychange` handler calls `handleAppVisible()`, so an installed PWA
+  left open across midnight re-checks when it returns to the foreground. Same
+  day, it issues no queries at all.
+- `invalidateRecurrenceCheck()` forces a re-check after edits that can make a
+  template due today: saving a schedule, or un-completing a template.
+
+All templates are checked with one `parent_id IN (...)` query instead of one per
+template, and all of a day's copies are spawned in one multi-row `INSERT`.
 
 ## Gotchas & Patterns
 
@@ -133,17 +150,38 @@ The summary line splits wall time three ways:
 toggle 486ms · queries 21ms (5) · js 175ms · paint 290ms · activeRows=199 ...
 ```
 
-- **queries** high → network round-trips dominate. Note that every mutation
-  triggers a full `loadTodos()`, which issues at least 4 *sequential* queries
-  (list name, recurrence scan, active items, completed page).
-- **js / paint** high → the full re-render dominates. `renderTodos()` rebuilds
-  every item's HTML (including its hidden edit form, textarea, notes preview and
-  timestamps — roughly 4.7 KB of HTML per item) and reassigns `innerHTML` for
-  all three sections on every mutation. `htmlChars` and `domNodes` in the counts
-  show how big that gets.
-- Separately from these numbers, `.todo-item` carries
-  `animation-delay: index * 30ms`, so with 200 active items the list takes ~6 s
-  to finish visually settling after every re-render.
+- **queries** high → round-trips dominate. Measured against a real ayb server,
+  every query costs the same ~120ms whether it returns 1 row or 101, so what
+  matters is the number of *sequential* round-trips, not rows or payload size.
+  Queries issued together via `Promise.all` cost one wait, not several.
+- **js / paint** high → the re-render dominates. `renderTodos()` rebuilds every
+  item's HTML (including its hidden edit form, textarea, notes preview and
+  timestamps — roughly 4.7 KB per item) and reassigns `innerHTML` for all three
+  sections on every mutation. `htmlChars` and `domNodes` show how big that gets.
+  At a few hundred items this is tens of milliseconds; it only starts to matter
+  in the high hundreds.
+- `.todo-item` carries `animation-delay: index * 30ms`, so the list keeps
+  animating for `30ms × item count` after a re-render. That is invisible in
+  these numbers but visible on screen.
+
+### Current round-trip budget
+
+A "wave" is one latency wait; queries fired together in a `Promise.all` share one.
+
+| Interaction | Sequential waves |
+|---|---|
+| Toggle / delete / add | 2 (the write, then the reads in parallel) |
+| Reload, same day | 1 |
+| Drag reorder, todos or lists | 1, regardless of item count |
+| Cold open, nothing due | 2 |
+| Cold open that spawns recurrences | 4 |
+| Duplicate | 4 — still `SELECT`, then shift, then insert, then reload |
+| Save schedule | 2, plus a recurrence re-check it deliberately forces |
+
+Mutations still reload the whole list rather than patching the changed item in
+place; that reload is what the last wave pays for. Collapsing `duplicateTodo()`
+into a single `INSERT ... SELECT` (plus its position shift) would take it from
+four waves to three.
 
 ## Common Workflow
 
