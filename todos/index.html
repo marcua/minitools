@@ -424,8 +424,13 @@
             background: var(--paper-shadow);
         }
 
-        .list-card.drag-over {
+        /* Insertion line on the edge the drop will actually land on */
+        .list-card.drag-over-above {
             border-top: 2px solid var(--accent);
+        }
+
+        .list-card.drag-over-below {
+            border-bottom: 2px solid var(--accent);
         }
 
         .list-card h3 {
@@ -581,8 +586,12 @@
             opacity: 0.5;
         }
 
-        .todo-item.drag-over {
+        .todo-item.drag-over-above {
             border-top: 2px solid var(--accent);
+        }
+
+        .todo-item.drag-over-below {
+            border-bottom: 2px solid var(--accent);
         }
 
         .todo-main {
@@ -2212,24 +2221,27 @@
                     handle.addEventListener('dragend', () => {
                         this.draggedList = null;
                         card.classList.remove('dragging');
-                        container.querySelectorAll('.list-card').forEach(c => c.classList.remove('drag-over'));
+                        this.clearDropIndicators(container);
                     });
 
                     card.addEventListener('dragover', (e) => {
                         e.preventDefault();
                         if (!this.draggedList || this.draggedList === card) return;
                         e.dataTransfer.dropEffect = 'move';
-                        card.classList.add('drag-over');
+                        this.showDropIndicator(card, e.clientY);
                     });
 
                     card.addEventListener('dragleave', () => {
-                        card.classList.remove('drag-over');
+                        card.classList.remove('drag-over-above', 'drag-over-below');
                     });
 
                     card.addEventListener('drop', (e) => {
                         e.preventDefault();
-                        card.classList.remove('drag-over');
-                        if (!this.draggedList || this.draggedList === card) return;
+                        if (!this.draggedList || this.draggedList === card) {
+                            this.clearDropIndicators(container);
+                            return;
+                        }
+                        this.showDropIndicator(card, e.clientY);
                         this.handleListDrop(this.draggedList, card);
                     });
 
@@ -2252,7 +2264,7 @@
 
                         // Find potential drop target
                         const allCards = Array.from(container.querySelectorAll('.list-card[data-id]'));
-                        allCards.forEach(c => c.classList.remove('drag-over'));
+                        this.clearDropIndicators(container);
 
                         const targetCard = allCards.find(c => {
                             if (c === card) return false;
@@ -2260,7 +2272,7 @@
                             return this.listTouchCurrentY > rect.top && this.listTouchCurrentY < rect.bottom;
                         });
 
-                        if (targetCard) targetCard.classList.add('drag-over');
+                        if (targetCard) this.showDropIndicator(targetCard, this.listTouchCurrentY);
                     }, { passive: false });
 
                     handle.addEventListener('touchend', () => {
@@ -2269,9 +2281,8 @@
                         card.style.zIndex = '';
                         card.classList.remove('dragging');
 
-                        const targetCard = container.querySelector('.list-card.drag-over');
+                        const targetCard = container.querySelector('.list-card.drag-over-above, .list-card.drag-over-below');
                         if (targetCard) {
-                            targetCard.classList.remove('drag-over');
                             this.handleListDrop(this.draggedList, targetCard);
                         }
 
@@ -2282,18 +2293,14 @@
 
             async handleListDrop(draggedCard, targetCard) {
                 const container = document.getElementById('lists-container');
-                const cards = Array.from(container.querySelectorAll('.list-card[data-id]'));
-                const draggedIdx = cards.indexOf(draggedCard);
-                const targetIdx = cards.indexOf(targetCard);
-
-                if (draggedIdx === targetIdx) return;
-
-                // Reorder in DOM
-                if (draggedIdx < targetIdx) {
-                    targetCard.after(draggedCard);
-                } else {
-                    targetCard.before(draggedCard);
+                if (draggedCard === targetCard) {
+                    this.clearDropIndicators(container);
+                    return;
                 }
+
+                // Reorder in DOM, on the side the indicator showed
+                this.placeAtIndicator(draggedCard, targetCard);
+                this.clearDropIndicators(container);
 
                 // Get new order and update positions
                 const newOrder = Array.from(container.querySelectorAll('.list-card[data-id]'))
@@ -3130,6 +3137,34 @@
                 });
             },
 
+            // ---- Drop placement ----
+            // A drop lands on whichever half of the target the pointer is over,
+            // and the insertion line is drawn on that same edge. Deciding by drag
+            // direction instead used to put a downward drag one slot too low,
+            // because the line was always drawn above the target.
+
+            dropsAfter(target, clientY) {
+                const rect = target.getBoundingClientRect();
+                return clientY > rect.top + rect.height / 2;
+            },
+
+            showDropIndicator(target, clientY) {
+                const after = this.dropsAfter(target, clientY);
+                target.classList.toggle('drag-over-below', after);
+                target.classList.toggle('drag-over-above', !after);
+            },
+
+            clearDropIndicators(root = document) {
+                root.querySelectorAll('.drag-over-above, .drag-over-below')
+                    .forEach(el => el.classList.remove('drag-over-above', 'drag-over-below'));
+            },
+
+            // Moves dragged next to target on the side the indicator showed.
+            placeAtIndicator(dragged, target) {
+                if (target.classList.contains('drag-over-below')) target.after(dragged);
+                else target.before(dragged);
+            },
+
             handleDragStart(e, item) {
                 this.draggedItem = item;
                 item.classList.add('dragging');
@@ -3138,19 +3173,18 @@
 
             handleDragEnd(e, item) {
                 item.classList.remove('dragging');
-                document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                this.clearDropIndicators();
                 this.draggedItem = null;
             },
 
             handleDragOver(e, item) {
                 e.preventDefault();
-                if (item !== this.draggedItem) {
-                    item.classList.add('drag-over');
-                }
+                if (item === this.draggedItem) return;
+                this.showDropIndicator(item, e.clientY);
             },
 
             handleDragLeave(e, item) {
-                item.classList.remove('drag-over');
+                item.classList.remove('drag-over-above', 'drag-over-below');
             },
 
             // Touch drag implementation for mobile
@@ -3172,10 +3206,10 @@
                     const targetItem = elemBelow?.closest('.todo-item');
 
                     // Clear previous drag-over states
-                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                    this.clearDropIndicators();
 
                     if (targetItem && targetItem !== this.draggedItem) {
-                        targetItem.classList.add('drag-over');
+                        this.showDropIndicator(targetItem, touch.clientY);
                     }
                 };
 
@@ -3185,22 +3219,18 @@
 
                     item.classList.remove('dragging');
 
-                    const targetItem = document.querySelector('.todo-item.drag-over');
-                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                    const targetItem = document.querySelector('.todo-item.drag-over-above, .todo-item.drag-over-below');
 
                     if (targetItem && targetItem !== this.draggedItem) {
                         const list = targetItem.parentNode;
-                        const items = Array.from(list.querySelectorAll('.todo-item'));
-                        const draggedIndex = items.indexOf(this.draggedItem);
-                        const targetIndex = items.indexOf(targetItem);
+                        this.placeAtIndicator(this.draggedItem, targetItem);
+                        this.clearDropIndicators();
 
-                        if (draggedIndex < targetIndex) {
-                            targetItem.after(this.draggedItem);
-                        } else {
-                            targetItem.before(this.draggedItem);
-                        }
-
+                        Perf.start('reorder');
                         await this.updatePositions(list);
+                        Perf.end();
+                    } else {
+                        this.clearDropIndicators();
                     }
 
                     this.draggedItem = null;
@@ -3212,20 +3242,18 @@
 
             async handleDrop(e, item) {
                 e.preventDefault();
-                item.classList.remove('drag-over');
 
-                if (!this.draggedItem || item === this.draggedItem) return;
+                if (!this.draggedItem || item === this.draggedItem) {
+                    this.clearDropIndicators();
+                    return;
+                }
 
                 const list = item.parentNode;
-                const items = Array.from(list.querySelectorAll('.todo-item'));
-                const draggedIndex = items.indexOf(this.draggedItem);
-                const targetIndex = items.indexOf(item);
-
-                if (draggedIndex < targetIndex) {
-                    item.after(this.draggedItem);
-                } else {
-                    item.before(this.draggedItem);
-                }
+                // Re-read the pointer position: the last dragover may have been
+                // throttled, and this is the placement the user actually sees.
+                this.showDropIndicator(item, e.clientY);
+                this.placeAtIndicator(this.draggedItem, item);
+                this.clearDropIndicators();
 
                 Perf.start('reorder');
                 await this.updatePositions(list);

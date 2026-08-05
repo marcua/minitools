@@ -111,8 +111,20 @@ this.showModal(`
 
 ### 10. Drag and Drop
 - Works via touch events for iOS compatibility
-- Updates `position` column in database
+- Updates `position` column in database (one statement, not one per item)
 - Both todo items and lists support reordering
+
+**Drop placement is decided by pointer position, not drag direction.**
+`dropsAfter(target, clientY)` compares the pointer against the target's vertical
+midpoint; `showDropIndicator()` draws the insertion line on that same edge
+(`drag-over-above` / `drag-over-below`), and `placeAtIndicator()` inserts on the
+side the line showed. All four paths — todo mouse, todo touch, list mouse, list
+touch — go through these helpers.
+
+Deciding by direction instead (`draggedIndex < targetIndex ? after : before`)
+while always drawing the line above the target is what made a downward drag land
+one slot too low. Keep the indicator and the insertion rule reading from the same
+value, or the bug comes back.
 
 ## Performance Instrumentation
 
