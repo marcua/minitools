@@ -1329,7 +1329,8 @@
             margin-top: 20px;
         }
 
-        /* Performance overlay (only present when perf logging is on) */
+        /* Performance overlay (only present when perf logging is on).
+           Collapsed to one line by default so it doesn't cover the list. */
         .perf-overlay {
             position: fixed;
             left: 8px;
@@ -1341,15 +1342,31 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 0.7rem;
             line-height: 1.5;
-            padding: 10px 12px;
-            max-height: 45vh;
-            overflow-y: auto;
+            padding: 8px 12px;
             box-shadow: 0 2px 12px rgba(26, 25, 24, 0.4);
         }
 
+        .perf-overlay.expanded {
+            max-height: 45vh;
+            overflow-y: auto;
+        }
+
         .perf-overlay .perf-summary {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
             font-weight: 600;
+            cursor: pointer;
+        }
+
+        .perf-overlay.expanded .perf-summary {
             margin-bottom: 6px;
+        }
+
+        .perf-overlay .perf-counts {
+            opacity: 0.7;
+            margin-bottom: 6px;
+            word-break: break-word;
         }
 
         .perf-overlay .perf-row {
@@ -1636,19 +1653,21 @@
         // Performance instrumentation
         // ============================================
         // Off by default; turn on from Settings or with `Perf.enable()` in the
-        // console. When on, every interaction that reloads the list is timed
-        // segment by segment so we can tell where the wall time actually goes:
-        // network round-trips, HTML building, DOM insertion, event binding, or
-        // browser layout/paint. Numbers land in the console and in an on-screen
+        // console. When on, each interaction is timed and split into round-trips,
+        // our own JS, and browser layout/paint, so a slowdown can be attributed
+        // without guessing. Numbers land in the console and in an on-screen
         // overlay (the app usually runs as a PWA, where there's no console).
         const Perf = {
             STORAGE_KEY: 'todos_perf',
             SLOW_SEGMENT_MS: 100,
             maxRuns: 25,
 
+            // Literal rather than STORAGE_KEY: `this` isn't bound yet in an
+            // object literal. Keep the two in sync.
             enabled: localStorage.getItem('todos_perf') === '1',
             runs: [],
             current: null,
+            overlayExpanded: false,
 
             enable() {
                 this.enabled = true;
@@ -1781,10 +1800,13 @@
                 return Math.max(0, run.jsMs - run.queryMs);
             },
 
+            countsText(run) {
+                return Object.entries(run.counts).map(([k, v]) => `${k}=${v}`).join(' ');
+            },
+
             summary(run) {
-                const counts = Object.entries(run.counts).map(([k, v]) => `${k}=${v}`).join(' ');
                 return `${run.name} ${Math.round(run.totalMs)}ms · queries ${Math.round(run.queryMs)}ms (${run.queries.length}) ` +
-                    `· js ${Math.round(this.ownJsMs(run))}ms · paint ${Math.round(run.paintMs)}ms · ${counts}`;
+                    `· js ${Math.round(this.ownJsMs(run))}ms · paint ${Math.round(run.paintMs)}ms · ${this.countsText(run)}`;
             },
 
             log(run) {
@@ -1823,6 +1845,13 @@
                 this.renderOverlay();
             },
 
+            toggleOverlay() {
+                this.overlayExpanded = !this.overlayExpanded;
+                this.renderOverlay();
+            },
+
+            // Collapsed to a single tappable line by default. Expanded it can
+            // cover most of the screen, which gets in the way of the list itself.
             renderOverlay() {
                 if (!this.enabled) return;
 
@@ -1830,42 +1859,47 @@
                 if (!overlay) {
                     overlay = document.createElement('div');
                     overlay.id = 'perf-overlay';
-                    overlay.className = 'perf-overlay';
                     document.body.appendChild(overlay);
                 }
+                overlay.className = `perf-overlay ${this.overlayExpanded ? 'expanded' : ''}`;
 
                 const run = this.runs[0];
-                if (!run) {
-                    overlay.innerHTML = `
-                        <div class="perf-summary">Perf logging on — interact with a list</div>
+                const headline = run
+                    ? `${run.name} ${Math.round(run.totalMs)}ms · ${Math.round(run.queryMs)}ms in ${run.queries.length} ${run.queries.length === 1 ? 'query' : 'queries'}`
+                    : 'Perf logging on — interact with a list';
+
+                let detail = '';
+                if (this.overlayExpanded) {
+                    // Slowest queries first: round-trips are what usually dominate.
+                    const slowest = [...(run?.queries || [])].sort((a, b) => b.ms - a.ms).slice(0, 4);
+                    const rows = run ? [
+                        ...run.segments.map(s => ({ label: s.label, ms: s.ms })),
+                        { label: 'paint', ms: run.paintMs },
+                        ...slowest.map(q => ({ label: `SQL ${q.rows} rows · ${q.sql.slice(0, 46)}`, ms: q.ms })),
+                    ] : [];
+
+                    detail = `
+                        ${run ? `<div class="perf-counts">${App.escapeHtml(this.countsText(run))}</div>` : ''}
+                        ${rows.map(r => `
+                            <div class="perf-row ${r.ms >= this.SLOW_SEGMENT_MS ? 'slow' : ''}">
+                                <span class="perf-label">${App.escapeHtml(r.label)}</span>
+                                <span>${Math.round(r.ms)}ms</span>
+                            </div>
+                        `).join('')}
                         <div class="perf-actions">
+                            <button onclick="Perf.copyReport()">Copy report (${this.runs.length})</button>
+                            <button onclick="Perf.clear()">Clear</button>
                             <button onclick="Perf.disable()">Turn off</button>
                         </div>
                     `;
-                    return;
                 }
 
-                // Slowest queries first: this is what tells network apart from render.
-                const slowestQueries = [...run.queries].sort((a, b) => b.ms - a.ms).slice(0, 4);
-                const rows = [
-                    ...run.segments.map(s => ({ label: s.label, ms: s.ms })),
-                    { label: 'paint', ms: run.paintMs },
-                    ...slowestQueries.map(q => ({ label: `SQL ${q.rows} rows · ${q.sql.slice(0, 46)}`, ms: q.ms })),
-                ];
-
                 overlay.innerHTML = `
-                    <div class="perf-summary">${App.escapeHtml(this.summary(run))}</div>
-                    ${rows.map(r => `
-                        <div class="perf-row ${r.ms >= this.SLOW_SEGMENT_MS ? 'slow' : ''}">
-                            <span class="perf-label">${App.escapeHtml(r.label)}</span>
-                            <span>${Math.round(r.ms)}ms</span>
-                        </div>
-                    `).join('')}
-                    <div class="perf-actions">
-                        <button onclick="Perf.copyReport()">Copy report (${this.runs.length})</button>
-                        <button onclick="Perf.clear()">Clear</button>
-                        <button onclick="Perf.disable()">Turn off</button>
+                    <div class="perf-summary" onclick="Perf.toggleOverlay()">
+                        <span class="perf-label">${App.escapeHtml(headline)}</span>
+                        <span>${this.overlayExpanded ? '▾' : '▴'}</span>
                     </div>
+                    ${detail}
                 `;
             },
         };
@@ -2658,7 +2692,6 @@
                     if (!loadMoreCompleted) {
                         this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
                         Perf.count('activeRows', this.allTodos.length);
-                        Perf.count('activeChars', this.payloadChars(activeResult.rows));
                     }
 
                     const completedRows = completedResult.rows || [];
@@ -2666,7 +2699,6 @@
                     this.completedHasMore = completedRows.length > this.completedPageSize;
                     const completedTodos = completedRows.slice(0, this.completedPageSize).map(row => this.mapTodoRow(row));
                     Perf.count('completedRows', completedTodos.length);
-                    Perf.count('completedChars', this.payloadChars(completedRows));
 
                     if (loadMoreCompleted) {
                         // Append to existing completed todos
@@ -2703,19 +2735,6 @@
                 }
             },
 
-            // Rough size of a result set, to tell "too many rows" apart from
-            // "a few rows with very large notes".
-            payloadChars(rows) {
-                if (!rows) return 0;
-                let chars = 0;
-                for (const row of rows) {
-                    for (const cell of row) {
-                        if (typeof cell === 'string') chars += cell.length;
-                    }
-                }
-                return chars;
-            },
-
             mapTodoRow(row) {
                 return {
                     id: row[0],
@@ -2741,7 +2760,7 @@
                 const activeTodos = [];
                 const completedTodos = [];
 
-                Perf.span('categorize', () => todos.forEach(t => {
+                todos.forEach(t => {
                     if (t.completed) {
                         completedTodos.push(t);
                     } else if (t.recurrence_type && !t.parent_id) {
@@ -2757,7 +2776,7 @@
                     } else {
                         activeTodos.push(t);
                     }
-                }));
+                });
 
                 // Sort scheduled: upcoming first (by date), then recurring
                 scheduledTodos.sort((a, b) => {
@@ -2769,30 +2788,25 @@
                     return 0;
                 });
 
-                const activeHtml = Perf.span('html:active', () => activeTodos.length > 0
+                const activeHtml = activeTodos.length > 0
                     ? activeTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('')
                     : (completedTodos.length === 0 && scheduledTodos.length === 0 ? `
                         <div class="empty-state">
                             <svg><use href="#icon-notebook"/></svg>
                             <p>Nothing here yet</p>
                         </div>
-                    ` : ''));
+                    ` : '');
 
                 // Render active
-                Perf.span('dom:active', () => {
-                    document.getElementById('active-todos').innerHTML = activeHtml;
-                });
+                document.getElementById('active-todos').innerHTML = activeHtml;
 
                 // Render scheduled section (upcoming + recurring)
-                const scheduledHtml = Perf.span('html:scheduled', () => scheduledTodos.map((t, idx) => this.renderTodoItem(t, idx, t.scheduleType)).join(''));
-                Perf.span('dom:scheduled', () => {
-                    document.getElementById('scheduled-todos').innerHTML = scheduledHtml;
-                });
+                document.getElementById('scheduled-todos').innerHTML = scheduledTodos.map((t, idx) => this.renderTodoItem(t, idx, t.scheduleType)).join('');
                 document.getElementById('scheduled-count').textContent = scheduledTodos.length;
                 document.getElementById('scheduled-section').classList.toggle('hidden', scheduledTodos.length === 0);
 
                 // Render completed section with load more button
-                let completedHtml = Perf.span('html:completed', () => completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join(''));
+                let completedHtml = completedTodos.map((t, idx) => this.renderTodoItem(t, idx)).join('');
                 if (this.completedHasMore) {
                     completedHtml += `
                         <li class="load-more-item">
@@ -2802,16 +2816,13 @@
                         </li>
                     `;
                 }
-                Perf.span('dom:completed', () => {
-                    document.getElementById('completed-todos').innerHTML = completedHtml;
-                });
+                document.getElementById('completed-todos').innerHTML = completedHtml;
                 document.getElementById('completed-count').textContent = completedTodos.length + (this.completedHasMore ? '+' : '');
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
 
                 Perf.count('rendered', `${activeTodos.length}a/${scheduledTodos.length}s/${completedTodos.length}c`);
-                Perf.count('htmlChars', activeHtml.length + scheduledHtml.length + completedHtml.length);
 
-                Perf.span('bindTodoEvents', () => this.bindTodoEvents());
+                this.bindTodoEvents();
 
                 // Bind load more button
                 const loadMoreBtn = document.getElementById('load-more-completed');
