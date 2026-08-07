@@ -1328,81 +1328,6 @@
             width: 100%;
             margin-top: 20px;
         }
-
-        /* Performance overlay (only present when perf logging is on).
-           Collapsed to one line by default so it doesn't cover the list. */
-        .perf-overlay {
-            position: fixed;
-            left: 8px;
-            right: 8px;
-            bottom: 8px;
-            z-index: 400;
-            background: var(--ink);
-            color: var(--paper);
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 0.7rem;
-            line-height: 1.5;
-            padding: 8px 12px;
-            box-shadow: 0 2px 12px rgba(26, 25, 24, 0.4);
-        }
-
-        .perf-overlay.expanded {
-            max-height: 45vh;
-            overflow-y: auto;
-        }
-
-        .perf-overlay .perf-summary {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .perf-overlay.expanded .perf-summary {
-            margin-bottom: 6px;
-        }
-
-        .perf-overlay .perf-counts {
-            opacity: 0.7;
-            margin-bottom: 6px;
-            word-break: break-word;
-        }
-
-        .perf-overlay .perf-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            opacity: 0.85;
-        }
-
-        .perf-overlay .perf-row.slow {
-            color: var(--accent);
-            opacity: 1;
-        }
-
-        .perf-overlay .perf-label {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .perf-overlay .perf-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .perf-overlay button {
-            flex: 1;
-            background: transparent;
-            border: 1px solid var(--paper);
-            color: var(--paper);
-            font-family: inherit;
-            font-size: 0.7rem;
-            padding: 5px 8px;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
@@ -1650,261 +1575,6 @@
         ];
 
         // ============================================
-        // Performance instrumentation
-        // ============================================
-        // Off by default; turn on from Settings or with `Perf.enable()` in the
-        // console. When on, each interaction is timed and split into round-trips,
-        // our own JS, and browser layout/paint, so a slowdown can be attributed
-        // without guessing. Numbers land in the console and in an on-screen
-        // overlay (the app usually runs as a PWA, where there's no console).
-        const Perf = {
-            STORAGE_KEY: 'todos_perf',
-            SLOW_SEGMENT_MS: 100,
-            maxRuns: 25,
-
-            // Literal rather than STORAGE_KEY: `this` isn't bound yet in an
-            // object literal. Keep the two in sync.
-            enabled: localStorage.getItem('todos_perf') === '1',
-            runs: [],
-            current: null,
-            overlayExpanded: false,
-
-            enable() {
-                this.enabled = true;
-                localStorage.setItem(this.STORAGE_KEY, '1');
-                this.renderOverlay();
-            },
-
-            disable() {
-                this.enabled = false;
-                localStorage.removeItem(this.STORAGE_KEY);
-                const overlay = document.getElementById('perf-overlay');
-                if (overlay) overlay.remove();
-            },
-
-            toggle() {
-                this.enabled ? this.disable() : this.enable();
-                return this.enabled;
-            },
-
-            // Begins timing an interaction. Segments and queries recorded until
-            // end() are attributed to it. If a previous interaction is still
-            // open (e.g. a drag reorder whose UPDATE loop is still in flight),
-            // close it out first so its queries don't leak into this one.
-            start(name) {
-                if (!this.enabled) return;
-                if (this.current) this.end();
-                this.current = { name, t0: performance.now(), segments: [], queries: [], counts: {} };
-            },
-
-            // Begins an interaction only if one isn't already open, so an inner
-            // loadTodos() doesn't steal the timing from the mutation that caused it.
-            startIfIdle(name) {
-                if (this.enabled && !this.current) this.start(name);
-            },
-
-            // Times fn and attributes it to the open interaction. Works for both
-            // sync and async fn; await the result either way.
-            span(label, fn) {
-                if (!this.enabled || !this.current) return fn();
-                const run = this.current;
-                const t = performance.now();
-                const done = () => run.segments.push({ label, ms: performance.now() - t });
-
-                let result;
-                try {
-                    result = fn();
-                } catch (e) {
-                    done();
-                    throw e;
-                }
-
-                if (result && typeof result.then === 'function') {
-                    return result.then(
-                        value => { done(); return value; },
-                        error => { done(); throw error; }
-                    );
-                }
-                done();
-                return result;
-            },
-
-            count(key, value) {
-                if (this.enabled && this.current) this.current.counts[key] = value;
-            },
-
-            // Wraps client.query() so every round-trip is timed, including the
-            // ones fired from inside processRecurrences() and updatePositions().
-            instrument(client) {
-                if (!client || client.__perfWrapped) return client;
-
-                const original = client.query.bind(client);
-                client.query = async (sql, ...rest) => {
-                    if (!this.enabled) return original(sql, ...rest);
-
-                    // Attribute to whichever interaction was open when the query
-                    // was issued, not when it resolved — otherwise a long tail of
-                    // in-flight queries lands on whatever interaction starts next.
-                    const run = this.current;
-                    const t = performance.now();
-                    let rows = null;
-                    try {
-                        const result = await original(sql, ...rest);
-                        rows = result?.rows?.length ?? 0;
-                        return result;
-                    } finally {
-                        this.recordQuery(sql, performance.now() - t, rows, run);
-                    }
-                };
-                client.__perfWrapped = true;
-                return client;
-            },
-
-            recordQuery(sql, ms, rows, run = this.current) {
-                const entry = { sql: String(sql).replace(/\s+/g, ' ').trim().slice(0, 120), ms, rows };
-                if (run) {
-                    run.queries.push(entry);
-                } else {
-                    // Fired outside a tracked interaction (e.g. migrations).
-                    console.log(`[perf] query ${Math.round(ms)}ms rows=${rows} · ${entry.sql}`);
-                }
-            },
-
-            // Closes the interaction. Total is measured after the next paint so
-            // browser layout/style cost shows up instead of hiding behind our JS.
-            end() {
-                if (!this.enabled || !this.current) return;
-
-                const run = this.current;
-                this.current = null;
-                run.jsMs = performance.now() - run.t0;
-
-                requestAnimationFrame(() => requestAnimationFrame(() => {
-                    run.totalMs = performance.now() - run.t0;
-                    run.paintMs = run.totalMs - run.jsMs;
-                    run.queryMs = run.queries.reduce((sum, q) => sum + q.ms, 0);
-                    run.counts.domItems = document.querySelectorAll('.todo-item').length;
-                    run.counts.domNodes = document.getElementById('todo-screen')?.getElementsByTagName('*').length ?? 0;
-
-                    this.runs.unshift(run);
-                    if (this.runs.length > this.maxRuns) this.runs.pop();
-
-                    this.log(run);
-                    this.renderOverlay();
-                }));
-            },
-
-            // JS time is what's left after the awaited queries. Clamped at 0: a
-            // run can still be waiting on a query issued before it started.
-            ownJsMs(run) {
-                return Math.max(0, run.jsMs - run.queryMs);
-            },
-
-            countsText(run) {
-                return Object.entries(run.counts).map(([k, v]) => `${k}=${v}`).join(' ');
-            },
-
-            summary(run) {
-                return `${run.name} ${Math.round(run.totalMs)}ms · queries ${Math.round(run.queryMs)}ms (${run.queries.length}) ` +
-                    `· js ${Math.round(this.ownJsMs(run))}ms · paint ${Math.round(run.paintMs)}ms · ${this.countsText(run)}`;
-            },
-
-            log(run) {
-                console.groupCollapsed(`[perf] ${this.summary(run)}`);
-                console.table(run.segments.map(s => ({ segment: s.label, ms: Math.round(s.ms) })));
-                console.table(run.queries.map(q => ({ ms: Math.round(q.ms), rows: q.rows, sql: q.sql })));
-                console.groupEnd();
-            },
-
-            // JSON of every recorded interaction, for pasting into a bug report.
-            report() {
-                return JSON.stringify({
-                    userAgent: navigator.userAgent,
-                    runs: this.runs.map(run => ({
-                        name: run.name,
-                        totalMs: Math.round(run.totalMs),
-                        queryMs: Math.round(run.queryMs),
-                        jsMs: Math.round(this.ownJsMs(run)),
-                        paintMs: Math.round(run.paintMs),
-                        counts: run.counts,
-                        segments: run.segments.map(s => [s.label, Math.round(s.ms)]),
-                        queries: run.queries.map(q => [Math.round(q.ms), q.rows, q.sql]),
-                    })),
-                }, null, 2);
-            },
-
-            copyReport() {
-                const text = this.report();
-                navigator.clipboard?.writeText(text)
-                    .then(() => alert('Perf report copied to clipboard'))
-                    .catch(() => console.log(text));
-            },
-
-            clear() {
-                this.runs = [];
-                this.renderOverlay();
-            },
-
-            toggleOverlay() {
-                this.overlayExpanded = !this.overlayExpanded;
-                this.renderOverlay();
-            },
-
-            // Collapsed to a single tappable line by default. Expanded it can
-            // cover most of the screen, which gets in the way of the list itself.
-            renderOverlay() {
-                if (!this.enabled) return;
-
-                let overlay = document.getElementById('perf-overlay');
-                if (!overlay) {
-                    overlay = document.createElement('div');
-                    overlay.id = 'perf-overlay';
-                    document.body.appendChild(overlay);
-                }
-                overlay.className = `perf-overlay ${this.overlayExpanded ? 'expanded' : ''}`;
-
-                const run = this.runs[0];
-                const headline = run
-                    ? `${run.name} ${Math.round(run.totalMs)}ms · ${Math.round(run.queryMs)}ms in ${run.queries.length} ${run.queries.length === 1 ? 'query' : 'queries'}`
-                    : 'Perf logging on — interact with a list';
-
-                let detail = '';
-                if (this.overlayExpanded) {
-                    // Slowest queries first: round-trips are what usually dominate.
-                    const slowest = [...(run?.queries || [])].sort((a, b) => b.ms - a.ms).slice(0, 4);
-                    const rows = run ? [
-                        ...run.segments.map(s => ({ label: s.label, ms: s.ms })),
-                        { label: 'paint', ms: run.paintMs },
-                        ...slowest.map(q => ({ label: `SQL ${q.rows} rows · ${q.sql.slice(0, 46)}`, ms: q.ms })),
-                    ] : [];
-
-                    detail = `
-                        ${run ? `<div class="perf-counts">${App.escapeHtml(this.countsText(run))}</div>` : ''}
-                        ${rows.map(r => `
-                            <div class="perf-row ${r.ms >= this.SLOW_SEGMENT_MS ? 'slow' : ''}">
-                                <span class="perf-label">${App.escapeHtml(r.label)}</span>
-                                <span>${Math.round(r.ms)}ms</span>
-                            </div>
-                        `).join('')}
-                        <div class="perf-actions">
-                            <button onclick="Perf.copyReport()">Copy report (${this.runs.length})</button>
-                            <button onclick="Perf.clear()">Clear</button>
-                            <button onclick="Perf.disable()">Turn off</button>
-                        </div>
-                    `;
-                }
-
-                overlay.innerHTML = `
-                    <div class="perf-summary" onclick="Perf.toggleOverlay()">
-                        <span class="perf-label">${App.escapeHtml(headline)}</span>
-                        <span>${this.overlayExpanded ? '▾' : '▴'}</span>
-                    </div>
-                    ${detail}
-                `;
-            },
-        };
-
-        // ============================================
         // App State & UI
         // ============================================
         const App = {
@@ -1959,8 +1629,6 @@
 
             async tryConnect() {
                 try {
-                    Perf.instrument(ayb);
-                    Perf.renderOverlay();
                     await runMigrations(ayb, 'todos', todoMigrations);
                     await this.handleRoute();
                 } catch (e) {
@@ -2398,7 +2066,6 @@
                 // Prevent double-loading from hashchange event
                 if (this.currentListId === id && !updateHash) return;
 
-                Perf.start('open-list');
                 this.currentListId = id;
                 const hash = `#list/${id}`;
                 if (updateHash) {
@@ -2461,7 +2128,6 @@
                           AND completed = 0
                     `);
 
-                    Perf.count('recurringTemplates', result.rows?.length || 0);
                     if (!result.rows?.length) return true;
 
                     const today = new Date();
@@ -2469,7 +2135,6 @@
                     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 19).replace('T', ' ');
 
                     const due = result.rows.filter(([, , , recType, recValue]) => this.shouldSpawnToday(recType, recValue, today));
-                    Perf.count('recurrencesDue', due.length);
                     if (!due.length) return true;
 
                     // One query for every template at once: which already have a
@@ -2488,7 +2153,6 @@
 
                     const alreadySpawned = new Set((spawnedResult.rows || []).map(row => Number(row[0])));
                     const toSpawn = due.filter(row => !alreadySpawned.has(Number(row[0])));
-                    Perf.count('recurrencesSpawned', toSpawn.length);
                     if (!toSpawn.length) return true;
 
                     // Spawn above the current top item, in one insert. Positions may
@@ -2641,15 +2305,14 @@
             async loadTodos(loadMoreCompleted = false) {
                 if (!this.currentListId) return;
 
-                Perf.startIfIdle(loadMoreCompleted ? 'load-more' : 'load');
-                const notesSnapshots = await Perf.span('captureNotesState', () => this.captureNotesState());
+                const notesSnapshots = this.captureNotesState();
 
                 try {
                     // Recurrences can insert rows, so they have to settle before
                     // the reads. Skipped entirely once the list has been checked
                     // today, which is the common case on a mutation reload.
                     if (!loadMoreCompleted) {
-                        await Perf.span('processRecurrences', () => this.processRecurrencesIfDue());
+                        await this.processRecurrencesIfDue();
                         this.completedOffset = 0;
                     }
 
@@ -2683,22 +2346,20 @@
                         LIMIT ${this.completedPageSize + 1} OFFSET ${this.completedOffset}
                     `);
 
-                    const [activeResult, completedResult] = await Perf.span('query:items', () => Promise.all([
+                    const [activeResult, completedResult] = await Promise.all([
                         activeQuery,
                         completedQuery,
                         this.renderListTitle(),
-                    ]));
+                    ]);
 
                     if (!loadMoreCompleted) {
                         this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
-                        Perf.count('activeRows', this.allTodos.length);
                     }
 
                     const completedRows = completedResult.rows || [];
                     // Check if there are more items
                     this.completedHasMore = completedRows.length > this.completedPageSize;
                     const completedTodos = completedRows.slice(0, this.completedPageSize).map(row => this.mapTodoRow(row));
-                    Perf.count('completedRows', completedTodos.length);
 
                     if (loadMoreCompleted) {
                         // Append to existing completed todos
@@ -2709,12 +2370,10 @@
                     }
 
                     this.completedOffset += completedTodos.length;
-                    await Perf.span('renderTodos', () => this.renderTodos(this.allTodos));
-                    await Perf.span('restoreNotesState', () => this.restoreNotesState(notesSnapshots));
+                    this.renderTodos(this.allTodos);
+                    this.restoreNotesState(notesSnapshots);
                 } catch (e) {
                     console.error('Load todos error:', e);
-                } finally {
-                    Perf.end();
                 }
             },
 
@@ -2820,7 +2479,6 @@
                 document.getElementById('completed-count').textContent = completedTodos.length + (this.completedHasMore ? '+' : '');
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
 
-                Perf.count('rendered', `${activeTodos.length}a/${scheduledTodos.length}s/${completedTodos.length}c`);
 
                 this.bindTodoEvents();
 
@@ -2871,7 +2529,6 @@
 
                 // Debounce: wait 300ms after typing stops
                 this.searchTimeout = setTimeout(() => {
-                    Perf.start('search');
                     this.searchTerm = value.toLowerCase().trim();
                     this.loadTodos(); // Backend search
                 }, 300);
@@ -3237,9 +2894,7 @@
                         this.placeAtIndicator(this.draggedItem, targetItem);
                         this.clearDropIndicators();
 
-                        Perf.start('reorder');
                         await this.updatePositions(list);
-                        Perf.end();
                     } else {
                         this.clearDropIndicators();
                     }
@@ -3266,16 +2921,13 @@
                 this.placeAtIndicator(this.draggedItem, item);
                 this.clearDropIndicators();
 
-                Perf.start('reorder');
                 await this.updatePositions(list);
-                Perf.end();
             },
 
             async updatePositions(list) {
                 const ids = Array.from(list.querySelectorAll('.todo-item'))
                     .map(item => parseInt(item.dataset.id))
                     .filter(Number.isInteger);
-                Perf.count('repositioned', ids.length);
                 if (!ids.length) return;
 
                 // Renumber every item in one statement. One update per item meant
@@ -3370,7 +3022,6 @@
 
                 // This path patches the DOM in place instead of reloading, so it
                 // ends its own interaction rather than relying on loadTodos().
-                Perf.start('save-edit');
 
                 try {
                     await ayb.query(`UPDATE todo_list_item SET
@@ -3400,7 +3051,6 @@
                     console.error('Save edit error:', e);
                     alert('Failed to save: ' + e.message);
                 } finally {
-                    Perf.end();
                 }
             },
 
@@ -3439,7 +3089,6 @@
             },
 
             async toggleChecklistItem(item, lineIdx) {
-                Perf.start('toggle-check');
                 const notesEl = item.querySelector('.todo-notes');
                 const textarea = notesEl.querySelector('.notes-textarea');
                 const todoId = parseInt(notesEl.dataset.todoId);
@@ -3465,7 +3114,6 @@
                     this.updateChecklistIndicator(item, textarea.value);
                 }
 
-                Perf.end();
             },
 
             updateChecklistIndicator(item, notes) {
@@ -3536,7 +3184,6 @@
                 const title = input.value.trim();
                 if (!title || !this.currentListId) return;
 
-                Perf.start('add');
 
                 try {
                     // Insert above the current top item rather than shifting every
@@ -3557,7 +3204,6 @@
             },
 
             async toggleTodo(id, checkboxEl) {
-                Perf.start('toggle');
 
                 // Un-completing a template makes it eligible to spawn again today.
                 const todo = this.allTodos.find(t => t.id === id);
@@ -3673,7 +3319,6 @@
             },
 
             async clearSchedule(id) {
-                Perf.start('clear-schedule');
 
                 try {
                     await ayb.query(`UPDATE todo_list_item SET remind_at = NULL, recurrence_type = NULL, recurrence_value = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
@@ -3723,7 +3368,6 @@
                     }
                 }
 
-                Perf.start('save-schedule');
 
                 try {
                     let remindAtUTC = 'NULL';
@@ -3759,7 +3403,6 @@
             async deleteTodo(id) {
                 if (!confirm('Delete this item?')) return;
 
-                Perf.start('delete');
 
                 try {
                     await ayb.query(`DELETE FROM todo_list_item WHERE id = ${id}`);
@@ -3770,7 +3413,6 @@
             },
 
             async duplicateTodo(id) {
-                Perf.start('duplicate');
 
                 try {
                     const result = await ayb.query(`SELECT list_id, title, notes, position FROM todo_list_item WHERE id = ${id}`);
@@ -3906,18 +3548,11 @@
                 this.showModal(`
                     <h2>Settings</h2>
                     <p style="color: var(--ink-light); margin-bottom: 20px; font-size: 0.9rem;">Connected to: ${this.escapeHtml(ayb?.getConnectionInfo()?.databaseUrl || 'Unknown')}</p>
-                    <p style="color: var(--ink-light); margin-bottom: 12px; font-size: 0.9rem;">Performance logging is <strong>${Perf.enabled ? 'on' : 'off'}</strong>. When on, each interaction is timed and broken down in an overlay you can copy as a report.</p>
-                    <button class="btn btn-secondary" style="width: 100%; margin-bottom: 20px;" onclick="App.togglePerf()">Turn performance logging ${Perf.enabled ? 'off' : 'on'}</button>
                     <div class="modal-actions">
                         <button class="btn btn-secondary" onclick="App.disconnect()">Disconnect</button>
                         <button class="btn" onclick="App.closeModal()">Close</button>
                     </div>
                 `);
-            },
-
-            togglePerf() {
-                Perf.toggle();
-                this.showSettings();
             },
 
             disconnect() {

@@ -21,6 +21,5 @@ See [README.md](./README.md) for full developer guide including:
 - Use `AybClient.escapeSQL()` for SQL string escaping (static method from ayb.js).
 - The global `ayb` variable holds the `AybOAuth` instance; use `ayb.query()` for database calls.
 - Migrations use `runMigrations(ayb, 'todos', todoMigrations)` which tracks state in `_ayb_migrations` table.
-- `Perf` (off by default, toggled in Settings) times each interaction; see the Performance Instrumentation section of README.md.
-- Every `ayb.query()` costs a fixed ~120ms round-trip regardless of rows returned. Batch into one statement or fire concurrently with `Promise.all`; never loop `await ayb.query()` over a list of rows.
+- Every `ayb.query()` costs a fixed round-trip (~120ms) regardless of rows returned. Batch into one statement or fire concurrently with `Promise.all`; never loop `await ayb.query()` over a list of rows.
 - `processRecurrences()` runs at most once per list per local day (`processRecurrencesIfDue()`); call `invalidateRecurrenceCheck()` after any edit that can make a template due today.

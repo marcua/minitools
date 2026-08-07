@@ -40,9 +40,9 @@ _ayb_migrations (app_id, version, applied_at)
 
 ### When the check runs
 
-`processRecurrences()` used to run on *every* `loadTodos()`, including every
-toggle and add — two round-trips of latency each time. It now runs at most once
-per list per local day, gated by `processRecurrencesIfDue()`:
+`processRecurrences()` runs at most once per list per local day, gated by
+`processRecurrencesIfDue()` — not on every `loadTodos()`, which would cost two
+round-trips on every toggle and add:
 
 - `recurrencesCheckedFor` maps `listId` → local date string.
 - It is **in memory only, deliberately**. A cold app open (including restoring
@@ -125,78 +125,6 @@ Deciding by direction instead (`draggedIndex < targetIndex ? after : before`)
 while always drawing the line above the target is what made a downward drag land
 one slot too low. Keep the indicator and the insertion rule reading from the same
 value, or the bug comes back.
-
-## Performance Instrumentation
-
-The `Perf` object (top of the script, above `App`) times every interaction that
-touches the list. It is **off by default**; turn it on from Settings (lists
-screen → gear icon) or with `Perf.enable()` in the console. The setting is
-stored in `localStorage` under `todos_perf`.
-
-When on:
-
-- `Perf.instrument(ayb)` wraps `ayb.query()`, so every round-trip is timed —
-  including the ones inside `processRecurrences()` and `updatePositions()`.
-  Wrapping is permanent but inert while disabled, so toggling needs no reload.
-- Each interaction (`toggle`, `add`, `delete`, `duplicate`, `save-edit`,
-  `toggle-check`, `save-schedule`, `reorder`, `search`, `load`, `open-list`) is
-  timed in five segments: `captureNotesState`, `processRecurrences`,
-  `query:items`, `renderTodos`, `restoreNotesState` — plus `paint`.
-- Totals are measured across two `requestAnimationFrame`s, so browser layout and
-  paint show up instead of hiding behind our JS.
-- Results go to the console (`console.table`) and to an on-screen overlay — the
-  app usually runs as an installed PWA where there is no console. The overlay is
-  collapsed to one line; tap it to expand.
-
-Useful entry points:
-
-- `Perf.report()` — JSON of the last 25 interactions
-- `Perf.copyReport()` — same, to the clipboard (the overlay's "Copy report" button)
-- `Perf.runs` — raw timing records
-- `Perf.clear()` / `Perf.disable()`
-
-### Interpreting the numbers
-
-The console summary splits wall time three ways:
-
-```
-toggle 243ms · queries 236ms (3) · js 5ms · paint 2ms · activeRows=34 ...
-```
-
-- **queries** high → round-trips dominate. Measured against a real ayb server,
-  every query costs the same ~120ms whether it returns 1 row or 101, so what
-  matters is the number of *sequential* round-trips, not rows or payload size.
-  Queries issued together via `Promise.all` cost one wait, not several. This is
-  the usual answer.
-- **js / paint** high → the re-render dominates. `renderTodos()` rebuilds every
-  item's HTML (including its hidden edit form, textarea, notes preview and
-  timestamps — roughly 4.7 KB per item) and reassigns `innerHTML` for all three
-  sections on every mutation. `rendered` and `domNodes` show how big that gets.
-  At a few hundred items this is tens of milliseconds; it only starts to matter
-  in the high hundreds. If it ever does, re-split `renderTodos` into per-section
-  string-building and `innerHTML` spans to see which half is at fault.
-- `.todo-item` carries `animation-delay: index * 30ms`, so the list keeps
-  animating for `30ms × item count` after a re-render. That is invisible in
-  these numbers but visible on screen.
-
-### Current round-trip budget
-
-A "wave" is one latency wait; queries fired together in a `Promise.all` share one.
-
-| Interaction | Sequential waves |
-|---|---|
-| Toggle / delete / add | 2 (the write, then the reads in parallel) |
-| Reload, same day | 1 |
-| Drag reorder, todos or lists | 1, regardless of item count |
-| Cold open, nothing due | 2 |
-| Cold open that spawns recurrences | 4 |
-| Duplicate | 4 — still `SELECT`, then shift, then insert, then reload |
-| Save schedule | 2, plus a recurrence re-check it deliberately forces |
-
-Mutations still reload the whole list rather than patching the changed item in
-place; that reload is what the last wave pays for. Collapsing `duplicateTodo()`
-into a single `INSERT ... SELECT` (plus its position shift) would take it from
-four waves to three.
 
 ## Common Workflow
 
