@@ -35,9 +35,26 @@ _ayb_migrations (app_id, version, applied_at)
 
 - **Template**: item with `recurrence_type` set, `parent_id = NULL`
 - **Spawned copy**: item with `parent_id` pointing to template
-- `processRecurrences()` runs on list load, spawns copies for today
 - Templates with `completed = 1` are skipped (won't spawn new todos)
 - Supports multiple values: monthly `1, 15` or yearly `Jan 1, Jul 4`
+
+### When the check runs
+
+`processRecurrences()` runs at most once per list per local day, gated by
+`processRecurrencesIfDue()` — not on every `loadTodos()`, which would cost two
+round-trips on every toggle and add:
+
+- `recurrencesCheckedFor` maps `listId` → local date string.
+- It is **in memory only, deliberately**. A cold app open (including restoring
+  the last list from `todos_last_hash` without navigating) always re-checks.
+- A `visibilitychange` handler calls `handleAppVisible()`, so an installed PWA
+  left open across midnight re-checks when it returns to the foreground. Same
+  day, it issues no queries at all.
+- `invalidateRecurrenceCheck()` forces a re-check after edits that can make a
+  template due today: saving a schedule, or un-completing a template.
+
+All templates are checked with one `parent_id IN (...)` query instead of one per
+template, and all of a day's copies are spawned in one multi-row `INSERT`.
 
 ## Gotchas & Patterns
 
@@ -94,8 +111,20 @@ this.showModal(`
 
 ### 10. Drag and Drop
 - Works via touch events for iOS compatibility
-- Updates `position` column in database
+- Updates `position` column in database (one statement, not one per item)
 - Both todo items and lists support reordering
+
+**Drop placement is decided by pointer position, not drag direction.**
+`dropsAfter(target, clientY)` compares the pointer against the target's vertical
+midpoint; `showDropIndicator()` draws the insertion line on that same edge
+(`drag-over-above` / `drag-over-below`), and `placeAtIndicator()` inserts on the
+side the line showed. All four paths — todo mouse, todo touch, list mouse, list
+touch — go through these helpers.
+
+Deciding by direction instead (`draggedIndex < targetIndex ? after : before`)
+while always drawing the line above the target is what made a downward drag land
+one slot too low. Keep the indicator and the insertion rule reading from the same
+value, or the bug comes back.
 
 ## Common Workflow
 

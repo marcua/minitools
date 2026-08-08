@@ -424,8 +424,13 @@
             background: var(--paper-shadow);
         }
 
-        .list-card.drag-over {
+        /* Insertion line on the edge the drop will actually land on */
+        .list-card.drag-over-above {
             border-top: 2px solid var(--accent);
+        }
+
+        .list-card.drag-over-below {
+            border-bottom: 2px solid var(--accent);
         }
 
         .list-card h3 {
@@ -581,8 +586,12 @@
             opacity: 0.5;
         }
 
-        .todo-item.drag-over {
+        .todo-item.drag-over-above {
             border-top: 2px solid var(--accent);
+        }
+
+        .todo-item.drag-over-below {
+            border-bottom: 2px solid var(--accent);
         }
 
         .todo-main {
@@ -1584,6 +1593,12 @@
             loadingMoreCompleted: false,
             // For list drag-and-drop
             draggedList: null,
+            // List names by id, so opening a list doesn't need a round-trip for
+            // its title. Populated by loadLists() and by openList()'s fallback.
+            listNames: {},
+            // listId -> local date string already checked by processRecurrences().
+            // Deliberately in memory only: a cold app open always re-checks.
+            recurrencesCheckedFor: {},
 
             async init() {
                 this.bindEvents();
@@ -1781,6 +1796,12 @@
                     this.handleRoute();
                 });
 
+                // An installed PWA can sit open for days. Re-check recurrences
+                // when it comes back to the foreground on a new local day.
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') this.handleAppVisible();
+                });
+
                 window.addEventListener('beforeunload', (e) => {
                     // Check for any open edit forms with notes
                     const openEditors = document.querySelectorAll('.todo-edit-form:not(.hidden)');
@@ -1834,6 +1855,9 @@
                         total: row[3] || 0,
                         pending: row[4] || 0
                     }));
+
+                    // Opening a list can then set its title without a round-trip.
+                    lists.forEach(list => { this.listNames[list.id] = list.name; });
 
                     this.renderLists(lists);
                 } catch (e) {
@@ -1899,24 +1923,27 @@
                     handle.addEventListener('dragend', () => {
                         this.draggedList = null;
                         card.classList.remove('dragging');
-                        container.querySelectorAll('.list-card').forEach(c => c.classList.remove('drag-over'));
+                        this.clearDropIndicators(container);
                     });
 
                     card.addEventListener('dragover', (e) => {
                         e.preventDefault();
                         if (!this.draggedList || this.draggedList === card) return;
                         e.dataTransfer.dropEffect = 'move';
-                        card.classList.add('drag-over');
+                        this.showDropIndicator(card, e.clientY);
                     });
 
                     card.addEventListener('dragleave', () => {
-                        card.classList.remove('drag-over');
+                        card.classList.remove('drag-over-above', 'drag-over-below');
                     });
 
                     card.addEventListener('drop', (e) => {
                         e.preventDefault();
-                        card.classList.remove('drag-over');
-                        if (!this.draggedList || this.draggedList === card) return;
+                        if (!this.draggedList || this.draggedList === card) {
+                            this.clearDropIndicators(container);
+                            return;
+                        }
+                        this.showDropIndicator(card, e.clientY);
                         this.handleListDrop(this.draggedList, card);
                     });
 
@@ -1939,7 +1966,7 @@
 
                         // Find potential drop target
                         const allCards = Array.from(container.querySelectorAll('.list-card[data-id]'));
-                        allCards.forEach(c => c.classList.remove('drag-over'));
+                        this.clearDropIndicators(container);
 
                         const targetCard = allCards.find(c => {
                             if (c === card) return false;
@@ -1947,7 +1974,7 @@
                             return this.listTouchCurrentY > rect.top && this.listTouchCurrentY < rect.bottom;
                         });
 
-                        if (targetCard) targetCard.classList.add('drag-over');
+                        if (targetCard) this.showDropIndicator(targetCard, this.listTouchCurrentY);
                     }, { passive: false });
 
                     handle.addEventListener('touchend', () => {
@@ -1956,9 +1983,8 @@
                         card.style.zIndex = '';
                         card.classList.remove('dragging');
 
-                        const targetCard = container.querySelector('.list-card.drag-over');
+                        const targetCard = container.querySelector('.list-card.drag-over-above, .list-card.drag-over-below');
                         if (targetCard) {
-                            targetCard.classList.remove('drag-over');
                             this.handleListDrop(this.draggedList, targetCard);
                         }
 
@@ -1969,18 +1995,14 @@
 
             async handleListDrop(draggedCard, targetCard) {
                 const container = document.getElementById('lists-container');
-                const cards = Array.from(container.querySelectorAll('.list-card[data-id]'));
-                const draggedIdx = cards.indexOf(draggedCard);
-                const targetIdx = cards.indexOf(targetCard);
-
-                if (draggedIdx === targetIdx) return;
-
-                // Reorder in DOM
-                if (draggedIdx < targetIdx) {
-                    targetCard.after(draggedCard);
-                } else {
-                    targetCard.before(draggedCard);
+                if (draggedCard === targetCard) {
+                    this.clearDropIndicators(container);
+                    return;
                 }
+
+                // Reorder in DOM, on the side the indicator showed
+                this.placeAtIndicator(draggedCard, targetCard);
+                this.clearDropIndicators(container);
 
                 // Get new order and update positions
                 const newOrder = Array.from(container.querySelectorAll('.list-card[data-id]'))
@@ -1990,10 +2012,17 @@
             },
 
             async updateListPositions(order) {
+                if (!order.length) return;
+
                 try {
-                    for (const item of order) {
-                        await ayb.query(`UPDATE todo_list SET position = ${item.position}, updated_at = CURRENT_TIMESTAMP WHERE id = ${item.id}`);
-                    }
+                    // Same single-statement renumbering as todo items.
+                    const cases = order.map(item => `WHEN ${item.id} THEN ${item.position}`).join(' ');
+                    const ids = order.map(item => item.id).join(',');
+                    await ayb.query(`
+                        UPDATE todo_list SET position = CASE id ${cases} END,
+                                             updated_at = CURRENT_TIMESTAMP
+                        WHERE id IN (${ids})
+                    `);
                 } catch (e) {
                     console.error('Update list positions error:', e);
                     this.loadLists(); // Reload on error
@@ -2049,8 +2078,44 @@
                 document.getElementById('new-todo-input').focus();
             },
 
-            async processRecurrences() {
+            // Local date as YYYY-MM-DD, used to decide whether today's recurrences
+            // have already been processed for a list.
+            localDateKey(date = new Date()) {
+                const pad = n => String(n).padStart(2, '0');
+                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+            },
+
+            // Recurrences only need checking once per list per local day, not on
+            // every reload. The guard lives in memory, so opening (or reloading)
+            // the app always re-checks, including when the last list is restored
+            // from localStorage without navigating.
+            async processRecurrencesIfDue() {
                 if (!this.currentListId) return;
+                if (this.recurrencesCheckedFor[this.currentListId] === this.localDateKey()) return;
+
+                if (await this.processRecurrences()) {
+                    this.recurrencesCheckedFor[this.currentListId] = this.localDateKey();
+                }
+            },
+
+            // Forces the next load to re-check, for edits that can create or
+            // revive a template that is due today.
+            invalidateRecurrenceCheck() {
+                delete this.recurrencesCheckedFor[this.currentListId];
+            },
+
+            // The app came back to the foreground. If the local day rolled over
+            // while it was backgrounded, today's recurrences haven't spawned yet.
+            async handleAppVisible() {
+                if (!this.currentListId) return;
+                if (this.recurrencesCheckedFor[this.currentListId] === this.localDateKey()) return;
+                await this.loadTodos();
+            },
+
+            // Returns true when the check completed, so the caller only marks the
+            // day as done if nothing failed.
+            async processRecurrences() {
+                if (!this.currentListId) return false;
 
                 try {
                     // Get active recurring templates (not completed, has recurrence_type, no parent_id)
@@ -2063,38 +2128,49 @@
                           AND completed = 0
                     `);
 
-                    if (!result.rows?.length) return;
+                    if (!result.rows?.length) return true;
 
                     const today = new Date();
                     // Get start of today in local time, formatted for SQL comparison
                     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 19).replace('T', ' ');
 
-                    for (const row of result.rows) {
-                        const [id, title, notes, recType, recValue] = row;
+                    const due = result.rows.filter(([, , , recType, recValue]) => this.shouldSpawnToday(recType, recValue, today));
+                    if (!due.length) return true;
 
-                        // Check if we should spawn today
-                        if (!this.shouldSpawnToday(recType, recValue, today)) continue;
-
-                        // Check if there's already a spawned copy that's either:
-                        // 1. Incomplete (not yet done), OR
-                        // 2. Created today (already done today, don't spawn again)
-                        const existsResult = await ayb.query(`
-                            SELECT id FROM todo_list_item
-                            WHERE parent_id = ${id}
+                    // One query for every template at once: which already have a
+                    // spawned copy that is either incomplete (not yet done) or was
+                    // created today (already done today, don't spawn again). Fetch
+                    // the top position alongside it, since both are needed to spawn.
+                    const dueIds = due.map(row => row[0]);
+                    const [spawnedResult, positionResult] = await Promise.all([
+                        ayb.query(`
+                            SELECT DISTINCT parent_id FROM todo_list_item
+                            WHERE parent_id IN (${dueIds.join(',')})
                               AND (completed = 0 OR created_at >= '${todayStart}')
-                        `);
+                        `),
+                        ayb.query(`SELECT MIN(position) FROM todo_list_item WHERE list_id = ${this.currentListId}`),
+                    ]);
 
-                        if (existsResult.rows?.length > 0) continue;
+                    const alreadySpawned = new Set((spawnedResult.rows || []).map(row => Number(row[0])));
+                    const toSpawn = due.filter(row => !alreadySpawned.has(Number(row[0])));
+                    if (!toSpawn.length) return true;
 
-                        // Spawn new item at position 0
-                        await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
-                        await ayb.query(`
-                            INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
-                            VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}', '${AybClient.escapeSQL(notes || '')}', 0, 0, ${id})
-                        `);
-                    }
+                    // Spawn above the current top item, in one insert. Positions may
+                    // go negative; ordering is all that matters, and a drag reorder
+                    // renumbers from 0 anyway.
+                    const minPosition = Number(positionResult.rows?.[0]?.[0] ?? 0) || 0;
+                    const values = toSpawn.map(([id, title, notes], idx) =>
+                        `(${this.currentListId}, '${AybClient.escapeSQL(title)}', '${AybClient.escapeSQL(notes || '')}', ${minPosition - 1 - idx}, 0, ${id})`
+                    ).join(', ');
+
+                    await ayb.query(`
+                        INSERT INTO todo_list_item (list_id, title, notes, position, completed, parent_id)
+                        VALUES ${values}
+                    `);
+                    return true;
                 } catch (e) {
                     console.error('Process recurrences error:', e);
+                    return false;
                 }
             },
 
@@ -2232,14 +2308,11 @@
                 const notesSnapshots = this.captureNotesState();
 
                 try {
-                    const listResult = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
-                    if (listResult.rows?.length) {
-                        document.getElementById('list-title').textContent = listResult.rows[0][0];
-                    }
-
-                    // Process recurring items first (only on initial load)
+                    // Recurrences can insert rows, so they have to settle before
+                    // the reads. Skipped entirely once the list has been checked
+                    // today, which is the common case on a mutation reload.
                     if (!loadMoreCompleted) {
-                        await this.processRecurrences();
+                        await this.processRecurrencesIfDue();
                         this.completedOffset = 0;
                     }
 
@@ -2251,22 +2324,19 @@
                         ? ` AND ((LOWER(title) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%' OR LOWER(notes) LIKE '%${AybClient.escapeSQL(this.searchTerm.toLowerCase())}%')${pinClause})`
                         : '';
 
-                    // Load active items (not completed) - no pagination needed
-                    if (!loadMoreCompleted) {
-                        const activeResult = await ayb.query(`
-                            SELECT id, title, notes, completed, position,
-                                   created_at, updated_at, completed_at,
-                                   remind_at, recurrence_type, recurrence_value, parent_id
-                            FROM todo_list_item
-                            WHERE list_id = ${this.currentListId} AND completed = 0${searchClause}
-                            ORDER BY position ASC, id ASC
-                        `);
+                    // Active items (not completed, no pagination needed), the page of
+                    // completed items, and the list title are independent, so they go
+                    // out together: one round-trip of latency instead of three.
+                    const activeQuery = loadMoreCompleted ? null : ayb.query(`
+                        SELECT id, title, notes, completed, position,
+                               created_at, updated_at, completed_at,
+                               remind_at, recurrence_type, recurrence_value, parent_id
+                        FROM todo_list_item
+                        WHERE list_id = ${this.currentListId} AND completed = 0${searchClause}
+                        ORDER BY position ASC, id ASC
+                    `);
 
-                        this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
-                    }
-
-                    // Load completed items with pagination
-                    const completedResult = await ayb.query(`
+                    const completedQuery = ayb.query(`
                         SELECT id, title, notes, completed, position,
                                created_at, updated_at, completed_at,
                                remind_at, recurrence_type, recurrence_value, parent_id
@@ -2275,6 +2345,16 @@
                         ORDER BY completed_at DESC, id DESC
                         LIMIT ${this.completedPageSize + 1} OFFSET ${this.completedOffset}
                     `);
+
+                    const [activeResult, completedResult] = await Promise.all([
+                        activeQuery,
+                        completedQuery,
+                        this.renderListTitle(),
+                    ]);
+
+                    if (!loadMoreCompleted) {
+                        this.allTodos = (activeResult.rows || []).map(row => this.mapTodoRow(row));
+                    }
 
                     const completedRows = completedResult.rows || [];
                     // Check if there are more items
@@ -2294,6 +2374,23 @@
                     this.restoreNotesState(notesSnapshots);
                 } catch (e) {
                     console.error('Load todos error:', e);
+                }
+            },
+
+            // Sets the header title from the cached list name, which loadLists()
+            // already fetched. Only a cold start straight into #list/{id} has to
+            // ask the server, and that request rides along with the item queries.
+            async renderListTitle() {
+                const cached = this.listNames[this.currentListId];
+                if (cached !== undefined) {
+                    document.getElementById('list-title').textContent = cached;
+                    return;
+                }
+
+                const result = await ayb.query(`SELECT name FROM todo_list WHERE id = ${this.currentListId}`);
+                if (result.rows?.length) {
+                    this.listNames[this.currentListId] = result.rows[0][0];
+                    document.getElementById('list-title').textContent = result.rows[0][0];
                 }
             },
 
@@ -2381,6 +2478,7 @@
                 document.getElementById('completed-todos').innerHTML = completedHtml;
                 document.getElementById('completed-count').textContent = completedTodos.length + (this.completedHasMore ? '+' : '');
                 document.getElementById('completed-section').classList.toggle('hidden', completedTodos.length === 0);
+
 
                 this.bindTodoEvents();
 
@@ -2707,6 +2805,34 @@
                 });
             },
 
+            // ---- Drop placement ----
+            // A drop lands on whichever half of the target the pointer is over,
+            // and the insertion line is drawn on that same edge. Deciding by drag
+            // direction instead used to put a downward drag one slot too low,
+            // because the line was always drawn above the target.
+
+            dropsAfter(target, clientY) {
+                const rect = target.getBoundingClientRect();
+                return clientY > rect.top + rect.height / 2;
+            },
+
+            showDropIndicator(target, clientY) {
+                const after = this.dropsAfter(target, clientY);
+                target.classList.toggle('drag-over-below', after);
+                target.classList.toggle('drag-over-above', !after);
+            },
+
+            clearDropIndicators(root = document) {
+                root.querySelectorAll('.drag-over-above, .drag-over-below')
+                    .forEach(el => el.classList.remove('drag-over-above', 'drag-over-below'));
+            },
+
+            // Moves dragged next to target on the side the indicator showed.
+            placeAtIndicator(dragged, target) {
+                if (target.classList.contains('drag-over-below')) target.after(dragged);
+                else target.before(dragged);
+            },
+
             handleDragStart(e, item) {
                 this.draggedItem = item;
                 item.classList.add('dragging');
@@ -2715,19 +2841,18 @@
 
             handleDragEnd(e, item) {
                 item.classList.remove('dragging');
-                document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                this.clearDropIndicators();
                 this.draggedItem = null;
             },
 
             handleDragOver(e, item) {
                 e.preventDefault();
-                if (item !== this.draggedItem) {
-                    item.classList.add('drag-over');
-                }
+                if (item === this.draggedItem) return;
+                this.showDropIndicator(item, e.clientY);
             },
 
             handleDragLeave(e, item) {
-                item.classList.remove('drag-over');
+                item.classList.remove('drag-over-above', 'drag-over-below');
             },
 
             // Touch drag implementation for mobile
@@ -2749,10 +2874,10 @@
                     const targetItem = elemBelow?.closest('.todo-item');
 
                     // Clear previous drag-over states
-                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                    this.clearDropIndicators();
 
                     if (targetItem && targetItem !== this.draggedItem) {
-                        targetItem.classList.add('drag-over');
+                        this.showDropIndicator(targetItem, touch.clientY);
                     }
                 };
 
@@ -2762,22 +2887,16 @@
 
                     item.classList.remove('dragging');
 
-                    const targetItem = document.querySelector('.todo-item.drag-over');
-                    document.querySelectorAll('.todo-item').forEach(i => i.classList.remove('drag-over'));
+                    const targetItem = document.querySelector('.todo-item.drag-over-above, .todo-item.drag-over-below');
 
                     if (targetItem && targetItem !== this.draggedItem) {
                         const list = targetItem.parentNode;
-                        const items = Array.from(list.querySelectorAll('.todo-item'));
-                        const draggedIndex = items.indexOf(this.draggedItem);
-                        const targetIndex = items.indexOf(targetItem);
-
-                        if (draggedIndex < targetIndex) {
-                            targetItem.after(this.draggedItem);
-                        } else {
-                            targetItem.before(this.draggedItem);
-                        }
+                        this.placeAtIndicator(this.draggedItem, targetItem);
+                        this.clearDropIndicators();
 
                         await this.updatePositions(list);
+                    } else {
+                        this.clearDropIndicators();
                     }
 
                     this.draggedItem = null;
@@ -2789,31 +2908,35 @@
 
             async handleDrop(e, item) {
                 e.preventDefault();
-                item.classList.remove('drag-over');
 
-                if (!this.draggedItem || item === this.draggedItem) return;
+                if (!this.draggedItem || item === this.draggedItem) {
+                    this.clearDropIndicators();
+                    return;
+                }
 
                 const list = item.parentNode;
-                const items = Array.from(list.querySelectorAll('.todo-item'));
-                const draggedIndex = items.indexOf(this.draggedItem);
-                const targetIndex = items.indexOf(item);
-
-                if (draggedIndex < targetIndex) {
-                    item.after(this.draggedItem);
-                } else {
-                    item.before(this.draggedItem);
-                }
+                // Re-read the pointer position: the last dragover may have been
+                // throttled, and this is the placement the user actually sees.
+                this.showDropIndicator(item, e.clientY);
+                this.placeAtIndicator(this.draggedItem, item);
+                this.clearDropIndicators();
 
                 await this.updatePositions(list);
             },
 
             async updatePositions(list) {
-                const items = Array.from(list.querySelectorAll('.todo-item'));
+                const ids = Array.from(list.querySelectorAll('.todo-item'))
+                    .map(item => parseInt(item.dataset.id))
+                    .filter(Number.isInteger);
+                if (!ids.length) return;
 
-                for (let i = 0; i < items.length; i++) {
-                    const id = parseInt(items[i].dataset.id);
-                    await ayb.query(`UPDATE todo_list_item SET position = ${i} WHERE id = ${id}`);
-                }
+                // Renumber every item in one statement. One update per item meant
+                // one round-trip per item, so a single drag cost seconds.
+                const cases = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(' ');
+                await ayb.query(`
+                    UPDATE todo_list_item SET position = CASE id ${cases} END
+                    WHERE id IN (${ids.join(',')})
+                `);
             },
 
             toggleNotes(item) {
@@ -2897,6 +3020,9 @@
                     return;
                 }
 
+                // This path patches the DOM in place instead of reloading, so it
+                // ends its own interaction rather than relying on loadTodos().
+
                 try {
                     await ayb.query(`UPDATE todo_list_item SET
                         title = '${AybClient.escapeSQL(newTitle)}',
@@ -2924,6 +3050,7 @@
                 } catch (e) {
                     console.error('Save edit error:', e);
                     alert('Failed to save: ' + e.message);
+                } finally {
                 }
             },
 
@@ -2986,6 +3113,7 @@
                     // Update the checklist indicator
                     this.updateChecklistIndicator(item, textarea.value);
                 }
+
             },
 
             updateChecklistIndicator(item, notes) {
@@ -3056,13 +3184,15 @@
                 const title = input.value.trim();
                 if (!title || !this.currentListId) return;
 
-                try {
-                    // Shift existing items down to make room at position 0
-                    await ayb.query(`UPDATE todo_list_item SET position = position + 1 WHERE list_id = ${this.currentListId}`);
 
+                try {
+                    // Insert above the current top item rather than shifting every
+                    // other row down first, which cost a second round-trip and an
+                    // O(n) write. Positions may go negative; only ordering matters.
                     await ayb.query(`
                         INSERT INTO todo_list_item (list_id, title, position, completed)
-                        VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}', 0, 0)
+                        VALUES (${this.currentListId}, '${AybClient.escapeSQL(title)}',
+                                COALESCE((SELECT MIN(position) - 1 FROM todo_list_item WHERE list_id = ${this.currentListId}), 0), 0)
                     `);
 
                     input.value = '';
@@ -3074,6 +3204,11 @@
             },
 
             async toggleTodo(id, checkboxEl) {
+
+                // Un-completing a template makes it eligible to spawn again today.
+                const todo = this.allTodos.find(t => t.id === id);
+                if (todo?.recurrence_type && !todo.parent_id) this.invalidateRecurrenceCheck();
+
                 // Immediate visual feedback
                 if (checkboxEl) {
                     checkboxEl.classList.add('saving');
@@ -3184,6 +3319,7 @@
             },
 
             async clearSchedule(id) {
+
                 try {
                     await ayb.query(`UPDATE todo_list_item SET remind_at = NULL, recurrence_type = NULL, recurrence_value = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`);
                     this.closeModal();
@@ -3232,6 +3368,7 @@
                     }
                 }
 
+
                 try {
                     let remindAtUTC = 'NULL';
                     if (remindAt) {
@@ -3252,6 +3389,9 @@
                         updated_at = CURRENT_TIMESTAMP
                         WHERE id = ${id}`);
 
+                    // A new or changed recurrence may be due today.
+                    this.invalidateRecurrenceCheck();
+
                     this.closeModal();
                     await this.loadTodos();
                 } catch (e) {
@@ -3263,6 +3403,7 @@
             async deleteTodo(id) {
                 if (!confirm('Delete this item?')) return;
 
+
                 try {
                     await ayb.query(`DELETE FROM todo_list_item WHERE id = ${id}`);
                     await this.loadTodos();
@@ -3272,6 +3413,7 @@
             },
 
             async duplicateTodo(id) {
+
                 try {
                     const result = await ayb.query(`SELECT list_id, title, notes, position FROM todo_list_item WHERE id = ${id}`);
                     if (!result.rows?.length) return;
@@ -3353,6 +3495,7 @@
                 try {
                     await ayb.query(`UPDATE todo_list SET name = '${AybClient.escapeSQL(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${this.currentListId}`);
                     title.textContent = name;
+                    this.listNames[this.currentListId] = name;
                 } catch (e) {
                     console.error('Save list name error:', e);
                 }
@@ -3391,6 +3534,8 @@
                 try {
                     await ayb.query(`DELETE FROM todo_list_item WHERE list_id = ${this.currentListId}`);
                     await ayb.query(`DELETE FROM todo_list WHERE id = ${this.currentListId}`);
+                    delete this.listNames[this.currentListId];
+                    delete this.recurrencesCheckedFor[this.currentListId];
                     this.closeModal();
                     this.goBack();
                 } catch (e) {

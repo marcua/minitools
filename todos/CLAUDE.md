@@ -21,3 +21,5 @@ See [README.md](./README.md) for full developer guide including:
 - Use `AybClient.escapeSQL()` for SQL string escaping (static method from ayb.js).
 - The global `ayb` variable holds the `AybOAuth` instance; use `ayb.query()` for database calls.
 - Migrations use `runMigrations(ayb, 'todos', todoMigrations)` which tracks state in `_ayb_migrations` table.
+- Batch into one statement or fire concurrently with `Promise.all`; never loop `await ayb.query()` over a list of rows.
+- `processRecurrences()` runs at most once per list per local day (`processRecurrencesIfDue()`); call `invalidateRecurrenceCheck()` after any edit that can make a template due today.
