@@ -151,6 +151,40 @@
             box-shadow: 4px 4px 0 #1a1a1a;
         }
 
+        .bookmarklet-button {
+            display: inline-block;
+            background: #f5f5f0;
+            color: #1a1a1a;
+            padding: 12px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: 3px solid #1a1a1a;
+            cursor: pointer;
+        }
+
+        .bookmarklet-button:hover {
+            background: #a855f7;
+            border-color: #a855f7;
+            color: white;
+        }
+
+        .bookmarklet-link.pending {
+            opacity: 0.5;
+            cursor: progress;
+        }
+
+        .note {
+            margin-top: 15px;
+            padding: 10px 12px;
+            background: #e5e5e0;
+            border-left: 4px solid #f59e0b;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
         .bookmarklet-label {
             display: block;
             font-size: 0.75rem;
@@ -258,9 +292,12 @@
                 other tools can't reach.
             </p>
             <p style="margin-top: 10px;">
-                Under the hood, it embeds Figma's own
+                Under the hood, the bookmarklet carries Figma's own
                 <a href="https://mcp.figma.com/mcp/html-to-design/capture.js"><code>capture.js</code></a>
-                in a bookmarklet. For more, read <a href="https://blog.marcua.net/2026/05/05/figmimic">the blog post</a>.
+                inside it, so it never has to load anything from the page it is
+                capturing. That is what lets it run on sites with a strict
+                <a href="#csp">Content Security Policy</a>. For more, read
+                <a href="https://blog.marcua.net/2026/05/05/figmimic">the blog post</a>.
             </p>
             <video autoplay loop muted playsinline controls>
                 <source src="figmimic.mp4" type="video/mp4">
@@ -273,9 +310,20 @@
             <p>Drag this bookmarklet to your bookmarks bar:</p>
             <div class="bookmarklet-row">
                 <div>
-                    <a class="bookmarklet-link" href="javascript:void((async()=>{const r=await fetch('https://mcp.figma.com/mcp/html-to-design/capture.js');const t=await r.text();const s=document.createElement('script');s.textContent=t;document.head.appendChild(s);await new  Promise(r=>setTimeout(r,500));window.figma.captureForDesign({selector:'body'})})())">Figmimic</a>
+                    <a class="bookmarklet-link pending" id="bookmarklet" href="javascript:void(0)">Figmimic</a>
+                    <span class="bookmarklet-label" id="bookmarklet-status">Building&hellip;</span>
+                </div>
+                <div>
+                    <button class="bookmarklet-button" id="copy-bookmarklet" disabled>Copy code</button>
+                    <span class="bookmarklet-label">Can't drag? Paste into a new bookmark's URL field</span>
                 </div>
             </div>
+            <div class="note" id="build-note" hidden></div>
+            <p style="margin-top: 15px;">
+                The bookmarklet is big (around 400&nbsp;KB) because Figma's
+                capture library travels inside it. Drag it again every few
+                months to pick up a fresh copy of that library.
+            </p>
         </div>
 
         <div class="card">
@@ -289,9 +337,115 @@
         </div>
 
 
+        <div class="card tips" id="csp">
+            <h2>If it doesn't work</h2>
+            <p>
+                <strong>Nothing happens, and the console says something was
+                refused by a Content Security Policy.</strong> A page's CSP
+                can't stop the bookmarklet's own code from running, but it does
+                stop that code from fetching a script, injecting a
+                <code>&lt;script&gt;</code> tag, or calling
+                <code>eval</code>. An older version of this bookmarklet fetched
+                <code>capture.js</code> at click time, so it died on any site
+                with a <code>connect-src</code> or <code>script-src</code>
+                policy. The current one carries the library inline instead, so
+                re-drag the bookmarklet above and try again.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>The layout is captured but some images are missing.</strong>
+                Images have to be downloaded to be embedded, and the page's
+                <code>connect-src</code> policy governs that download. Images
+                served from the site's own domain come through; images on
+                third-party domains the policy doesn't list are skipped. Text,
+                layout, and styles are unaffected.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>No "copied to clipboard" confirmation.</strong> The
+                capture waits for the page to have focus before writing to the
+                clipboard. If you clicked the bookmarklet while focus was
+                elsewhere, click once on the page itself and the copy completes.
+            </p>
+        </div>
+
         <footer>
             <p>Part of <a href="../">Minitools</a></p>
         </footer>
     </div>
+    <script>
+        (function () {
+            var CAPTURE_URL = 'https://mcp.figma.com/mcp/html-to-design/capture.js';
+
+            // Fallback for when capture.js can't be fetched: load it at click
+            // time. Only works on pages without a restrictive CSP.
+            var LOADER = "javascript:void((async()=>{const r=await fetch('" + CAPTURE_URL + "');" +
+                "const t=await r.text();const s=document.createElement('script');s.textContent=t;" +
+                "document.head.appendChild(s);await new Promise(r=>setTimeout(r,500));" +
+                "window.figma.captureForDesign({selector:'body'})})())";
+
+            var link = document.getElementById('bookmarklet');
+            var status = document.getElementById('bookmarklet-status');
+            var copyButton = document.getElementById('copy-bookmarklet');
+            var note = document.getElementById('build-note');
+
+            // A javascript: URL is percent-decoded once before it is evaluated,
+            // so escape the characters that would otherwise be lost or would
+            // end the URL. '%' has to go first, or we'd re-escape our own
+            // escapes. Newlines matter most: URL parsing strips raw ones, which
+            // would swallow everything after a // comment.
+            function encodeSource(source) {
+                return source
+                    .replace(/%/g, '%25')
+                    .replace(/#/g, '%23')
+                    .replace(/\r/g, '%0D')
+                    .replace(/\n/g, '%0A')
+                    .replace(/\t/g, '%09')
+                    .replace(/ /g, '%20')
+                    .replace(/"/g, '%22')
+                    .replace(/</g, '%3C')
+                    .replace(/>/g, '%3E');
+            }
+
+            function buildBookmarklet(source) {
+                return 'javascript:void(function(){' + encodeSource(source) +
+                    '%0Awindow.figma.captureForDesign({selector:%22body%22})}())';
+            }
+
+            fetch(CAPTURE_URL)
+                .then(function (response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.text();
+                })
+                .then(function (source) {
+                    if (!/captureForDesign/.test(source)) {
+                        throw new Error('unexpected capture.js contents');
+                    }
+                    var bookmarklet = buildBookmarklet(source);
+                    link.href = bookmarklet;
+                    link.classList.remove('pending');
+                    status.textContent = 'Ready \u00b7 ' + Math.round(bookmarklet.length / 1024) + ' KB';
+                    copyButton.disabled = false;
+                    copyButton.addEventListener('click', function () {
+                        navigator.clipboard.writeText(bookmarklet).then(function () {
+                            copyButton.textContent = 'Copied!';
+                            setTimeout(function () { copyButton.textContent = 'Copy code'; }, 2000);
+                        }, function () {
+                            copyButton.textContent = 'Copy failed';
+                        });
+                    });
+                })
+                .catch(function (error) {
+                    link.href = LOADER;
+                    link.classList.remove('pending');
+                    status.textContent = 'Fallback version';
+                    note.hidden = false;
+                    note.innerHTML = "Couldn't fetch Figma's capture library (" +
+                        String(error.message).replace(/[<>&]/g, '') +
+                        '), so the bookmarklet above is the version that loads it at ' +
+                        'click time. That one only works on pages without a strict ' +
+                        'Content Security Policy. Reload to try building the ' +
+                        'self-contained version again.';
+                });
+        })();
+    </script>
 </body>
 </html>
