@@ -151,26 +151,6 @@
             box-shadow: 4px 4px 0 #1a1a1a;
         }
 
-        .bookmarklet-button {
-            display: inline-block;
-            background: #f5f5f0;
-            color: #1a1a1a;
-            padding: 12px 20px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.95rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border: 3px solid #1a1a1a;
-            cursor: pointer;
-        }
-
-        .bookmarklet-button:hover {
-            background: #a855f7;
-            border-color: #a855f7;
-            color: white;
-        }
-
         .bookmarklet-link.pending {
             opacity: 0.5;
             cursor: progress;
@@ -313,14 +293,6 @@
                     <a class="bookmarklet-link pending" id="bookmarklet" href="javascript:void(0)">Figmimic</a>
                     <span class="bookmarklet-label" id="bookmarklet-status">Building&hellip;</span>
                 </div>
-                <div>
-                    <button class="bookmarklet-button" id="copy-bookmarklet" disabled>Copy code</button>
-                    <span class="bookmarklet-label">Can't drag? Paste into a new bookmark's URL field</span>
-                </div>
-                <div>
-                    <a class="bookmarklet-link" id="bookmarklet-small" href="javascript:void(0)">Figmimic Lite</a>
-                    <span class="bookmarklet-label">Small &middot; no strict-CSP support &middot; for Firefox</span>
-                </div>
             </div>
             <div class="note" id="build-note" hidden></div>
             <div class="note" id="firefox-note" hidden></div>
@@ -343,17 +315,15 @@
 
 
         <div class="card tips" id="csp">
-            <h2>If it doesn't work</h2>
+            <h2>Common issues</h2>
             <p>
                 <strong>Firefox won't save it.</strong> Firefox stores bookmark
                 URLs only up to 65,536 characters and rejects longer ones
                 without a warning, so dragging or pasting the full bookmarklet
                 looks like it worked and leaves you with nothing. The
                 bookmarklet runs fine in Firefox once installed &mdash; there is
-                just no way to install it there. Use Figmimic Lite above, which
-                loads Figma's library at click time and so can't capture pages
-                with a strict Content Security Policy, or use Chrome or Safari
-                for those. Both store the full bookmarklet without complaint.
+                just no way to install it there. Use Chrome or Safari, which
+                store it without complaint.
             </p>
             <p style="margin-top: 10px;">
                 <strong>It says the clipboard was refused.</strong> A clipboard
@@ -376,20 +346,6 @@
                 third-party domains the policy doesn't list are skipped. Text,
                 layout, and styles are unaffected.
             </p>
-            <p style="margin-top: 10px;">
-                <strong>What the capture sends to Figma.</strong> An external SVG
-                reference &mdash; a <code>&lt;use&gt;</code> pointing at another
-                file &mdash; that the browser can't fetch directly gets retried
-                through <code>cors-image-proxy.figma.com</code>, which puts that
-                asset's URL in the query string of a request to Figma. It only
-                happens when the file is on another domain and serves no CORS
-                headers: same-origin sprites, and cross-origin ones that allow
-                CORS, are fetched directly and nothing goes to Figma. Ordinary
-                images never take that route &mdash; a third-party
-                <code>&lt;img&gt;</code> that can't be downloaded is skipped
-                instead. That retry is the only request to <code>figma.com</code>
-                a capture makes.
-            </p>
         </div>
 
         <footer>
@@ -401,9 +357,7 @@
             var CAPTURE_URL = 'https://mcp.figma.com/mcp/html-to-design/capture.js';
 
             var link = document.getElementById('bookmarklet');
-            var smallLink = document.getElementById('bookmarklet-small');
             var statusLabel = document.getElementById('bookmarklet-status');
-            var copyButton = document.getElementById('copy-bookmarklet');
             var note = document.getElementById('build-note');
 
             // A javascript: URL is percent-decoded once before it is evaluated,
@@ -566,25 +520,10 @@
                 }
             }
 
-            // Small enough for browsers that cap bookmark length, but it has to
-            // fetch capture.js and inject it as a script when clicked, which a
-            // connect-src or script-src policy refuses.
-            function buildLoader() {
-                return 'javascript:' + encodeSource('void((async function () {' +
-                    'var response = await fetch("' + CAPTURE_URL + '");' +
-                    'var script = document.createElement("script");' +
-                    'script.textContent = await response.text();' +
-                    'document.head.appendChild(script);' +
-                    '(' + kickoff.toString() + ')();' +
-                    '})())');
-            }
-
             function buildBookmarklet(source) {
                 return 'javascript:void(function(){' + encodeSource(source) +
                     '%0A' + encodeSource('(' + kickoff.toString() + ')()') + '}())';
             }
-
-            smallLink.href = buildLoader();
 
             // Firefox stores bookmark URLs only up to 65,536 characters and
             // rejects longer ones without saying anything, so the full
@@ -594,8 +533,7 @@
                 firefoxNote.hidden = false;
                 firefoxNote.innerHTML = 'Firefox caps saved bookmarks at 65,536 characters and drops ' +
                     'longer ones silently, so dragging or pasting the full bookmarklet will appear ' +
-                    'to do nothing. Use Figmimic Lite here, or Chrome or Safari for pages with a ' +
-                    'strict Content Security Policy.';
+                    'to do nothing. Use Chrome or Safari instead.';
             }
 
             fetch(CAPTURE_URL)
@@ -611,27 +549,13 @@
                     link.href = bookmarklet;
                     link.classList.remove('pending');
                     statusLabel.textContent = 'Ready \u00b7 ' + Math.round(bookmarklet.length / 1024) + ' KB';
-                    copyButton.disabled = false;
-                    copyButton.addEventListener('click', function () {
-                        navigator.clipboard.writeText(bookmarklet).then(function () {
-                            copyButton.textContent = 'Copied!';
-                            setTimeout(function () { copyButton.textContent = 'Copy code'; }, 2000);
-                        }, function () {
-                            copyButton.textContent = 'Copy failed';
-                        });
-                    });
                 })
                 .catch(function (error) {
-                    link.href = buildLoader();
-                    link.classList.remove('pending');
-                    statusLabel.textContent = 'Fallback version';
+                    statusLabel.textContent = "Couldn't build";
                     note.hidden = false;
                     note.innerHTML = "Couldn't fetch Figma's capture library (" +
                         String(error.message).replace(/[<>&]/g, '') +
-                        '), so the bookmarklet above is the version that loads it at ' +
-                        'click time. That one only works on pages without a strict ' +
-                        'Content Security Policy. Reload to try building the ' +
-                        'self-contained version again.';
+                        '), so there is nothing to drag yet. Reload to try again.';
                 });
         })();
     </script>
