@@ -376,6 +376,16 @@
                 <em>without</em> a strict policy where this is worth knowing.
             </p>
             <p style="margin-top: 10px;">
+                <strong>It says the clipboard was refused, or Figma's own
+                overlay reports a clipboard error.</strong> Browsers only allow a
+                clipboard write that belongs to something you clicked, and
+                <code>capture.js</code> writes after it has finished serializing
+                the page &mdash; by which time the bookmarklet click no longer
+                counts. Safari is strictest about this. The capture itself is
+                fine, so the bookmarklet keeps it and offers it again: click anywhere
+                on the page and the copy runs from that click instead.
+            </p>
+            <p style="margin-top: 10px;">
                 <strong>It says "click this page to capture it".</strong> A page
                 can only be written to the clipboard while it has focus, and
                 clicking a bookmark sometimes leaves focus in the browser's own
@@ -429,7 +439,7 @@
             // window.figma. Stringified into the bookmarklet below, so it can't
             // reference anything on this page.
             function kickoff() {
-                var chip = null, hideTimer = null;
+                var chip = null, hideTimer = null, awaitingRetry = false;
 
                 // data-h2d-ignore is capture.js's own opt-out marker, so this
                 // status chip stays out of the capture. Styles go through CSSOM
@@ -441,7 +451,7 @@
                         chip.setAttribute('data-h2d-ignore', 'true');
                         var s = chip.style;
                         s.position = 'fixed';
-                        s.top = '16px';
+                        s.bottom = '16px';
                         s.left = '50%';
                         s.transform = 'translateX(-50%)';
                         s.zIndex = '2147483647';
@@ -473,17 +483,58 @@
                     if (!clipboard || typeof clipboard[method] !== 'function') return;
                     var original = clipboard[method];
                     clipboard[method] = function () {
-                        var result = original.apply(clipboard, arguments);
+                        var args = arguments;
+                        var result = original.apply(clipboard, args);
                         clipboard[method] = original;
                         Promise.resolve(result).then(function () {
                             onSettled();
                             status('Copied \u2014 paste into Figma', 5000);
                         }, function (error) {
                             onSettled();
-                            status('Clipboard refused: ' + ((error && error.name) || 'error'), 10000);
+                            offerRetry(method, args, error);
                         });
                         return result;
                     };
+                }
+
+                // A ClipboardItem may not survive a second write, so copy its
+                // blobs into a fresh one.
+                function rebuild(method, args) {
+                    var item = args[0] && args[0][0];
+                    if (method !== 'write' || !item || !item.types) return args;
+                    var types = [].slice.call(item.types);
+                    return Promise.all(types.map(function (type) { return item.getType(type); }))
+                        .then(function (blobs) {
+                            var data = {};
+                            types.forEach(function (type, i) { data[type] = blobs[i]; });
+                            return [[new ClipboardItem(data)]];
+                        })
+                        .catch(function () { return args; });
+                }
+
+                // Browsers can refuse a clipboard write that isn't tied to a
+                // click, and capture.js writes after serializing, by which time
+                // the bookmarklet click no longer counts. A click on the chip
+                // is fresh activation, so retry the write from there.
+                function offerRetry(method, args, error) {
+                    awaitingRetry = true;
+                    status('Clipboard refused (' + ((error && error.name) || 'error') + ') \u2014 click anywhere to copy');
+                    // Listen on the window during capture, so the click counts
+                    // even when it lands on capture.js's own overlay.
+                    window.addEventListener('click', function retry() {
+                        window.removeEventListener('click', retry, true);
+                        awaitingRetry = false;
+                        status('Copying\u2026');
+                        Promise.resolve(rebuild(method, args))
+                            .then(function (retryArgs) {
+                                return navigator.clipboard[method].apply(navigator.clipboard, retryArgs);
+                            })
+                            .then(function () {
+                                status('Copied \u2014 paste into Figma', 5000);
+                            }, function (retryError) {
+                                status('Clipboard refused: ' + ((retryError && retryError.message) || 'error'), 15000);
+                            });
+                    }, true);
                 }
 
                 function capture() {
@@ -503,13 +554,13 @@
 
                     Promise.resolve(window.figma.captureForDesign({ selector: 'body' }))
                         .then(function (result) {
-                            if (result && result.success === false) {
+                            if (result && result.success === false && !awaitingRetry) {
                                 done();
                                 status('Capture failed: ' + result.error, 10000);
                             }
                         }, function (error) {
                             done();
-                            status('Capture failed: ' + ((error && error.message) || 'error'), 10000);
+                            if (!awaitingRetry) status('Capture failed: ' + ((error && error.message) || 'error'), 10000);
                         });
                 }
 
