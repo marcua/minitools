@@ -151,6 +151,20 @@
             box-shadow: 4px 4px 0 #1a1a1a;
         }
 
+        .bookmarklet-link.pending {
+            opacity: 0.5;
+            cursor: progress;
+        }
+
+        .note {
+            margin-top: 15px;
+            padding: 10px 12px;
+            background: #e5e5e0;
+            border-left: 4px solid #f59e0b;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
         .bookmarklet-label {
             display: block;
             font-size: 0.75rem;
@@ -258,9 +272,12 @@
                 other tools can't reach.
             </p>
             <p style="margin-top: 10px;">
-                Under the hood, it embeds Figma's own
+                Under the hood, the bookmarklet carries Figma's own
                 <a href="https://mcp.figma.com/mcp/html-to-design/capture.js"><code>capture.js</code></a>
-                in a bookmarklet. For more, read <a href="https://blog.marcua.net/2026/05/05/figmimic">the blog post</a>.
+                inside it, so it never has to load anything from the page it is
+                capturing. That is what lets it run on sites with a strict
+                <a href="#csp">Content Security Policy</a>. For more, read
+                <a href="https://blog.marcua.net/2026/05/05/figmimic">the blog post</a>.
             </p>
             <video autoplay loop muted playsinline controls>
                 <source src="figmimic.mp4" type="video/mp4">
@@ -273,9 +290,17 @@
             <p>Drag this bookmarklet to your bookmarks bar:</p>
             <div class="bookmarklet-row">
                 <div>
-                    <a class="bookmarklet-link" href="javascript:void((async()=>{const r=await fetch('https://mcp.figma.com/mcp/html-to-design/capture.js');const t=await r.text();const s=document.createElement('script');s.textContent=t;document.head.appendChild(s);await new  Promise(r=>setTimeout(r,500));window.figma.captureForDesign({selector:'body'})})())">Figmimic</a>
+                    <a class="bookmarklet-link pending" id="bookmarklet" href="javascript:void(0)">Figmimic</a>
+                    <span class="bookmarklet-label" id="bookmarklet-status">Building&hellip;</span>
                 </div>
             </div>
+            <div class="note" id="build-note" hidden></div>
+            <div class="note" id="firefox-note" hidden></div>
+            <p style="margin-top: 15px;">
+                The bookmarklet is big (around 400&nbsp;KB) because Figma's
+                capture library travels inside it. Drag it again every few
+                months to pick up a fresh copy of that library.
+            </p>
         </div>
 
         <div class="card">
@@ -283,15 +308,256 @@
             <ol>
                 <li><span class="step-num">1</span> Navigate to any web page you want to capture</li>
                 <li><span class="step-num">2</span> Click the bookmarklet in your bookmarks bar</li>
-                <li><span class="step-num">3</span> Wait for the "Copied to clipboard" confirmation</li>
+                <li><span class="step-num">3</span> Wait for the "Copied &mdash; paste into Figma" confirmation</li>
                 <li><span class="step-num">4</span> Open Figma and paste the copied interface</li>
             </ol>
         </div>
 
 
+        <div class="card tips" id="csp">
+            <h2>Common issues</h2>
+            <p>
+                <strong>Firefox won't save it.</strong> Firefox stores bookmark
+                URLs only up to 65,536 characters and rejects longer ones
+                without a warning, so dragging or pasting the full bookmarklet
+                looks like it worked and leaves you with nothing. The
+                bookmarklet runs fine in Firefox once installed &mdash; there is
+                just no way to install it there. Consider Chrome or Safari, which
+                store it without complaint.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>It says the clipboard was refused.</strong> A clipboard
+                write has to belong to something you clicked, and the capture
+                finishes long after the click that started it &mdash; Safari is
+                strictest about this. The capture isn't lost: click anywhere on
+                the page and the copy runs from that click.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>It says "click this page to capture it".</strong> A page
+                can only be written to the clipboard while it has focus, and
+                clicking a bookmark sometimes leaves focus in the browser's own
+                UI. Click anywhere on the page and the capture runs.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>Some images are missing.</strong> Images have to be
+                downloaded to be embedded, and the page's
+                <code>connect-src</code> policy governs that download. Images
+                served from the site's own domain come through; images on
+                third-party domains the policy doesn't list are skipped. Text,
+                layout, and styles are unaffected.
+            </p>
+        </div>
+
         <footer>
             <p>Part of <a href="../">Minitools</a></p>
         </footer>
     </div>
+    <script>
+        (function () {
+            var CAPTURE_URL = 'https://mcp.figma.com/mcp/html-to-design/capture.js';
+
+            var link = document.getElementById('bookmarklet');
+            var statusLabel = document.getElementById('bookmarklet-status');
+            var note = document.getElementById('build-note');
+
+            // A javascript: URL is percent-decoded once before it is evaluated,
+            // so escape the characters that would otherwise be lost or would
+            // end the URL. '%' has to go first, or we'd re-escape our own
+            // escapes. Newlines matter most: URL parsing strips raw ones, which
+            // would swallow everything after a // comment.
+            function encodeSource(source) {
+                return source
+                    .replace(/%/g, '%25')
+                    .replace(/#/g, '%23')
+                    .replace(/\r/g, '%0D')
+                    .replace(/\n/g, '%0A')
+                    .replace(/\t/g, '%09')
+                    .replace(/ /g, '%20')
+                    .replace(/"/g, '%22')
+                    .replace(/</g, '%3C')
+                    .replace(/>/g, '%3E');
+            }
+
+            // Runs inside the bookmarklet once capture.js has defined
+            // window.figma. Stringified into the bookmarklet below, so it can't
+            // reference anything on this page.
+            function kickoff() {
+                var chip = null, hideTimer = null, awaitingRetry = false;
+
+                // data-h2d-ignore is capture.js's own opt-out marker, so this
+                // status chip stays out of the capture. Styles go through CSSOM
+                // because a style-src policy refuses style attributes but does
+                // not govern property assignment.
+                function status(text, hideAfterMs) {
+                    if (!chip) {
+                        chip = document.createElement('div');
+                        chip.setAttribute('data-h2d-ignore', 'true');
+                        var s = chip.style;
+                        s.position = 'fixed';
+                        s.bottom = '16px';
+                        s.left = '50%';
+                        s.transform = 'translateX(-50%)';
+                        s.zIndex = '2147483647';
+                        s.padding = '10px 16px';
+                        s.background = '#1a1a1a';
+                        s.color = '#fff';
+                        s.font = '700 12px/1.4 ui-monospace, Menlo, Consolas, monospace';
+                        s.letterSpacing = '1px';
+                        s.textTransform = 'uppercase';
+                        s.border = '3px solid #a855f7';
+                        s.pointerEvents = 'none';
+                        document.body.appendChild(chip);
+                    }
+                    chip.textContent = text;
+                    clearTimeout(hideTimer);
+                    if (hideAfterMs) {
+                        hideTimer = setTimeout(function () {
+                            if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
+                            chip = null;
+                        }, hideAfterMs);
+                    }
+                }
+
+                // capture.js announces success through an overlay whose styles a
+                // strict style-src can refuse, so watch the clipboard write
+                // directly and report on it here.
+                function watchClipboard(method, onSettled) {
+                    var clipboard = navigator.clipboard;
+                    if (!clipboard || typeof clipboard[method] !== 'function') return;
+                    var original = clipboard[method];
+                    clipboard[method] = function () {
+                        var args = arguments;
+                        var result = original.apply(clipboard, args);
+                        clipboard[method] = original;
+                        Promise.resolve(result).then(function () {
+                            onSettled();
+                            status('Copied \u2014 paste into Figma', 5000);
+                        }, function (error) {
+                            onSettled();
+                            offerRetry(method, args, error);
+                        });
+                        return result;
+                    };
+                }
+
+                // A ClipboardItem may not survive a second write, so copy its
+                // blobs into a fresh one.
+                function rebuild(method, args) {
+                    var item = args[0] && args[0][0];
+                    if (method !== 'write' || !item || !item.types) return args;
+                    var types = [].slice.call(item.types);
+                    return Promise.all(types.map(function (type) { return item.getType(type); }))
+                        .then(function (blobs) {
+                            var data = {};
+                            types.forEach(function (type, i) { data[type] = blobs[i]; });
+                            return [[new ClipboardItem(data)]];
+                        })
+                        .catch(function () { return args; });
+                }
+
+                // Browsers can refuse a clipboard write that isn't tied to a
+                // click, and capture.js writes after serializing, by which time
+                // the bookmarklet click no longer counts. A click on the chip
+                // is fresh activation, so retry the write from there.
+                function offerRetry(method, args, error) {
+                    awaitingRetry = true;
+                    status('Clipboard refused (' + ((error && error.name) || 'error') + ') \u2014 click anywhere to copy');
+                    // Listen on the window during capture, so the click counts
+                    // even when it lands on capture.js's own overlay.
+                    window.addEventListener('click', function retry() {
+                        window.removeEventListener('click', retry, true);
+                        awaitingRetry = false;
+                        status('Copying\u2026');
+                        Promise.resolve(rebuild(method, args))
+                            .then(function (retryArgs) {
+                                return navigator.clipboard[method].apply(navigator.clipboard, retryArgs);
+                            })
+                            .then(function () {
+                                status('Copied \u2014 paste into Figma', 5000);
+                            }, function (retryError) {
+                                status('Clipboard refused: ' + ((retryError && retryError.message) || 'error'), 15000);
+                            });
+                    }, true);
+                }
+
+                function capture() {
+                    var settled = false;
+                    var done = function () { settled = true; };
+                    watchClipboard('write', done);
+                    watchClipboard('writeText', done);
+
+                    status('Capturing\u2026');
+                    // The clipboard can only be written while this page has
+                    // focus, and capture.js waits for that silently. Say so
+                    // instead, in case focus goes elsewhere mid-capture.
+                    var poll = setInterval(function () {
+                        if (settled) { clearInterval(poll); return; }
+                        status(document.hasFocus() ? 'Capturing\u2026' : 'Click this page to finish the capture');
+                    }, 1000);
+
+                    Promise.resolve(window.figma.captureForDesign({ selector: 'body' }))
+                        .then(function (result) {
+                            if (result && result.success === false && !awaitingRetry) {
+                                done();
+                                status('Capture failed: ' + result.error, 10000);
+                            }
+                        }, function (error) {
+                            done();
+                            if (!awaitingRetry) status('Capture failed: ' + ((error && error.message) || 'error'), 10000);
+                        });
+                }
+
+                // Clicking a bookmark can leave focus in the browser's own UI.
+                if (!document.hasFocus()) window.focus();
+                if (document.hasFocus()) {
+                    capture();
+                } else {
+                    status('Click this page to capture it');
+                    window.addEventListener('focus', function once() {
+                        window.removeEventListener('focus', once);
+                        capture();
+                    });
+                }
+            }
+
+            function buildBookmarklet(source) {
+                return 'javascript:void(function(){' + encodeSource(source) +
+                    '%0A' + encodeSource('(' + kickoff.toString() + ')()') + '}())';
+            }
+
+            // Firefox stores bookmark URLs only up to 65,536 characters and
+            // rejects longer ones without saying anything, so the full
+            // bookmarklet cannot be installed there at all.
+            if (navigator.userAgent.indexOf('Firefox/') !== -1) {
+                var firefoxNote = document.getElementById('firefox-note');
+                firefoxNote.hidden = false;
+                firefoxNote.innerHTML = 'Firefox caps saved bookmarks at 65,536 characters and drops ' +
+                    'longer ones silently, so dragging or pasting the full bookmarklet will appear ' +
+                    'to do nothing. Use Chrome or Safari instead.';
+            }
+
+            fetch(CAPTURE_URL)
+                .then(function (response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.text();
+                })
+                .then(function (source) {
+                    if (!/captureForDesign/.test(source)) {
+                        throw new Error('unexpected capture.js contents');
+                    }
+                    var bookmarklet = buildBookmarklet(source);
+                    link.href = bookmarklet;
+                    link.classList.remove('pending');
+                    statusLabel.textContent = 'Ready \u00b7 ' + Math.round(bookmarklet.length / 1024) + ' KB';
+                })
+                .catch(function (error) {
+                    statusLabel.textContent = "Couldn't build";
+                    note.hidden = false;
+                    note.innerHTML = "Couldn't fetch Figma's capture library (" +
+                        String(error.message).replace(/[<>&]/g, '') +
+                        '), so there is nothing to drag yet. Reload to try again.';
+                });
+        })();
+    </script>
 </body>
 </html>
