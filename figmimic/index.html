@@ -360,6 +360,22 @@
                 layout, and styles are unaffected.
             </p>
             <p style="margin-top: 10px;">
+                <strong>What the capture sends to Figma.</strong> An external SVG
+                reference &mdash; a <code>&lt;use&gt;</code> pointing at another
+                file &mdash; that the browser can't fetch directly gets retried
+                through <code>cors-image-proxy.figma.com</code>, which puts that
+                asset's URL in the query string of a request to Figma. It only
+                happens when the file is on another domain and serves no CORS
+                headers: same-origin sprites, and cross-origin ones that allow
+                CORS, are fetched directly and nothing goes to Figma. Ordinary
+                images never take that route &mdash; a third-party
+                <code>&lt;img&gt;</code> that can't be downloaded is skipped
+                instead. That retry is the only request to <code>figma.com</code>
+                a capture makes, and a strict <code>connect-src</code> refuses it
+                along with everything else &mdash; so it's the private dashboards
+                <em>without</em> a strict policy where this is worth knowing.
+            </p>
+            <p style="margin-top: 10px;">
                 <strong>It says "click this page to capture it".</strong> A page
                 can only be written to the clipboard while it has focus, and
                 clicking a bookmark sometimes leaves focus in the browser's own
