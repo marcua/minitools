@@ -317,8 +317,13 @@
                     <button class="bookmarklet-button" id="copy-bookmarklet" disabled>Copy code</button>
                     <span class="bookmarklet-label">Can't drag? Paste into a new bookmark's URL field</span>
                 </div>
+                <div>
+                    <a class="bookmarklet-link" id="bookmarklet-small" href="javascript:void(0)">Figmimic Lite</a>
+                    <span class="bookmarklet-label">Small &middot; no strict-CSP support &middot; for Firefox</span>
+                </div>
             </div>
             <div class="note" id="build-note" hidden></div>
+            <div class="note" id="firefox-note" hidden></div>
             <p style="margin-top: 15px;">
                 The bookmarklet is big (around 400&nbsp;KB) because Figma's
                 capture library travels inside it. Drag it again every few
@@ -340,20 +345,32 @@
         <div class="card tips" id="csp">
             <h2>If it doesn't work</h2>
             <p>
-                <strong>Nothing happens, and the console says something was
-                refused by a Content Security Policy.</strong> A page's CSP
-                can't stop the bookmarklet's own code from running, but it does
-                stop that code from fetching a script, injecting a
-                <code>&lt;script&gt;</code> tag, or calling
-                <code>eval</code>. An older version of this bookmarklet fetched
-                <code>capture.js</code> at click time, so it died on any site
-                with a <code>connect-src</code> or <code>script-src</code>
-                policy. The current one carries the library inline instead, so
-                re-drag the bookmarklet above and try again.
+                <strong>Firefox won't save it.</strong> Firefox stores bookmark
+                URLs only up to 65,536 characters and rejects longer ones
+                without a warning, so dragging or pasting the full bookmarklet
+                looks like it worked and leaves you with nothing. The
+                bookmarklet runs fine in Firefox once installed &mdash; there is
+                just no way to install it there. Use Figmimic Lite above, which
+                loads Figma's library at click time and so can't capture pages
+                with a strict Content Security Policy, or use Chrome or Safari
+                for those. Both store the full bookmarklet without complaint.
             </p>
             <p style="margin-top: 10px;">
-                <strong>The layout is captured but some images are missing.</strong>
-                Images have to be downloaded to be embedded, and the page's
+                <strong>It says the clipboard was refused.</strong> A clipboard
+                write has to belong to something you clicked, and the capture
+                finishes long after the click that started it &mdash; Safari is
+                strictest about this. The capture isn't lost: click anywhere on
+                the page and the copy runs from that click.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>It says "click this page to capture it".</strong> A page
+                can only be written to the clipboard while it has focus, and
+                clicking a bookmark sometimes leaves focus in the browser's own
+                UI. Click anywhere on the page and the capture runs.
+            </p>
+            <p style="margin-top: 10px;">
+                <strong>Some images are missing.</strong> Images have to be
+                downloaded to be embedded, and the page's
                 <code>connect-src</code> policy governs that download. Images
                 served from the site's own domain come through; images on
                 third-party domains the policy doesn't list are skipped. Text,
@@ -371,29 +388,13 @@
                 images never take that route &mdash; a third-party
                 <code>&lt;img&gt;</code> that can't be downloaded is skipped
                 instead. That retry is the only request to <code>figma.com</code>
-                a capture makes, and a strict <code>connect-src</code> refuses it
-                along with everything else &mdash; so it's the private dashboards
-                <em>without</em> a strict policy where this is worth knowing.
+                a capture makes.
             </p>
             <p style="margin-top: 10px;">
-                <strong>It says the clipboard was refused, or Figma's own
-                overlay reports a clipboard error.</strong> Browsers only allow a
-                clipboard write that belongs to something you clicked, and
-                <code>capture.js</code> writes after it has finished serializing
-                the page &mdash; by which time the bookmarklet click no longer
-                counts. Safari is strictest about this. The capture itself is
-                fine, so the bookmarklet keeps it and offers it again: click anywhere
-                on the page and the copy runs from that click instead.
-            </p>
-            <p style="margin-top: 10px;">
-                <strong>It says "click this page to capture it".</strong> A page
-                can only be written to the clipboard while it has focus, and
-                clicking a bookmark sometimes leaves focus in the browser's own
-                UI. Click anywhere on the page and the capture runs. Figma's
-                capture library waits for that focus without saying so, which is
-                why the bookmarklet reports progress itself &mdash; including on
-                pages whose <code>style-src</code> policy stops the library's own
-                confirmation overlay from being styled.
+                <strong>Installed this before August 2026?</strong> That
+                bookmarklet fetched <code>capture.js</code> when you clicked it,
+                which any page with a <code>connect-src</code> policy refuses.
+                Drag the one above again to replace it.
             </p>
         </div>
 
@@ -405,14 +406,8 @@
         (function () {
             var CAPTURE_URL = 'https://mcp.figma.com/mcp/html-to-design/capture.js';
 
-            // Fallback for when capture.js can't be fetched: load it at click
-            // time. Only works on pages without a restrictive CSP.
-            var LOADER = "javascript:void((async()=>{const r=await fetch('" + CAPTURE_URL + "');" +
-                "const t=await r.text();const s=document.createElement('script');s.textContent=t;" +
-                "document.head.appendChild(s);await new Promise(r=>setTimeout(r,500));" +
-                "window.figma.captureForDesign({selector:'body'})})())";
-
             var link = document.getElementById('bookmarklet');
+            var smallLink = document.getElementById('bookmarklet-small');
             var statusLabel = document.getElementById('bookmarklet-status');
             var copyButton = document.getElementById('copy-bookmarklet');
             var note = document.getElementById('build-note');
@@ -577,9 +572,36 @@
                 }
             }
 
+            // Small enough for browsers that cap bookmark length, but it has to
+            // fetch capture.js and inject it as a script when clicked, which a
+            // connect-src or script-src policy refuses.
+            function buildLoader() {
+                return 'javascript:' + encodeSource('void((async function () {' +
+                    'var response = await fetch("' + CAPTURE_URL + '");' +
+                    'var script = document.createElement("script");' +
+                    'script.textContent = await response.text();' +
+                    'document.head.appendChild(script);' +
+                    '(' + kickoff.toString() + ')();' +
+                    '})())');
+            }
+
             function buildBookmarklet(source) {
                 return 'javascript:void(function(){' + encodeSource(source) +
                     '%0A' + encodeSource('(' + kickoff.toString() + ')()') + '}())';
+            }
+
+            smallLink.href = buildLoader();
+
+            // Firefox stores bookmark URLs only up to 65,536 characters and
+            // rejects longer ones without saying anything, so the full
+            // bookmarklet cannot be installed there at all.
+            if (navigator.userAgent.indexOf('Firefox/') !== -1) {
+                var firefoxNote = document.getElementById('firefox-note');
+                firefoxNote.hidden = false;
+                firefoxNote.innerHTML = 'Firefox caps saved bookmarks at 65,536 characters and drops ' +
+                    'longer ones silently, so dragging or pasting the full bookmarklet will appear ' +
+                    'to do nothing. Use Figmimic Lite here, or Chrome or Safari for pages with a ' +
+                    'strict Content Security Policy.';
             }
 
             fetch(CAPTURE_URL)
@@ -606,7 +628,7 @@
                     });
                 })
                 .catch(function (error) {
-                    link.href = LOADER;
+                    link.href = buildLoader();
                     link.classList.remove('pending');
                     statusLabel.textContent = 'Fallback version';
                     note.hidden = false;
