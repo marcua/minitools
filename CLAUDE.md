@@ -1,4 +1,4 @@
-OA# Minitools
+# Minitools
 
 A collection of tiny, client-side web tools. Everything runs in the browser, is
 privacy-friendly, and avoids build steps / backend servers wherever possible.
