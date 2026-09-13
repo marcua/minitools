@@ -6,3 +6,6 @@ export.sh
 
 # Don't check in raw videos of tools
 *.mp4
+
+# macOS Finder metadata
+.DS_Store
