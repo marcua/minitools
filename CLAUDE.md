@@ -26,6 +26,7 @@ Published at <https://marcua.net/minitools/>; source at
 |------|------|------------|-----------|
 | Todos | `todos/` | Todo PWA with recurring tasks, reminders, drag-and-drop; syncs to ayb database | `todos/README.md`, `todos/CLAUDE.md` |
 | Streaks | `streaks/` | Habit/streak tracker PWA with GitHub-style heatmaps; ayb database backend | `streaks/README.md`, `streaks/CLAUDE.md` |
+| Timely | `timely/` | Step-by-step routine timer with synthesized chimes; ayb database backend | `timely/README.md`, `timely/CLAUDE.md` |
 | Duck Time | `ducktime/` | Visual timer with presets and a duck-quack alert | — (see `index.html`) |
 | Review | `review/` | Bookmarklet that extracts GitHub PR review comments as Markdown for pasting into a coding agent | `review/README.md` |
 | Rich | `rich/` | Client-side CSV enrichment using the OpenAI API | `rich/README.md` |

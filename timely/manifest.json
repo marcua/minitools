@@ -1,0 +1,23 @@
+{
+    "name": "Timely",
+    "short_name": "Timely",
+    "description": "Run step-by-step routines with a gentle countdown timer",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#FAFBFC",
+    "theme_color": "#FAFBFC",
+    "icons": [
+        {
+            "src": "icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ]
+}
