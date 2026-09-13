@@ -252,14 +252,6 @@
             margin-top: 2px;
         }
 
-        .step-index {
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            color: var(--ink-muted);
-            width: 22px;
-            text-align: center;
-            flex: none;
-        }
         .step-time {
             font-family: var(--font-mono);
             font-size: 0.9rem;
@@ -550,6 +542,54 @@
         .field-row { display: flex; gap: 12px; }
         .field-row > div { flex: 1; }
         .field-row .name-field { flex: 2; }
+        .field-row .minutes-field { flex: none; width: 132px; }
+
+        /* Minute stepper: +/- move by a whole minute, decimals can still be typed */
+        .stepper {
+            display: flex;
+            align-items: stretch;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--paper);
+            overflow: hidden;
+            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+        }
+        .stepper:focus-within {
+            border-color: var(--signal);
+            box-shadow: 0 0 0 3px var(--signal-light);
+        }
+        .stepper input[type="text"] {
+            width: 100%;
+            min-width: 0;
+            border: none;
+            border-radius: 0;
+            margin: 0;
+            padding: 11px 2px;
+            background: transparent;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            outline: none;
+            box-shadow: none;
+        }
+        .stepper input[type="text"]:focus { border: none; box-shadow: none; }
+        .stepper-btn {
+            flex: none;
+            width: 34px;
+            border: none;
+            background: transparent;
+            color: var(--ink-secondary);
+            font-family: var(--font-body);
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background var(--duration-fast), color var(--duration-fast);
+        }
+        .stepper-btn:hover { background: var(--paper-warm); color: var(--signal); }
+        .stepper-btn:active { background: var(--signal-light); }
 
         .btn-group { display: flex; gap: 10px; margin-top: 4px; }
         .btn-group .btn { flex: 1; }
@@ -725,9 +765,13 @@
                         <label for="step-name">Step name</label>
                         <input type="text" id="step-name" placeholder="Brush teeth" autocomplete="off" required>
                     </div>
-                    <div>
+                    <div class="minutes-field">
                         <label for="step-minutes">Minutes</label>
-                        <input type="number" id="step-minutes" min="0.1" step="any" value="1" inputmode="decimal" required>
+                        <div class="stepper">
+                            <button type="button" class="stepper-btn" id="step-minus" aria-label="Decrease minutes">&minus;</button>
+                            <input type="text" id="step-minutes" value="1" inputmode="decimal" autocomplete="off" required>
+                            <button type="button" class="stepper-btn" id="step-plus" aria-label="Increase minutes">+</button>
+                        </div>
                     </div>
                 </div>
                 <div class="btn-group">
@@ -1260,12 +1304,11 @@
                     return;
                 }
 
-                container.innerHTML = App.steps.map((s, i) => `
+                container.innerHTML = App.steps.map(s => `
                     <div class="item-card" data-id="${s.id}">
                         <div class="drag-handle" title="Drag to reorder">
                             <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                         </div>
-                        <div class="step-index">${i + 1}</div>
                         <div class="item-main" data-action="play">
                             <div class="item-title">${escapeHtml(s.name)}</div>
                         </div>
@@ -1471,9 +1514,20 @@
                 document.getElementById('step-modal-title').textContent = step ? 'Edit step' : 'Add step';
                 document.getElementById('step-id').value = step ? step.id : '';
                 document.getElementById('step-name').value = step ? step.name : '';
-                document.getElementById('step-minutes').value = step ? (step.seconds / 60) : 1;
+                document.getElementById('step-minutes').value = step
+                    ? String(Math.round(step.seconds / 60 * 100) / 100)
+                    : '1';
                 App.showModal('step-modal');
                 setTimeout(() => document.getElementById('step-name').focus(), 50);
+            },
+
+            adjustMinutes(delta) {
+                const input = document.getElementById('step-minutes');
+                let v = parseFloat(input.value);
+                if (!isFinite(v)) v = 1;
+                v = Math.round((v + delta) * 100) / 100;
+                if (v < 0.1) v = 0.1;
+                input.value = String(v);
             },
 
             async submitStepForm(e) {
@@ -1481,7 +1535,8 @@
                 const id = document.getElementById('step-id').value;
                 const name = document.getElementById('step-name').value.trim();
                 const minutes = parseFloat(document.getElementById('step-minutes').value);
-                if (!name || !isFinite(minutes) || minutes <= 0) return;
+                if (!name) { App.toast('Enter a step name'); return; }
+                if (!isFinite(minutes) || minutes <= 0) { App.toast('Enter a time greater than 0'); return; }
                 const seconds = Math.round(minutes * 60);
                 App.hideModal('step-modal');
 
@@ -1810,6 +1865,8 @@
         document.getElementById('routine-cancel').addEventListener('click', () => App.hideModal('routine-modal'));
         document.getElementById('step-form').addEventListener('submit', App.submitStepForm);
         document.getElementById('step-cancel').addEventListener('click', () => App.hideModal('step-modal'));
+        document.getElementById('step-minus').addEventListener('click', () => App.adjustMinutes(-1));
+        document.getElementById('step-plus').addEventListener('click', () => App.adjustMinutes(1));
 
         document.getElementById('confirm-cancel').addEventListener('click', () => {
             App.pendingConfirm = null;
