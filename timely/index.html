@@ -1694,6 +1694,7 @@
                 const run = App.run;
                 run.done = true;
                 run.paused = false;
+                run.remainingMs = 0;
                 clearInterval(run.tickTimer);
                 run.tickTimer = null;
                 App.renderRunStep();

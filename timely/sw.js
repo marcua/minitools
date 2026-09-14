@@ -1,4 +1,4 @@
-const CACHE_NAME = 'timely-v3';
+const CACHE_NAME = 'timely-v4';
 const ASSETS = [
     './',
     './index.html',
