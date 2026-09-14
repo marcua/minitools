@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#FAFBFC">
+    <title>Timely</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --paper: #FAFBFC;
+            --paper-warm: #F6F5F3;
+            --surface: #FFFFFF;
+            --border: #E1E4E8;
+            --border-strong: #D0D4D9;
+
+            --ink: #1B2631;
+            --ink-secondary: #57606A;
+            --ink-muted: #8B949E;
+            --ink-faint: #B8BFC6;
+
+            --signal: #4F46E5;
+            --signal-light: #4F46E515;
+            --signal-medium: #4F46E530;
+            --signal-hover: #4338CA;
+
+            --warm: #D97706;
+            --danger: #DC2626;
+            --success: #059669;
+
+            --shadow-sm: 0 1px 2px rgba(27, 38, 49, 0.04);
+            --shadow-md: 0 2px 8px rgba(27, 38, 49, 0.06), 0 1px 2px rgba(27, 38, 49, 0.04);
+            --shadow-lg: 0 8px 24px rgba(27, 38, 49, 0.08), 0 2px 8px rgba(27, 38, 49, 0.04);
+
+            --font-display: 'Outfit', system-ui, sans-serif;
+            --font-body: 'DM Sans', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --duration-fast: 120ms;
+            --duration-normal: 200ms;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        dialog { margin: auto; }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--paper);
+            background-image: radial-gradient(ellipse at 50% -20%, var(--signal-light) 0%, transparent 50%);
+            color: var(--ink);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-family: var(--font-display);
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+            margin-top: 40px;
+            margin-bottom: 0.5rem;
+        }
+
+        h2 {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            margin-bottom: 0.75rem;
+        }
+
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn var(--duration-normal) var(--ease-out); }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ---------- Header ---------- */
+        .page-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 40px;
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .page-header h1 { margin: 0; padding: 0; border: none; }
+
+        .icon-btn {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--ink-secondary);
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            flex: none;
+        }
+        .icon-btn:hover { border-color: var(--border-strong); color: var(--ink); background: var(--paper-warm); }
+        .icon-btn svg { width: 18px; height: 18px; }
+
+        /* ---------- Buttons ---------- */
+        .btn {
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            font-weight: 500;
+            border: 1px solid var(--signal);
+            background: var(--signal);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn:hover { background: var(--signal-hover); border-color: var(--signal-hover); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn svg { width: 18px; height: 18px; }
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--ink-secondary);
+            border-color: var(--border);
+        }
+        .btn-secondary:hover { background: var(--paper-warm); color: var(--ink); border-color: var(--border-strong); }
+        .btn-danger { background: var(--danger); border-color: var(--danger); }
+        .btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
+        .btn-small { padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; }
+        .btn-block { width: 100%; }
+        .btn-ghost {
+            background: transparent;
+            border-color: transparent;
+            color: var(--signal);
+            padding: 8px 10px;
+        }
+        .btn-ghost:hover { background: var(--signal-light); }
+
+        .add-btn {
+            margin-top: 16px;
+            width: 100%;
+            padding: 14px;
+            border-style: dashed;
+            border-width: 1.5px;
+            background: transparent;
+            color: var(--signal);
+            font-weight: 500;
+        }
+        .add-btn:hover { background: var(--signal-light); border-color: var(--signal); }
+
+        /* ---------- Back link ---------- */
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 24px;
+            color: var(--ink-secondary);
+            background: none;
+            border: none;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 6px 0;
+        }
+        .back-link:hover { color: var(--signal); }
+        .back-link svg { width: 16px; height: 16px; }
+
+        /* ---------- Routine / step cards ---------- */
+        .card-list { display: flex; flex-direction: column; gap: 10px; }
+
+        .item-card {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 10px 10px 6px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast), opacity var(--duration-fast);
+            position: relative;
+        }
+        .item-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+        .item-card.dragging { opacity: 0.5; }
+        .item-card.drag-over-above { box-shadow: 0 -3px 0 var(--signal); }
+        .item-card.drag-over-below { box-shadow: 0 3px 0 var(--signal); }
+
+        .drag-handle {
+            flex: none;
+            width: 30px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ink-faint);
+            cursor: grab;
+            touch-action: none;
+            border-radius: 8px;
+        }
+        .drag-handle:active { cursor: grabbing; }
+        .drag-handle:hover { color: var(--ink-muted); background: var(--paper-warm); }
+        .drag-handle svg { width: 16px; height: 16px; }
+
+        .item-main {
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
+            padding: 2px 4px;
+        }
+        .item-title {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1.02rem;
+            color: var(--ink);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .item-meta {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 2px;
+        }
+
+        .step-time {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--signal);
+            flex: none;
+            min-width: 52px;
+            text-align: right;
+            padding-right: 4px;
+        }
+
+        .item-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+        .action-btn {
+            border: none;
+            background: transparent;
+            color: var(--ink-muted);
+            width: 36px;
+            height: 36px;
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--duration-fast);
+        }
+        .action-btn svg { width: 18px; height: 18px; }
+        .action-btn:hover { background: var(--paper-warm); color: var(--ink); }
+        .action-btn.play:hover { background: var(--signal-light); color: var(--signal); }
+        .action-btn.delete:hover { background: #FEE2E2; color: var(--danger); }
+
+        /* ---------- Empty state ---------- */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--ink-muted);
+        }
+        .empty-state svg { width: 44px; height: 44px; color: var(--ink-faint); margin-bottom: 12px; }
+        .empty-state-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; color: var(--ink-secondary); margin-bottom: 4px; }
+        .empty-state-text { font-size: 0.9rem; margin-bottom: 18px; }
+
+        /* ---------- Routine header total ---------- */
+        .routine-total {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--ink-muted);
+            text-align: center;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ---------- Run screen ---------- */
+        #run-screen.active { display: block; }
+        .run-wrap {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+            max-width: 600px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .run-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .run-routine {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: var(--ink-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .run-step-label {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            flex: none;
+        }
+
+        .run-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 24px 0;
+        }
+        .run-step-name {
+            font-family: var(--font-display);
+            font-size: 1.7rem;
+            font-weight: 600;
+            color: var(--ink);
+            margin-bottom: 10px;
+            max-width: 100%;
+        }
+        .run-time {
+            font-family: var(--font-mono);
+            font-size: clamp(3.5rem, 22vw, 6rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--signal);
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+        .run-time.paused { color: var(--ink-muted); }
+        .run-total {
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            color: var(--ink-muted);
+            margin-top: 12px;
+        }
+        .run-progress {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 22px;
+        }
+        .run-progress-bar {
+            height: 100%;
+            width: 100%;
+            background: var(--signal);
+            border-radius: 999px;
+            transition: width 250ms linear;
+        }
+        .run-alert-hint {
+            margin-top: 14px;
+            font-size: 0.85rem;
+            color: var(--warm);
+            font-weight: 500;
+            display: none;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .run-alert-hint.show { display: block; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .run-upcoming {
+            margin-top: 20px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .run-upcoming-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: var(--ink-muted);
+            padding: 3px 6px;
+            border-radius: 6px;
+        }
+        .run-upcoming-item.current { color: var(--signal); font-weight: 500; background: var(--signal-light); }
+        .run-upcoming-item .t { font-family: var(--font-mono); font-size: 0.78rem; flex: none; }
+
+        .run-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .run-controls .btn { flex: 1; padding: 15px 8px; font-size: 0.95rem; }
+
+        /* Done overlay */
+        .run-done {
+            position: absolute;
+            inset: 0;
+            background: var(--paper);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 30px;
+            z-index: 10;
+        }
+        .run-done.show { display: flex; animation: fadeIn var(--duration-normal) var(--ease-out); }
+        .run-done-check {
+            width: 84px;
+            height: 84px;
+            border-radius: 50%;
+            background: var(--signal);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 22px;
+            animation: donePop 400ms var(--ease-spring);
+        }
+        .run-done-check svg { width: 44px; height: 44px; }
+        @keyframes donePop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .run-done h2 { font-size: 1.6rem; margin-bottom: 6px; }
+        .run-done p { color: var(--ink-secondary); margin-bottom: 28px; }
+        .run-done .btn { padding: 15px 44px; }
+
+        /* ---------- Setup / error ---------- */
+        .center-screen {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 30px;
+        }
+        .center-screen h1 { margin: 0 0 8px; }
+        .center-screen p { color: var(--ink-secondary); max-width: 360px; margin-bottom: 22px; }
+        .center-screen .logo { width: 64px; height: 64px; color: var(--signal); margin-bottom: 18px; }
+        .error-text {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--danger);
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            border-radius: 8px;
+            padding: 10px 14px;
+            max-width: 420px;
+            word-break: break-word;
+            margin-bottom: 18px;
+        }
+
+        /* ---------- Modal ---------- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(27, 38, 49, 0.4);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay.active { display: flex; animation: modalFadeIn var(--duration-normal) var(--ease-out); }
+        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal {
+            background: var(--surface);
+            border-radius: 14px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            animation: modalSlideIn var(--duration-normal) var(--ease-spring);
+        }
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .modal h2 { margin-bottom: 1rem; }
+        .modal p.hint { font-size: 0.85rem; color: var(--ink-muted); margin-top: -6px; margin-bottom: 14px; }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--ink-secondary);
+            margin-bottom: 6px;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            font-family: var(--font-body);
+            font-size: 1rem;
+            color: var(--ink);
+            background: var(--paper);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 13px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+        }
+        input[type="text"]:focus, input[type="number"]:focus {
+            border-color: var(--signal);
+            box-shadow: 0 0 0 3px var(--signal-light);
+        }
+        .field-row { display: flex; gap: 12px; }
+        .field-row > div { flex: 1; }
+        .field-row .name-field { flex: 2; }
+        .field-row .minutes-field { flex: none; width: 132px; }
+
+        /* Minute stepper: +/- move by a whole minute, decimals can still be typed */
+        .stepper {
+            display: flex;
+            align-items: stretch;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--paper);
+            overflow: hidden;
+            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+        }
+        .stepper:focus-within {
+            border-color: var(--signal);
+            box-shadow: 0 0 0 3px var(--signal-light);
+        }
+        .stepper input[type="text"] {
+            width: 100%;
+            min-width: 0;
+            border: none;
+            border-radius: 0;
+            margin: 0;
+            padding: 11px 2px;
+            background: transparent;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            outline: none;
+            box-shadow: none;
+        }
+        .stepper input[type="text"]:focus { border: none; box-shadow: none; }
+        .stepper-btn {
+            flex: none;
+            width: 34px;
+            border: none;
+            background: transparent;
+            color: var(--ink-secondary);
+            font-family: var(--font-body);
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background var(--duration-fast), color var(--duration-fast);
+        }
+        .stepper-btn:hover { background: var(--paper-warm); color: var(--signal); }
+        .stepper-btn:active { background: var(--signal-light); }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 4px; }
+        .btn-group .btn { flex: 1; }
+
+        .confirm-message { color: var(--ink-secondary); margin-bottom: 18px; }
+
+        /* Settings */
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .setting-row:last-of-type { border-bottom: none; }
+        .setting-label { font-size: 0.95rem; color: var(--ink); }
+        .setting-sub { font-size: 0.8rem; color: var(--ink-muted); margin-top: 2px; }
+        .switch {
+            position: relative;
+            width: 46px;
+            height: 27px;
+            flex: none;
+            background: var(--border-strong);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background var(--duration-fast);
+            border: none;
+        }
+        .switch.on { background: var(--signal); }
+        .switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+            transition: transform var(--duration-normal) var(--ease-spring);
+        }
+        .switch.on::after { transform: translateX(19px); }
+    </style>
+</head>
+<body>
+
+    <!-- Setup Screen -->
+    <div class="screen" id="setup-screen">
+        <div class="center-screen">
+            <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/>
+            </svg>
+            <h1>Timely</h1>
+            <p>Build step-by-step routines and run through them with a gentle timer.</p>
+            <button class="btn" id="setup-btn">Connect your database</button>
+        </div>
+    </div>
+
+    <!-- Error Screen -->
+    <div class="screen" id="error-screen">
+        <div class="center-screen">
+            <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.5" fill="currentColor"/>
+            </svg>
+            <h1>Connection failed</h1>
+            <p>We couldn't reach your database. Your saved connection is still here.</p>
+            <div class="error-text" id="error-message"></div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="change-db-btn">Change database</button>
+                <button class="btn" id="retry-btn">Try again</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Routine List Screen -->
+    <div class="screen" id="list-screen">
+        <div class="container">
+            <div class="page-header">
+                <h1>Routines</h1>
+                <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10.6 3V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 16 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.4 9v.09a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="routine-list" class="card-list"></div>
+            <button class="btn add-btn" id="add-routine-btn">+ Add routine</button>
+        </div>
+    </div>
+
+    <!-- Routine Detail Screen -->
+    <div class="screen" id="routine-screen">
+        <div class="container">
+            <button class="back-link" id="routine-back-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                Routines
+            </button>
+            <div class="page-header">
+                <h1 id="routine-title"></h1>
+                <button class="icon-btn" id="edit-routine-btn" title="Rename routine" aria-label="Rename routine">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="routine-total" id="routine-total"></div>
+            <div id="step-list" class="card-list"></div>
+            <button class="btn add-btn" id="add-step-btn">+ Add step</button>
+            <button class="btn btn-block" id="play-routine-btn" style="margin-top:12px;padding:14px;">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                Play routine
+            </button>
+        </div>
+    </div>
+
+    <!-- Run Screen -->
+    <div class="screen" id="run-screen">
+        <div class="run-wrap" id="run-tap-area">
+            <div class="run-head">
+                <div class="run-routine" id="run-routine-name"></div>
+                <div class="run-step-label" id="run-step-label"></div>
+            </div>
+            <div class="run-center">
+                <div class="run-step-name" id="run-step-name"></div>
+                <div class="run-time" id="run-step-time">0:00</div>
+                <div class="run-total" id="run-total"></div>
+                <div class="run-progress"><div class="run-progress-bar" id="run-progress-bar"></div></div>
+                <div class="run-alert-hint" id="run-alert-hint">🔔 Tap to silence</div>
+            </div>
+            <div class="run-upcoming" id="run-upcoming"></div>
+            <div class="run-controls">
+                <button class="btn btn-secondary" id="run-pause-btn">Pause</button>
+                <button class="btn btn-secondary" id="run-plus-btn">+1:00</button>
+                <button class="btn btn-secondary" id="run-stop-btn">Stop</button>
+            </div>
+            <div class="run-done" id="run-done">
+                <div class="run-done-check">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </div>
+                <h2>Routine complete</h2>
+                <p id="run-done-name"></p>
+                <button class="btn" id="run-done-btn">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Routine Modal -->
+    <div class="modal-overlay" id="routine-modal">
+        <div class="modal">
+            <h2 id="routine-modal-title">Add routine</h2>
+            <form id="routine-form">
+                <input type="hidden" id="routine-id">
+                <label for="routine-name">Routine name</label>
+                <input type="text" id="routine-name" placeholder="Evening wind-down" autocomplete="off" required>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" id="routine-cancel">Cancel</button>
+                    <button type="submit" class="btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Step Modal -->
+    <div class="modal-overlay" id="step-modal">
+        <div class="modal">
+            <h2 id="step-modal-title">Add step</h2>
+            <form id="step-form">
+                <input type="hidden" id="step-id">
+                <div class="field-row">
+                    <div class="name-field">
+                        <label for="step-name">Step name</label>
+                        <input type="text" id="step-name" placeholder="Brush teeth" autocomplete="off" required>
+                    </div>
+                    <div class="minutes-field">
+                        <label for="step-minutes">Minutes</label>
+                        <div class="stepper">
+                            <button type="button" class="stepper-btn" id="step-minus" aria-label="Decrease minutes">&minus;</button>
+                            <input type="text" id="step-minutes" value="1" inputmode="decimal" autocomplete="off" required>
+                            <button type="button" class="stepper-btn" id="step-plus" aria-label="Increase minutes">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" id="step-cancel">Cancel</button>
+                    <button type="submit" class="btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal">
+            <h2 id="confirm-title">Confirm</h2>
+            <p class="confirm-message" id="confirm-message"></p>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+                <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal">
+            <h2>Settings</h2>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Sound</div>
+                    <div class="setting-sub">Play a chime at each step and at the end</div>
+                </div>
+                <button class="switch" id="setting-sound" role="switch" aria-label="Sound"></button>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Repeat alert until acknowledged</div>
+                    <div class="setting-sub">Re-chime every few seconds until you tap. Always on for the final "Done" alert.</div>
+                </div>
+                <button class="switch" id="setting-repeat" role="switch" aria-label="Repeat alert until acknowledged"></button>
+            </div>
+            <div class="btn-group" style="margin-top:20px;">
+                <button class="btn btn-secondary" id="disconnect-btn">Disconnect database</button>
+                <button class="btn" id="settings-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js"></script>
+    <script>
+        // ============ Configuration ============
+        const APP_NAME = 'timely';
+        let ayb = null;
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function escapeSql(str) {
+            return AybClient.escapeSQL(str);
+        }
+
+        // ============ Time formatting ============
+        // Round remaining seconds up so a fresh 2:00 step never briefly reads 1:59.
+        function formatClock(totalSeconds) {
+            const s = Math.max(0, Math.ceil(totalSeconds));
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+            return `${m}:${String(sec).padStart(2, '0')}`;
+        }
+
+        // Exact duration for lists ("9:30", "1:05:00").
+        function formatDuration(totalSeconds) {
+            const s = Math.max(0, Math.round(totalSeconds));
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+            return `${m}:${String(sec).padStart(2, '0')}`;
+        }
+
+        function pluralize(n, word) {
+            return `${n} ${word}${n === 1 ? '' : 's'}`;
+        }
+
+        // ============ Migrations ============
+        const timelyMigrations = [
+            // v0: Initial schema
+            `CREATE TABLE IF NOT EXISTS routines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS steps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                routine_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                seconds INTEGER NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (routine_id) REFERENCES routines(id)
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_steps_routine ON steps(routine_id)`
+        ];
+
+        // ============ CRUD ============
+        async function getRoutines() {
+            const result = await ayb.query(
+                `SELECT id, name, position FROM routines ORDER BY position, id`
+            );
+            return result.rows ? result.rows.map(row => ({
+                id: Number(row[0]),
+                name: row[1],
+                position: Number(row[2])
+            })) : [];
+        }
+
+        async function getStepStats() {
+            const result = await ayb.query(
+                `SELECT routine_id, COUNT(*), COALESCE(SUM(seconds), 0) FROM steps GROUP BY routine_id`
+            );
+            const map = {};
+            if (result.rows) {
+                result.rows.forEach(row => {
+                    map[Number(row[0])] = { count: Number(row[1]), seconds: Number(row[2]) };
+                });
+            }
+            return map;
+        }
+
+        async function getSteps(routineId) {
+            const result = await ayb.query(
+                `SELECT id, name, seconds, position FROM steps
+                 WHERE routine_id = ${routineId} ORDER BY position, id`
+            );
+            return result.rows ? result.rows.map(row => ({
+                id: Number(row[0]),
+                name: row[1],
+                seconds: Number(row[2]),
+                position: Number(row[3])
+            })) : [];
+        }
+
+        async function createRoutine(name) {
+            const pos = App.routines.reduce((max, r) => Math.max(max, r.position), -1) + 1;
+            await ayb.query(
+                `INSERT INTO routines (name, position) VALUES ('${escapeSql(name)}', ${pos})`
+            );
+        }
+
+        async function updateRoutine(id, name) {
+            await ayb.query(
+                `UPDATE routines SET name = '${escapeSql(name)}', updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`
+            );
+        }
+
+        async function deleteRoutine(id) {
+            // Fire both deletes concurrently; never await serially.
+            await Promise.all([
+                ayb.query(`DELETE FROM steps WHERE routine_id = ${id}`),
+                ayb.query(`DELETE FROM routines WHERE id = ${id}`)
+            ]);
+        }
+
+        async function createStep(routineId, name, seconds) {
+            const pos = App.steps.reduce((max, s) => Math.max(max, s.position), -1) + 1;
+            await ayb.query(
+                `INSERT INTO steps (routine_id, name, seconds, position)
+                 VALUES (${routineId}, '${escapeSql(name)}', ${seconds}, ${pos})`
+            );
+        }
+
+        async function updateStep(id, name, seconds) {
+            await ayb.query(
+                `UPDATE steps SET name = '${escapeSql(name)}', seconds = ${seconds},
+                 updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`
+            );
+        }
+
+        async function deleteStep(id) {
+            await ayb.query(`DELETE FROM steps WHERE id = ${id}`);
+        }
+
+        // One statement for the whole list, like the other apps.
+        async function updatePositions(table, ids) {
+            if (!ids.length) return;
+            const cases = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(' ');
+            await ayb.query(
+                `UPDATE ${table} SET position = CASE id ${cases} END WHERE id IN (${ids.join(',')})`
+            );
+        }
+
+        // ============ Audio ============
+        let audioCtx = null;
+        let keepAliveOsc = null;
+        let keepAliveGain = null;
+
+        function initAudio() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch (e) {
+                console.log('Audio init failed:', e);
+            }
+        }
+
+        function playTone(freq, startTime, duration, type, peak) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, startTime);
+            gain.gain.exponentialRampToValueAtTime(peak || 0.22, startTime + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + duration + 0.03);
+        }
+
+        // Three friendly ascending bings.
+        function playBing() {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime + 0.02;
+            [523.25, 659.25, 783.99].forEach((f, i) => {
+                playTone(f, t + i * 0.17, 0.20, 'sine', 0.24);
+            });
+        }
+
+        // Distinct longer completion arpeggio.
+        function playCompletion() {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime + 0.02;
+            [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+                playTone(f, t + i * 0.16, 0.5, 'triangle', 0.2);
+            });
+        }
+
+        // A near-inaudible tone keeps the iOS audio session alive in the
+        // background so step alerts still sound while the wake lock holds.
+        function startKeepAlive() {
+            if (!audioCtx || keepAliveOsc) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = 20;
+                gain.gain.value = 0.0001;
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                keepAliveOsc = osc;
+                keepAliveGain = gain;
+            } catch (e) {
+                console.log('Keep-alive failed:', e);
+            }
+        }
+
+        function stopKeepAlive() {
+            try {
+                if (keepAliveOsc) { keepAliveOsc.stop(); keepAliveOsc.disconnect(); }
+                if (keepAliveGain) keepAliveGain.disconnect();
+            } catch (e) { /* already stopped */ }
+            keepAliveOsc = null;
+            keepAliveGain = null;
+        }
+
+        function warmUpAudio() {
+            initAudio();
+            if (!audioCtx) return;
+            // Play a moment of silence to unlock audio on iOS.
+            const t = audioCtx.currentTime + 0.01;
+            playTone(440, t, 0.02, 'sine', 0.0001);
+        }
+
+        document.addEventListener('touchstart', warmUpAudio, { once: true });
+        document.addEventListener('click', warmUpAudio, { once: true });
+
+        // ============ Wake lock ============
+        let wakeLock = null;
+
+        async function requestWakeLock() {
+            if (!('wakeLock' in navigator)) return;
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => { wakeLock = null; });
+            } catch (err) {
+                console.log('Wake lock request failed:', err.message);
+            }
+        }
+
+        async function releaseWakeLock() {
+            if (wakeLock !== null) {
+                try { await wakeLock.release(); } catch (err) { /* ignore */ }
+                wakeLock = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                if (App.run && !App.run.paused && !App.run.done) {
+                    requestWakeLock();
+                    App.tick();
+                }
+            }
+        });
+
+        // ============ Settings ============
+        const DEFAULT_SETTINGS = { soundEnabled: true, repeatUntilAcknowledged: true };
+
+        function getSettings() {
+            try {
+                const raw = localStorage.getItem(`${APP_NAME}_settings`);
+                return raw ? Object.assign({}, DEFAULT_SETTINGS, JSON.parse(raw)) : Object.assign({}, DEFAULT_SETTINGS);
+            } catch (e) {
+                return Object.assign({}, DEFAULT_SETTINGS);
+            }
+        }
+
+        function saveSettings(s) {
+            localStorage.setItem(`${APP_NAME}_settings`, JSON.stringify(s));
+        }
+
+        // ============ App ============
+        const App = {
+            settings: null,
+            routines: [],
+            steps: [],
+            currentRoutine: null,
+            draggedItem: null,
+            dragTouchY: 0,
+            pendingConfirm: null,
+            alertTimer: null,
+
+            // ---------- Screens ----------
+            showScreen(screenId) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById(screenId).classList.add('active');
+                window.scrollTo(0, 0);
+            },
+
+            showModal(id) { document.getElementById(id).classList.add('active'); },
+            hideModal(id) { document.getElementById(id).classList.remove('active'); },
+
+            // ---------- Auth / boot ----------
+            async init() {
+                App.settings = getSettings();
+
+                if ('serviceWorker' in navigator) {
+                    try { await navigator.serviceWorker.register('sw.js'); }
+                    catch (e) { console.log('Service worker registration failed:', e); }
+                }
+
+                try {
+                    ayb = await restoreOAuth({
+                        appName: 'Timely',
+                        queryPermissionLevel: 'read-write',
+                    });
+                } catch (e) {
+                    console.error('OAuth restore error:', e);
+                }
+
+                if (ayb && ayb.isConnected()) {
+                    const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
+                    if (lastHash) window.location.hash = lastHash;
+                    await App.tryConnect();
+                } else {
+                    App.showScreen('setup-screen');
+                }
+            },
+
+            async tryConnect() {
+                try {
+                    await runMigrations(ayb, 'timely', timelyMigrations);
+                    await App.handleRoute();
+                } catch (e) {
+                    console.error('Connection error:', e);
+                    App.showError(e.message);
+                }
+            },
+
+            showError(message) {
+                document.getElementById('error-message').textContent = message;
+                App.showScreen('error-screen');
+            },
+
+            // ---------- Routing ----------
+            async handleRoute() {
+                const hash = window.location.hash;
+                const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
+                if (hash !== lastHash) localStorage.setItem(`${APP_NAME}_last_hash`, hash);
+
+                const routineMatch = hash.match(/^#routine\/(\d+)$/);
+                if (routineMatch) {
+                    await App.openRoutine(parseInt(routineMatch[1]));
+                } else {
+                    await App.loadListScreen();
+                }
+            },
+
+            // ---------- List screen ----------
+            async loadListScreen() {
+                App.showScreen('list-screen');
+                App.routines = await getRoutines();
+                const stats = await getStepStats();
+                App.renderRoutines(stats);
+            },
+
+            renderRoutines(stats) {
+                const container = document.getElementById('routine-list');
+
+                if (!App.routines.length) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/>
+                            </svg>
+                            <div class="empty-state-title">No routines yet</div>
+                            <div class="empty-state-text">Add a routine like "Evening wind-down" and give each step a time.</div>
+                        </div>`;
+                    return;
+                }
+
+                container.innerHTML = App.routines.map(r => {
+                    const st = stats[r.id] || { count: 0, seconds: 0 };
+                    const meta = st.count
+                        ? `${pluralize(st.count, 'step')} · ${formatDuration(st.seconds)}`
+                        : 'No steps yet';
+                    return `
+                        <div class="item-card" data-id="${r.id}">
+                            <div class="drag-handle" title="Drag to reorder">
+                                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                            </div>
+                            <div class="item-main" data-action="open">
+                                <div class="item-title">${escapeHtml(r.name)}</div>
+                                <div class="item-meta">${meta}</div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="action-btn play" data-action="play" title="Play routine" aria-label="Play routine">
+                                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                                <button class="action-btn" data-action="edit" title="Rename" aria-label="Rename routine">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                                </button>
+                                <button class="action-btn delete" data-action="delete" title="Delete" aria-label="Delete routine">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                                </button>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                container.querySelectorAll('.item-card[data-id]').forEach(card => {
+                    const id = parseInt(card.dataset.id);
+
+                    card.querySelector('[data-action="open"]').addEventListener('click', () => {
+                        window.location.hash = `#routine/${id}`;
+                    });
+
+                    card.querySelector('[data-action="play"]').addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const r = App.routines.find(x => x.id === id);
+                        const list = await getSteps(id);
+                        if (!list.length) { App.toast('Add a step first'); return; }
+                        App.startRun(r, list, 0);
+                    });
+
+                    card.querySelector('[data-action="edit"]').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        App.openRoutineModal(App.routines.find(x => x.id === id));
+                    });
+
+                    card.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const r = App.routines.find(x => x.id === id);
+                        App.confirm(
+                            'Delete routine?',
+                            `"${r.name}" and all of its steps will be deleted.`,
+                            async () => {
+                                await deleteRoutine(id);
+                                await App.loadListScreen();
+                            }
+                        );
+                    });
+                });
+
+                App.setupDrag(container, '.item-card', 'routines');
+            },
+
+            // ---------- Routine detail ----------
+            async openRoutine(id) {
+                // Deep links (#routine/5) can land here before the list loaded.
+                if (!App.routines.length) App.routines = await getRoutines();
+                const r = App.routines.find(x => x.id === id) || null;
+                if (!r) { App.navigate(''); return; }
+                App.currentRoutine = r;
+                App.steps = await getSteps(id);
+                App.showScreen('routine-screen');
+                App.renderRoutineDetail();
+            },
+
+            renderRoutineDetail() {
+                const r = App.currentRoutine;
+                if (!r) return;
+                document.getElementById('routine-title').textContent = r.name;
+
+                const total = App.steps.reduce((sum, s) => sum + s.seconds, 0);
+                document.getElementById('routine-total').textContent = App.steps.length
+                    ? `${pluralize(App.steps.length, 'step')} · ${formatDuration(total)} total`
+                    : 'No steps yet';
+
+                const container = document.getElementById('step-list');
+
+                if (!App.steps.length) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                            <div class="empty-state-title">No steps yet</div>
+                            <div class="empty-state-text">Add the first step and how long it should take.</div>
+                        </div>`;
+                    return;
+                }
+
+                container.innerHTML = App.steps.map(s => `
+                    <div class="item-card" data-id="${s.id}">
+                        <div class="drag-handle" title="Drag to reorder">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                        </div>
+                        <div class="item-main" data-action="play">
+                            <div class="item-title">${escapeHtml(s.name)}</div>
+                        </div>
+                        <div class="step-time">${formatDuration(s.seconds)}</div>
+                        <div class="item-actions">
+                            <button class="action-btn play" data-action="play" title="Play from here" aria-label="Play from here">
+                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            </button>
+                            <button class="action-btn" data-action="edit" title="Edit step" aria-label="Edit step">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                            </button>
+                            <button class="action-btn delete" data-action="delete" title="Delete" aria-label="Delete step">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                            </button>
+                        </div>
+                    </div>`).join('');
+
+                container.querySelectorAll('.item-card[data-id]').forEach(card => {
+                    const id = parseInt(card.dataset.id);
+                    const index = App.steps.findIndex(x => x.id === id);
+
+                    // Both the step name and the play button start the run here.
+                    card.querySelectorAll('[data-action="play"]').forEach(el => {
+                        el.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            App.startRun(App.currentRoutine, App.steps, index);
+                        });
+                    });
+
+                    card.querySelector('[data-action="edit"]').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        App.openStepModal(App.steps[index]);
+                    });
+
+                    card.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const s = App.steps[index];
+                        App.confirm(
+                            'Delete step?',
+                            `"${s.name}" will be removed from this routine.`,
+                            async () => {
+                                await deleteStep(id);
+                                App.steps = await getSteps(App.currentRoutine.id);
+                                App.renderRoutineDetail();
+                            }
+                        );
+                    });
+                });
+
+                App.setupDrag(container, '.item-card', 'steps');
+            },
+
+            // ---------- Drag and drop ----------
+            setupDrag(container, selector, table) {
+                const items = container.querySelectorAll(`${selector}[data-id]`);
+
+                items.forEach(item => {
+                    const handle = item.querySelector('.drag-handle');
+
+                    // Desktop: only draggable while pressing the handle.
+                    handle.addEventListener('mousedown', () => item.setAttribute('draggable', 'true'));
+                    handle.addEventListener('mouseup', () => item.removeAttribute('draggable'));
+                    item.addEventListener('dragstart', (e) => {
+                        App.draggedItem = item;
+                        item.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                    });
+                    item.addEventListener('dragend', () => {
+                        item.classList.remove('dragging');
+                        item.removeAttribute('draggable');
+                        App.draggedItem = null;
+                        App.clearDropIndicators(container);
+                    });
+                    item.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        if (!App.draggedItem || App.draggedItem === item) return;
+                        App.showDropIndicator(item, e.clientY);
+                    });
+                    item.addEventListener('dragleave', () => {
+                        item.classList.remove('drag-over-above', 'drag-over-below');
+                    });
+                    item.addEventListener('drop', async (e) => {
+                        e.preventDefault();
+                        if (!App.draggedItem || App.draggedItem === item) {
+                            App.clearDropIndicators(container);
+                            return;
+                        }
+                        App.showDropIndicator(item, e.clientY);
+                        App.placeAtIndicator(App.draggedItem, item);
+                        App.clearDropIndicators(container);
+                        await App.persistOrder(container, table);
+                    });
+
+                    // Touch: long-press-free drag from the handle.
+                    handle.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        App.draggedItem = item;
+                        item.classList.add('dragging');
+                        App.dragTouchY = e.touches[0].clientY;
+
+                        const onMove = (ev) => {
+                            ev.preventDefault();
+                            const y = ev.touches[0].clientY;
+                            App.dragTouchY = y;
+
+                            const all = Array.from(container.querySelectorAll(`${selector}[data-id]`));
+                            App.clearDropIndicators(container);
+                            const target = all.find(c => {
+                                if (c === item) return false;
+                                const rect = c.getBoundingClientRect();
+                                return y > rect.top && y < rect.bottom;
+                            });
+                            if (target) App.showDropIndicator(target, y);
+                        };
+
+                        const onEnd = async () => {
+                            document.removeEventListener('touchmove', onMove);
+                            document.removeEventListener('touchend', onEnd);
+                            item.classList.remove('dragging');
+
+                            const target = container.querySelector(`${selector}.drag-over-above, ${selector}.drag-over-below`);
+                            if (target && target !== item) {
+                                App.placeAtIndicator(item, target);
+                                App.clearDropIndicators(container);
+                                await App.persistOrder(container, table);
+                            } else {
+                                App.clearDropIndicators(container);
+                            }
+                            App.draggedItem = null;
+                        };
+
+                        document.addEventListener('touchmove', onMove, { passive: false });
+                        document.addEventListener('touchend', onEnd);
+                    }, { passive: false });
+                });
+            },
+
+            dropsAfter(target, clientY) {
+                const rect = target.getBoundingClientRect();
+                return clientY > rect.top + rect.height / 2;
+            },
+
+            showDropIndicator(target, clientY) {
+                const after = App.dropsAfter(target, clientY);
+                target.classList.toggle('drag-over-below', after);
+                target.classList.toggle('drag-over-above', !after);
+            },
+
+            clearDropIndicators(root) {
+                (root || document).querySelectorAll('.drag-over-above, .drag-over-below')
+                    .forEach(el => el.classList.remove('drag-over-above', 'drag-over-below'));
+            },
+
+            placeAtIndicator(dragged, target) {
+                if (target.classList.contains('drag-over-below')) target.after(dragged);
+                else target.before(dragged);
+            },
+
+            async persistOrder(container, table) {
+                const ids = Array.from(container.querySelectorAll('.item-card[data-id]'))
+                    .map(el => parseInt(el.dataset.id))
+                    .filter(Number.isInteger);
+                if (table === 'routines') {
+                    App.routines = ids.map(id => App.routines.find(r => r.id === id)).filter(Boolean);
+                } else {
+                    App.steps = ids.map(id => App.steps.find(s => s.id === id)).filter(Boolean);
+                }
+                await updatePositions(table, ids);
+            },
+
+            // ---------- Modals: routine / step ----------
+            openRoutineModal(routine) {
+                document.getElementById('routine-modal-title').textContent = routine ? 'Rename routine' : 'Add routine';
+                document.getElementById('routine-id').value = routine ? routine.id : '';
+                document.getElementById('routine-name').value = routine ? routine.name : '';
+                App.showModal('routine-modal');
+                setTimeout(() => document.getElementById('routine-name').focus(), 50);
+            },
+
+            async submitRoutineForm(e) {
+                e.preventDefault();
+                const id = document.getElementById('routine-id').value;
+                const name = document.getElementById('routine-name').value.trim();
+                if (!name) return;
+                App.hideModal('routine-modal');
+
+                if (id) {
+                    await updateRoutine(parseInt(id), name);
+                    if (App.currentRoutine && App.currentRoutine.id === parseInt(id)) {
+                        App.currentRoutine.name = name;
+                        App.renderRoutineDetail();
+                    }
+                    if (document.getElementById('list-screen').classList.contains('active')) {
+                        await App.loadListScreen();
+                    }
+                } else {
+                    await createRoutine(name);
+                    await App.loadListScreen();
+                }
+            },
+
+            openStepModal(step) {
+                document.getElementById('step-modal-title').textContent = step ? 'Edit step' : 'Add step';
+                document.getElementById('step-id').value = step ? step.id : '';
+                document.getElementById('step-name').value = step ? step.name : '';
+                document.getElementById('step-minutes').value = step
+                    ? String(Math.round(step.seconds / 60 * 100) / 100)
+                    : '1';
+                App.showModal('step-modal');
+                setTimeout(() => document.getElementById('step-name').focus(), 50);
+            },
+
+            adjustMinutes(delta) {
+                const input = document.getElementById('step-minutes');
+                let v = parseFloat(input.value);
+                if (!isFinite(v)) v = 1;
+                v = Math.round((v + delta) * 100) / 100;
+                if (v < 0.1) v = 0.1;
+                input.value = String(v);
+            },
+
+            async submitStepForm(e) {
+                e.preventDefault();
+                const id = document.getElementById('step-id').value;
+                const name = document.getElementById('step-name').value.trim();
+                const minutes = parseFloat(document.getElementById('step-minutes').value);
+                if (!name) { App.toast('Enter a step name'); return; }
+                if (!isFinite(minutes) || minutes <= 0) { App.toast('Enter a time greater than 0'); return; }
+                const seconds = Math.round(minutes * 60);
+                App.hideModal('step-modal');
+
+                if (id) {
+                    await updateStep(parseInt(id), name, seconds);
+                } else {
+                    await createStep(App.currentRoutine.id, name, seconds);
+                }
+                App.steps = await getSteps(App.currentRoutine.id);
+                App.renderRoutineDetail();
+            },
+
+            // ---------- Confirm ----------
+            confirm(title, message, onOk) {
+                document.getElementById('confirm-title').textContent = title;
+                document.getElementById('confirm-message').textContent = message;
+                App.pendingConfirm = onOk;
+                App.showModal('confirm-modal');
+            },
+
+            async runConfirm() {
+                const fn = App.pendingConfirm;
+                App.pendingConfirm = null;
+                App.hideModal('confirm-modal');
+                if (fn) await fn();
+            },
+
+            // ---------- Run engine ----------
+            startRun(routine, stepList, startIndex) {
+                if (!stepList.length) return;
+
+                App.stopAllTimers();
+                initAudio();
+
+                const start = Math.max(0, Math.min(startIndex, stepList.length - 1));
+                const cloned = stepList.map(s => ({ name: s.name, seconds: s.seconds }));
+
+                App.run = {
+                    routineId: routine.id,
+                    routineName: routine.name,
+                    steps: cloned,
+                    index: start,
+                    remainingMs: cloned[start].seconds * 1000,
+                    endTime: Date.now() + cloned[start].seconds * 1000,
+                    paused: false,
+                    done: false,
+                    alerting: false,
+                    alertKind: null,
+                    tickTimer: null
+                };
+
+                document.getElementById('run-done').classList.remove('show');
+                App.showScreen('run-screen');
+                App.renderRunStep();
+                App.updateRunDisplay();
+                App.run.tickTimer = setInterval(() => App.tick(), 250);
+                requestWakeLock();
+                startKeepAlive();
+            },
+
+            tick() {
+                const run = App.run;
+                if (!run || run.paused || run.done) return;
+
+                const now = Date.now();
+                let advanced = false;
+
+                // Catch up across steps using the scheduled end times, so a
+                // throttled/backgrounded tab doesn't lose time.
+                while (run.endTime - now <= 0) {
+                    if (run.index >= run.steps.length - 1) {
+                        App.finishRun();
+                        return;
+                    }
+                    run.index++;
+                    run.endTime += run.steps[run.index].seconds * 1000;
+                    advanced = true;
+                }
+
+                run.remainingMs = run.endTime - now;
+                if (advanced) App.onStepAdvanced();
+                App.updateRunDisplay();
+            },
+
+            onStepAdvanced() {
+                App.renderRunStep();
+                App.startAlert('step');
+            },
+
+            updateRunDisplay() {
+                const run = App.run;
+                if (!run) return;
+
+                document.getElementById('run-step-time').textContent = formatClock(run.remainingMs / 1000);
+                document.getElementById('run-step-time').classList.toggle('paused', run.paused);
+
+                let remaining = run.remainingMs;
+                for (let i = run.index + 1; i < run.steps.length; i++) remaining += run.steps[i].seconds * 1000;
+                document.getElementById('run-total').textContent = `Routine remaining ${formatClock(remaining / 1000)}`;
+
+                const stepMs = run.steps[run.index].seconds * 1000;
+                const elapsed = Math.min(stepMs, Math.max(0, stepMs - run.remainingMs));
+                document.getElementById('run-progress-bar').style.width = `${(elapsed / stepMs) * 100}%`;
+
+                document.getElementById('run-pause-btn').textContent = run.paused ? 'Resume' : 'Pause';
+            },
+
+            renderRunStep() {
+                const run = App.run;
+                if (!run) return;
+
+                document.getElementById('run-routine-name').textContent = run.routineName;
+                document.getElementById('run-step-label').textContent = `Step ${run.index + 1} of ${run.steps.length}`;
+                document.getElementById('run-step-name').textContent = run.steps[run.index].name;
+                document.getElementById('run-total').textContent = `Routine remaining ${formatClock((run.remainingMs + run.steps.slice(run.index + 1).reduce((a, s) => a + s.seconds * 1000, 0)) / 1000)}`;
+
+                document.getElementById('run-upcoming').innerHTML = run.steps.map((s, i) => `
+                    <div class="run-upcoming-item ${i === run.index ? 'current' : ''}">
+                        <span>${i + 1}. ${escapeHtml(s.name)}</span>
+                        <span class="t">${formatDuration(s.seconds)}</span>
+                    </div>`).join('');
+            },
+
+            togglePause() {
+                const run = App.run;
+                if (!run || run.done) return;
+
+                if (run.paused) {
+                    run.endTime = Date.now() + run.remainingMs;
+                    run.paused = false;
+                    run.tickTimer = setInterval(() => App.tick(), 250);
+                    requestWakeLock();
+                    App.stopAlert();
+                } else {
+                    run.remainingMs = Math.max(0, run.endTime - Date.now());
+                    run.paused = true;
+                    clearInterval(run.tickTimer);
+                    run.tickTimer = null;
+                    releaseWakeLock();
+                    // Pausing silences alerts but keeps them acknowledged.
+                    App.stopAlert();
+                }
+                App.updateRunDisplay();
+            },
+
+            addMinute() {
+                const run = App.run;
+                if (!run || run.done) return;
+                run.remainingMs += 60000;
+                if (!run.paused) run.endTime += 60000;
+                App.updateRunDisplay();
+            },
+
+            finishRun() {
+                const run = App.run;
+                run.done = true;
+                run.paused = false;
+                run.remainingMs = 0;
+                clearInterval(run.tickTimer);
+                run.tickTimer = null;
+                App.renderRunStep();
+                App.updateRunDisplay();
+                document.getElementById('run-done-name').textContent = run.routineName;
+                document.getElementById('run-done').classList.add('show');
+                App.startAlert('done');
+            },
+
+            // ---------- Alerts ----------
+            startAlert(kind) {
+                App.stopAlert();
+                const run = App.run;
+                if (!run) return;
+                run.alerting = true;
+                run.alertKind = kind;
+
+                const settings = App.settings || DEFAULT_SETTINGS;
+                const repeat = kind === 'done' ? true : settings.repeatUntilAcknowledged;
+
+                if (settings.soundEnabled) {
+                    if (kind === 'done') playCompletion(); else playBing();
+                }
+
+                if (settings.soundEnabled && repeat) {
+                    App.alertTimer = setInterval(() => {
+                        if (!App.run || !App.run.alerting) { App.stopAlert(); return; }
+                        if (kind === 'done') playCompletion(); else playBing();
+                    }, 6000);
+                }
+                App.updateAlertHint();
+            },
+
+            stopAlert() {
+                if (App.alertTimer) { clearInterval(App.alertTimer); App.alertTimer = null; }
+                if (App.run) { App.run.alerting = false; App.run.alertKind = null; }
+                App.updateAlertHint();
+            },
+
+            updateAlertHint() {
+                const hint = document.getElementById('run-alert-hint');
+                const run = App.run;
+                // Only a step alert is dismissible by tapping; Done needs its button.
+                const show = run && run.alerting && run.alertKind === 'step'
+                    && App.settings && App.settings.soundEnabled && App.settings.repeatUntilAcknowledged;
+                hint.classList.toggle('show', !!show);
+            },
+
+            acknowledgeAlert() {
+                const run = App.run;
+                if (run && run.alerting && run.alertKind === 'step') App.stopAlert();
+            },
+
+            acknowledgeDone() {
+                const run = App.run;
+                const routineId = run ? run.routineId : null;
+                App.stopAllTimers();
+                document.getElementById('run-done').classList.remove('show');
+                App.run = null;
+
+                if (routineId) App.navigate(`#routine/${routineId}`);
+                else App.navigate('');
+            },
+
+            requestStop() {
+                const run = App.run;
+                if (!run) return;
+                App.confirm(
+                    'Stop routine?',
+                    `"${run.routineName}" will stop and your progress will be lost.`,
+                    () => {
+                        const routineId = run.routineId;
+                        App.stopAllTimers();
+                        App.run = null;
+                        if (routineId) App.navigate(`#routine/${routineId}`);
+                        else App.navigate('');
+                    }
+                );
+            },
+
+            stopAllTimers() {
+                if (App.alertTimer) { clearInterval(App.alertTimer); App.alertTimer = null; }
+                if (App.run && App.run.tickTimer) clearInterval(App.run.tickTimer);
+                if (App.run) App.run.tickTimer = null;
+                releaseWakeLock();
+                stopKeepAlive();
+            },
+
+            // ---------- Settings ----------
+            openSettings() {
+                App.renderSettings();
+                App.showModal('settings-modal');
+            },
+
+            renderSettings() {
+                App.settings = App.settings || getSettings();
+                document.getElementById('setting-sound').classList.toggle('on', !!App.settings.soundEnabled);
+                document.getElementById('setting-repeat').classList.toggle('on', !!App.settings.repeatUntilAcknowledged);
+            },
+
+            toggleSetting(key) {
+                App.settings[key] = !App.settings[key];
+                saveSettings(App.settings);
+                App.renderSettings();
+                if (key === 'soundEnabled' && App.settings.soundEnabled) {
+                    initAudio();
+                    playBing();
+                }
+                if (!App.settings.soundEnabled) App.stopAlert();
+                App.updateAlertHint();
+            },
+
+            // ---------- Navigation ----------
+            // Setting a hash fires hashchange asynchronously; if it's already the
+            // target, route directly so we don't render twice.
+            navigate(hash) {
+                if (window.location.hash === hash) App.handleRoute();
+                else window.location.hash = hash;
+            },
+
+            // ---------- Misc ----------
+            toast(message) {
+                const el = document.createElement('div');
+                el.textContent = message;
+                el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:0.9rem;z-index:200;box-shadow:var(--shadow-lg);opacity:0;transition:opacity 200ms;';
+                document.body.appendChild(el);
+                requestAnimationFrame(() => { el.style.opacity = '1'; });
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 250);
+                }, 1600);
+            }
+        };
+
+        window.App = App;
+
+        // ============ Event wiring ============
+        document.getElementById('setup-btn').addEventListener('click', () => {
+            createServerSelectionModal({
+                appName: 'Timely',
+                queryPermissionLevel: 'read-write',
+            });
+        });
+
+        document.getElementById('retry-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('retry-btn');
+            btn.disabled = true;
+            btn.textContent = 'Connecting...';
+            try { await App.tryConnect(); }
+            finally { btn.disabled = false; btn.textContent = 'Try again'; }
+        });
+
+        document.getElementById('change-db-btn').addEventListener('click', () => {
+            ayb.disconnect();
+            ayb = null;
+            App.showScreen('setup-screen');
+        });
+
+        document.getElementById('add-routine-btn').addEventListener('click', () => App.openRoutineModal(null));
+        document.getElementById('add-step-btn').addEventListener('click', () => App.openStepModal(null));
+        document.getElementById('edit-routine-btn').addEventListener('click', () => App.openRoutineModal(App.currentRoutine));
+        document.getElementById('play-routine-btn').addEventListener('click', () => {
+            if (!App.steps.length) { App.toast('Add a step first'); return; }
+            App.startRun(App.currentRoutine, App.steps, 0);
+        });
+        document.getElementById('routine-back-btn').addEventListener('click', () => App.navigate(''));
+
+        document.getElementById('routine-form').addEventListener('submit', App.submitRoutineForm);
+        document.getElementById('routine-cancel').addEventListener('click', () => App.hideModal('routine-modal'));
+        document.getElementById('step-form').addEventListener('submit', App.submitStepForm);
+        document.getElementById('step-cancel').addEventListener('click', () => App.hideModal('step-modal'));
+        document.getElementById('step-minus').addEventListener('click', () => App.adjustMinutes(-1));
+        document.getElementById('step-plus').addEventListener('click', () => App.adjustMinutes(1));
+
+        document.getElementById('confirm-cancel').addEventListener('click', () => {
+            App.pendingConfirm = null;
+            App.hideModal('confirm-modal');
+        });
+        document.getElementById('confirm-ok').addEventListener('click', () => App.runConfirm());
+
+        document.getElementById('run-pause-btn').addEventListener('click', (e) => { e.stopPropagation(); App.togglePause(); });
+        document.getElementById('run-plus-btn').addEventListener('click', (e) => { e.stopPropagation(); App.addMinute(); });
+        document.getElementById('run-stop-btn').addEventListener('click', (e) => { e.stopPropagation(); App.requestStop(); });
+        document.getElementById('run-done-btn').addEventListener('click', (e) => { e.stopPropagation(); App.acknowledgeDone(); });
+        document.getElementById('run-tap-area').addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            App.acknowledgeAlert();
+        });
+
+        document.getElementById('settings-btn').addEventListener('click', () => App.openSettings());
+        document.getElementById('settings-close').addEventListener('click', () => App.hideModal('settings-modal'));
+        document.getElementById('setting-sound').addEventListener('click', () => App.toggleSetting('soundEnabled'));
+        document.getElementById('setting-repeat').addEventListener('click', () => App.toggleSetting('repeatUntilAcknowledged'));
+        document.getElementById('disconnect-btn').addEventListener('click', () => {
+            App.hideModal('settings-modal');
+            ayb.disconnect();
+            ayb = null;
+            App.showScreen('setup-screen');
+        });
+
+        // Close modal when clicking the dimmed backdrop
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('active');
+                    if (overlay.id === 'confirm-modal') App.pendingConfirm = null;
+                }
+            });
+        });
+
+        window.addEventListener('hashchange', App.handleRoute);
+        window.addEventListener('beforeunload', () => App.stopAllTimers());
+
+        App.init();
+    </script>
+</body>
+</html>
