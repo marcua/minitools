@@ -54,6 +54,9 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* The reset above strips <dialog>'s default centering (ayb's connect modal). */
+        dialog { margin: auto; }
+
         body {
             font-family: var(--font-body);
             background-color: var(--paper);
