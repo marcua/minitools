@@ -1,4 +1,4 @@
-const CACHE_NAME = 'socialite-v4';
+const CACHE_NAME = 'socialite-v5';
 const AYB_CLIENT = 'https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js';
 const ASSETS = [
     './',
@@ -11,8 +11,10 @@ const ASSETS = [
 // Install - cache assets
 self.addEventListener('install', (event) => {
     event.waitUntil(
+        // cache: 'reload' skips the browser's HTTP cache (the site sends
+        // max-age=600), so a new worker never stores a stale page.
         caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(ASSETS))
+            .then(cache => cache.addAll(ASSETS.map(url => new Request(url, { cache: 'reload' }))))
             .then(() => self.skipWaiting())
     );
 });
@@ -43,13 +45,28 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Static assets - cache first, network fallback
+    // The page itself - network first so updates show on the next load;
+    // the cached copy is only for offline.
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request, { cache: 'no-cache' }).then(response => {
+                if (response.ok) {
+                    const responseClone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+                }
+                return response;
+            }).catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
+        );
+        return;
+    }
+
+    // Other static assets - cache first, network fallback
     event.respondWith(
         caches.match(event.request)
             .then(cached => {
                 if (cached) {
                     // Return cached, but also update cache in background
-                    fetch(event.request).then(response => {
+                    fetch(event.request, { cache: 'no-cache' }).then(response => {
                         if (response.ok) {
                             caches.open(CACHE_NAME).then(cache => {
                                 cache.put(event.request, response);

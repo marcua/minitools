@@ -249,7 +249,10 @@ backfill, including reposted and quoted originals and identity lookups.
 **MUST bump `CACHE_NAME` in `sw.js` after every change** (e.g. `socialite-v1` →
 `socialite-v2`). The worker only handles same-origin assets and the ayb client
 script. Everything else, including every PDS/instance request, must bypass it
-so polls never see a cached answer.
+so polls never see a cached answer. The page itself is network-first (cache only when
+offline), and the worker's own fetches use `cache: 'reload'`/`'no-cache'`
+because the site sends `max-age=600`; otherwise a fresh worker could cache a
+stale `index.html` and updates would lag by a load or ten minutes.
 
 ### 2. SQL
 Use `sqlVal()` for every literal: it handles `NULL`, numbers, JSON objects, and
