@@ -893,6 +893,14 @@
             return `${Math.round(diff / HOUR)}h`;
         }
 
+        // A person's display name. Before their first check, a Bluesky
+        // source is just a DID; show something readable instead.
+        function sourceName(s) {
+            if (s.displayName || s.handle) return s.displayName || s.handle;
+            const svc = Services[s.service];
+            return `${svc ? svc.label : 'New'} account`;
+        }
+
         function pluralize(n, word) {
             return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
         }
@@ -2674,7 +2682,7 @@
 
         function contextHtml(post) {
             const source = App.sources.get(post.sourceId);
-            const who = source ? (source.displayName || source.handle || post.sourceId) : 'Someone you follow';
+            const who = source ? sourceName(source) : 'Someone you follow';
             if (post.kind === 'repost') {
                 return `<div class="post-context">${ICONS.repost}<span>${escapeHtml(who)} reposted</span></div>`;
             }
@@ -3000,9 +3008,11 @@
                     return;
                 }
                 container.innerHTML = list.slice(0, 500).map(s => {
-                    const name = s.displayName || s.handle || s.id;
+                    const name = sourceName(s);
+                    const unnamed = !s.displayName && !s.handle;
                     const polled = s.lastPolledAt ? `checked ${relativeTime(s.lastPolledAt)}`.replace('checked now', 'checked just now') : 'not checked yet';
-                    const next = Poller.inflight.has(s.id) ? 'checking now' : `next in ${relativeFuture(s.nextPollAt)}`;
+                    const next = Poller.inflight.has(s.id) ? 'checking now'
+                        : s.nextPollAt <= Date.now() ? 'queued' : `next in ${relativeFuture(s.nextPollAt)}`;
                     const host = Services[s.service] ? Services[s.service].pollHost(s) : '';
                     const feed = HostFeeds.covers(s);
                     const via = (s.endpoint && s.endpoint.mode === 'home'
@@ -3013,7 +3023,9 @@
                         ${avatarHtml(s.avatarUrl, name, s.profileUrl)}
                         <div class="item-main">
                             <div class="item-title"><span class="svc-dot ${escapeHtml(s.service)}"></span><span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</span>${via}</div>
-                            <div class="item-meta">${s.handle ? `@${escapeHtml(s.handle)} · ` : ''}${escapeHtml(host || '')}</div>
+                            ${unnamed
+                                ? `<div class="item-meta" title="${escapeHtml(s.id)}">Name and handle load on first check</div>`
+                                : `<div class="item-meta">${s.handle ? `@${escapeHtml(s.handle)} · ` : ''}${escapeHtml(host || '')}</div>`}
                             ${s.error ? `<div class="item-meta error">${escapeHtml(s.error)}</div>` : `<div class="item-meta">${escapeHtml(polled)} · ${escapeHtml(next)}${s.lastPostAt ? ` · last post ${escapeHtml(relativeTime(s.lastPostAt))}` : ''}</div>`}
                         </div>
                     </div>`;
