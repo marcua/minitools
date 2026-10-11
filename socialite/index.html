@@ -1,0 +1,2808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#FAFBFC">
+    <meta name="referrer" content="no-referrer">
+    <title>Socialite</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --paper: #FAFBFC;
+            --paper-warm: #F6F5F3;
+            --surface: #FFFFFF;
+            --border: #E1E4E8;
+            --border-strong: #D0D4D9;
+
+            --ink: #1B2631;
+            --ink-secondary: #57606A;
+            --ink-muted: #8B949E;
+            --ink-faint: #B8BFC6;
+
+            --signal: #0F766E;
+            --signal-light: #0F766E14;
+            --signal-medium: #0F766E30;
+            --signal-hover: #115E59;
+
+            --warm: #D97706;
+            --danger: #DC2626;
+
+            --svc-bluesky: #1185FE;
+            --svc-mastodon: #6364FF;
+
+            --shadow-sm: 0 1px 2px rgba(27, 38, 49, 0.04);
+            --shadow-md: 0 2px 8px rgba(27, 38, 49, 0.06), 0 1px 2px rgba(27, 38, 49, 0.04);
+            --shadow-lg: 0 8px 24px rgba(27, 38, 49, 0.08), 0 2px 8px rgba(27, 38, 49, 0.04);
+
+            --font-display: 'Outfit', system-ui, sans-serif;
+            --font-body: 'DM Sans', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --duration-fast: 120ms;
+            --duration-normal: 200ms;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--paper);
+            background-image: radial-gradient(ellipse at 50% -20%, var(--signal-light) 0%, transparent 50%);
+            color: var(--ink);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        a { color: var(--signal); }
+
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 20px 16px 60px;
+        }
+
+        h1 {
+            font-family: var(--font-display);
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+        }
+
+        h2 {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            margin-bottom: 0.75rem;
+        }
+
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn var(--duration-normal) var(--ease-out); }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ---------- Header ---------- */
+        .page-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 28px;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .header-actions { display: flex; gap: 8px; }
+
+        .icon-btn {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--ink-secondary);
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            flex: none;
+        }
+        .icon-btn:hover { border-color: var(--border-strong); color: var(--ink); background: var(--paper-warm); }
+        .icon-btn svg { width: 18px; height: 18px; }
+        .icon-btn.spinning svg { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ---------- Buttons ---------- */
+        .btn {
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            font-weight: 500;
+            border: 1px solid var(--signal);
+            background: var(--signal);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        .btn:hover { background: var(--signal-hover); border-color: var(--signal-hover); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--ink-secondary);
+            border-color: var(--border);
+        }
+        .btn-secondary:hover { background: var(--paper-warm); color: var(--ink); border-color: var(--border-strong); }
+        .btn-danger { background: var(--danger); border-color: var(--danger); }
+        .btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
+        .btn-small { padding: 6px 10px; font-size: 0.82rem; border-radius: 8px; }
+        .btn-block { width: 100%; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 16px;
+            color: var(--ink-secondary);
+            background: none;
+            border: none;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 6px 0;
+        }
+        .back-link:hover { color: var(--signal); }
+        .back-link svg { width: 16px; height: 16px; }
+
+        /* ---------- Status + chips ---------- */
+        .status-bar {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 10px;
+            min-height: 1.1em;
+        }
+        .status-bar a { color: var(--danger); cursor: pointer; text-decoration: none; }
+        .status-bar a:hover { text-decoration: underline; }
+
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .chip {
+            font-family: var(--font-body);
+            font-size: 0.82rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--ink-secondary);
+            border-radius: 999px;
+            padding: 4px 12px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chip:hover { border-color: var(--border-strong); color: var(--ink); }
+        .chip.active { background: var(--signal); border-color: var(--signal); color: #fff; }
+
+        .svc-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+        .svc-dot.bluesky { background: var(--svc-bluesky); }
+        .svc-dot.mastodon { background: var(--svc-mastodon); }
+
+        .new-pill {
+            position: sticky;
+            top: 10px;
+            z-index: 20;
+            display: none;
+            margin: 0 auto 10px;
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            font-weight: 500;
+            background: var(--signal);
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            padding: 7px 16px;
+            box-shadow: var(--shadow-lg);
+            cursor: pointer;
+        }
+        .new-pill.show { display: block; animation: fadeIn var(--duration-normal) var(--ease-out); }
+
+        /* ---------- Posts ---------- */
+        .feed { display: flex; flex-direction: column; gap: 10px; }
+        .post {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            box-shadow: var(--shadow-sm);
+        }
+        .post-context {
+            font-size: 0.78rem;
+            color: var(--ink-muted);
+            margin: -2px 0 6px 52px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+        }
+        .post-context svg { width: 13px; height: 13px; flex: none; }
+        .post-context span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .post-row { display: flex; gap: 12px; }
+
+        .avatar {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            flex: none;
+            background: var(--signal-medium);
+            color: var(--signal);
+            font-family: var(--font-display);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            text-decoration: none;
+        }
+        .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+        .avatar.small { width: 20px; height: 20px; font-size: 0.65rem; }
+
+        .post-body { flex: 1; min-width: 0; }
+        .post-head {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            min-width: 0;
+            font-size: 0.92rem;
+        }
+        .post-author {
+            font-weight: 700;
+            color: var(--ink);
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 0 1 auto;
+            min-width: 0;
+        }
+        .post-author:hover { text-decoration: underline; }
+        .post-handle {
+            color: var(--ink-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1 1 0;
+            min-width: 0;
+            font-size: 0.85rem;
+        }
+        .post-head .svc-dot { align-self: center; }
+        .post-time {
+            color: var(--ink-muted);
+            font-size: 0.82rem;
+            text-decoration: none;
+            white-space: nowrap;
+            flex: none;
+        }
+        .post-time:hover { text-decoration: underline; }
+
+        .post-content {
+            font-size: 0.95rem;
+            color: var(--ink);
+            overflow-wrap: anywhere;
+            margin-top: 2px;
+        }
+        .post-content p { margin: 0 0 0.6em; }
+        .post-content p:last-child { margin-bottom: 0; }
+        .post-content a { color: var(--signal); text-decoration: none; }
+        .post-content a:hover { text-decoration: underline; }
+        .post-content .invisible { display: none; }
+        .post-content .ellipsis::after { content: '…'; }
+        .post-content img.emoji { height: 1.2em; width: auto; vertical-align: -0.25em; }
+        .post-content blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--ink-secondary); }
+
+        details.cw { margin-top: 4px; }
+        details.cw summary {
+            cursor: pointer;
+            font-size: 0.88rem;
+            color: var(--warm);
+            font-weight: 500;
+            list-style: none;
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            padding: 2px 8px;
+            border: 1px solid #FCD34D;
+            background: #FFFBEB;
+            border-radius: 6px;
+        }
+        details.cw summary::-webkit-details-marker { display: none; }
+        details.cw[open] summary { margin-bottom: 6px; }
+
+        .post-media {
+            display: grid;
+            gap: 4px;
+            margin-top: 8px;
+            border-radius: 10px;
+            overflow: hidden;
+            grid-template-columns: 1fr 1fr;
+        }
+        .post-media.n1 { grid-template-columns: 1fr; }
+        .post-media a, .post-media video, .post-media audio { display: block; width: 100%; }
+        .post-media img, .post-media video {
+            width: 100%;
+            height: 100%;
+            max-height: 420px;
+            object-fit: cover;
+            display: block;
+            background: var(--paper-warm);
+        }
+        .post-media:not(.n1) img, .post-media:not(.n1) video { aspect-ratio: 4 / 3; }
+        .post-media.n1 img { object-fit: contain; max-height: 480px; }
+
+        .link-card {
+            display: flex;
+            margin-top: 8px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            background: var(--paper);
+        }
+        .link-card:hover { border-color: var(--border-strong); }
+        .link-card img { width: 96px; min-height: 72px; object-fit: cover; flex: none; background: var(--paper-warm); }
+        .link-card-body { padding: 8px 12px; min-width: 0; }
+        .link-card-host { font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .link-card-title { font-weight: 500; font-size: 0.9rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .link-card-desc { font-size: 0.8rem; color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+        .quote {
+            display: block;
+            margin-top: 8px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 12px;
+            text-decoration: none;
+            color: inherit;
+            background: var(--paper);
+        }
+        a.quote:hover { border-color: var(--border-strong); }
+        .quote .post-head { font-size: 0.85rem; align-items: center; }
+        .quote .post-content { font-size: 0.88rem; }
+        .quote .post-media img { max-height: 220px; }
+        .quote-missing { font-size: 0.85rem; color: var(--ink-muted); }
+
+        .feed-footer {
+            text-align: center;
+            color: var(--ink-muted);
+            font-size: 0.85rem;
+            padding: 20px 0;
+        }
+
+        /* ---------- Empty state ---------- */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--ink-muted);
+        }
+        .empty-state svg { width: 44px; height: 44px; color: var(--ink-faint); margin-bottom: 12px; }
+        .empty-state-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; color: var(--ink-secondary); margin-bottom: 4px; }
+        .empty-state-text { font-size: 0.9rem; margin-bottom: 18px; }
+
+        /* ---------- Accounts / sources ---------- */
+        .card-list { display: flex; flex-direction: column; gap: 10px; }
+        .item-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            box-shadow: var(--shadow-sm);
+        }
+        .item-main { flex: 1; min-width: 0; }
+        .item-title {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--ink);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .item-meta {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 2px;
+            overflow-wrap: anywhere;
+        }
+        .item-meta.error { color: var(--danger); text-transform: none; letter-spacing: 0; }
+        .item-actions { display: flex; gap: 6px; flex: none; }
+        .tag {
+            font-family: var(--font-mono);
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--warm);
+            border: 1px solid #FCD34D;
+            background: #FFFBEB;
+            border-radius: 4px;
+            padding: 0 4px;
+            flex: none;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 18px;
+            box-shadow: var(--shadow-sm);
+        }
+        .panel p.hint { font-size: 0.85rem; color: var(--ink-muted); margin-top: 10px; }
+
+        .segmented {
+            display: flex;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .segmented button {
+            flex: 1;
+            border: none;
+            background: var(--surface);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            padding: 9px;
+            cursor: pointer;
+            color: var(--ink-secondary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .segmented button + button { border-left: 1px solid var(--border); }
+        .segmented button.active { background: var(--signal-light); color: var(--signal); font-weight: 500; }
+
+        .add-row { display: flex; gap: 8px; }
+        .add-row input { margin: 0; }
+
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 6px 0 10px;
+        }
+
+        /* ---------- Setup / error ---------- */
+        .center-screen {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 30px;
+        }
+        .center-screen h1 { margin: 0 0 8px; }
+        .center-screen p { color: var(--ink-secondary); max-width: 380px; margin-bottom: 22px; }
+        .center-screen .logo { width: 64px; height: 64px; color: var(--signal); margin-bottom: 18px; }
+        .error-text {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--danger);
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            border-radius: 8px;
+            padding: 10px 14px;
+            max-width: 420px;
+            word-break: break-word;
+            margin-bottom: 18px;
+        }
+
+        /* ---------- Modal ---------- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(27, 38, 49, 0.4);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay.active { display: flex; animation: modalFadeIn var(--duration-normal) var(--ease-out); }
+        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal {
+            background: var(--surface);
+            border-radius: 14px;
+            padding: 24px;
+            max-width: 420px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            animation: modalSlideIn var(--duration-normal) var(--ease-spring);
+        }
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        input[type="text"], input[type="search"], select {
+            width: 100%;
+            font-family: var(--font-body);
+            font-size: 1rem;
+            color: var(--ink);
+            background: var(--paper);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 13px;
+            margin-bottom: 14px;
+            outline: none;
+            transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+        }
+        select { width: auto; margin: 0; padding: 7px 10px; font-size: 0.9rem; }
+        input[type="text"]:focus, input[type="search"]:focus, select:focus {
+            border-color: var(--signal);
+            box-shadow: 0 0 0 3px var(--signal-light);
+        }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 4px; }
+        .btn-group .btn { flex: 1; }
+        .confirm-message { color: var(--ink-secondary); margin-bottom: 18px; }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .setting-label { font-size: 0.95rem; color: var(--ink); }
+        .setting-sub { font-size: 0.8rem; color: var(--ink-muted); margin-top: 2px; }
+        .switch {
+            position: relative;
+            width: 46px;
+            height: 27px;
+            flex: none;
+            background: var(--border-strong);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background var(--duration-fast);
+            border: none;
+        }
+        .switch.on { background: var(--signal); }
+        .switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+            transition: transform var(--duration-normal) var(--ease-spring);
+        }
+        .switch.on::after { transform: translateX(19px); }
+    </style>
+</head>
+<body>
+
+    <!-- Setup Screen -->
+    <div class="screen" id="setup-screen">
+        <div class="center-screen">
+            <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1v2l-3-2h-4"/>
+            </svg>
+            <h1>Socialite</h1>
+            <p>One timeline for the people you follow on Bluesky and Mastodon, read straight from their own servers. Your browser is the backend.</p>
+            <button class="btn" id="setup-btn">Connect your database</button>
+        </div>
+    </div>
+
+    <!-- Error Screen -->
+    <div class="screen" id="error-screen">
+        <div class="center-screen">
+            <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.5" fill="currentColor"/>
+            </svg>
+            <h1>Connection failed</h1>
+            <p>We couldn't reach your database. Your saved connection is still here.</p>
+            <div class="error-text" id="error-message"></div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="change-db-btn">Change database</button>
+                <button class="btn" id="retry-btn">Try again</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feed Screen -->
+    <div class="screen" id="feed-screen">
+        <div class="container">
+            <div class="page-header">
+                <h1>Socialite</h1>
+                <div class="header-actions">
+                    <button class="icon-btn" id="refresh-btn" title="Check for new posts" aria-label="Check for new posts">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                    </button>
+                    <button class="icon-btn" id="accounts-btn" title="Accounts" aria-label="Accounts">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>
+                    </button>
+                    <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10.6 3V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 16 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.4 9v.09a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="status-bar" id="status-bar"></div>
+            <div class="chips" id="feed-chips"></div>
+            <button class="new-pill" id="new-pill"></button>
+            <div class="feed" id="feed"></div>
+            <div class="feed-footer" id="feed-footer"></div>
+        </div>
+    </div>
+
+    <!-- Accounts Screen -->
+    <div class="screen" id="accounts-screen">
+        <div class="container">
+            <button class="back-link" data-nav="">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                Timeline
+            </button>
+            <div class="page-header"><h1>Accounts</h1></div>
+            <div id="account-list" class="card-list"></div>
+
+            <form class="panel" id="add-account-form">
+                <h2>Add an account</h2>
+                <div class="segmented" id="service-picker"></div>
+                <div class="add-row">
+                    <input type="text" id="account-handle" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+                    <button type="submit" class="btn" id="add-account-btn">Add</button>
+                </div>
+                <p class="hint">No login needed. Socialite reads your <em>public</em> follow list, then reads each person's posts directly from their own server.</p>
+            </form>
+
+            <button class="btn btn-secondary btn-block" data-nav="#sources" style="margin-top:14px;">View everyone you follow</button>
+        </div>
+    </div>
+
+    <!-- Sources Screen -->
+    <div class="screen" id="sources-screen">
+        <div class="container">
+            <button class="back-link" data-nav="#accounts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                Accounts
+            </button>
+            <div class="page-header"><h1>Following</h1></div>
+            <div class="section-label" id="sources-summary"></div>
+            <input type="search" id="sources-search" placeholder="Filter by name or handle" autocomplete="off">
+            <div id="source-list" class="card-list"></div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal">
+            <h2 id="confirm-title">Confirm</h2>
+            <p class="confirm-message" id="confirm-message"></p>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+                <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal">
+            <h2>Settings</h2>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Check each person every</div>
+                    <div class="setting-sub">Quiet accounts are checked less often</div>
+                </div>
+                <select id="setting-poll">
+                    <option value="5">5 min</option>
+                    <option value="10">10 min</option>
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="60">1 hour</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Replies</div>
+                    <div class="setting-sub">Self-threads always show</div>
+                </div>
+                <select id="setting-replies">
+                    <option value="following">To people I follow</option>
+                    <option value="all">All replies</option>
+                    <option value="none">Hide replies</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Show reposts &amp; boosts</div>
+                </div>
+                <button class="switch" id="setting-reposts" role="switch" aria-label="Show reposts"></button>
+            </div>
+            <div class="setting-row" style="border-bottom:none;">
+                <div>
+                    <div class="setting-label">Keep posts for</div>
+                    <div class="setting-sub">Older posts are pruned from your database</div>
+                </div>
+                <select id="setting-retention">
+                    <option value="7">1 week</option>
+                    <option value="14">2 weeks</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                </select>
+            </div>
+            <div class="btn-group" style="margin-top:20px;">
+                <button class="btn btn-secondary" id="disconnect-btn">Disconnect database</button>
+                <button class="btn" id="settings-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js"></script>
+    <script>
+        // ============ Configuration ============
+        const APP_NAME = 'socialite';
+        const MINUTE = 60 * 1000;
+        const HOUR = 60 * MINUTE;
+        const DAY = 24 * HOUR;
+        const FEED_PAGE = 40;
+        const FOLLOW_RESYNC_MS = 12 * HOUR;
+        let ayb = null;
+
+        // ============ Helpers ============
+        // Escapes quotes too, so the result is safe inside attributes.
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeSql(str) {
+            return AybClient.escapeSQL(str);
+        }
+
+        // A SQL literal for any JS value: NULL, a number, or a quoted string.
+        function sqlVal(v) {
+            if (v === null || v === undefined) return 'NULL';
+            if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';
+            if (typeof v === 'object') v = JSON.stringify(v);
+            return `'${escapeSql(v)}'`;
+        }
+
+        function parseJson(str, fallback) {
+            if (!str) return fallback;
+            try { return JSON.parse(str); } catch (e) { return fallback; }
+        }
+
+        // Only http(s) URLs make it into href/src attributes.
+        function safeUrl(url) {
+            if (!url) return '';
+            try {
+                const u = new URL(url);
+                return (u.protocol === 'https:' || u.protocol === 'http:') ? u.href : '';
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function hostOf(url) {
+            try { return new URL(url).host; } catch (e) { return ''; }
+        }
+
+        function chunk(list, size) {
+            const out = [];
+            for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+            return out;
+        }
+
+        function toIso(value) {
+            const d = new Date(value);
+            return isNaN(d) ? new Date().toISOString() : d.toISOString();
+        }
+
+        // Clients set their own timestamps; don't let a future-dated post pin
+        // itself to the top of the timeline.
+        function clampToNow(iso) {
+            const now = new Date().toISOString();
+            return iso > now ? now : iso;
+        }
+
+        function relativeTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            const diff = Date.now() - d.getTime();
+            if (diff < MINUTE) return 'now';
+            if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m`;
+            if (diff < DAY) return `${Math.floor(diff / HOUR)}h`;
+            if (diff < 7 * DAY) return `${Math.floor(diff / DAY)}d`;
+            const opts = { month: 'short', day: 'numeric' };
+            if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+            return d.toLocaleDateString(undefined, opts);
+        }
+
+        function relativeFuture(ms) {
+            const diff = ms - Date.now();
+            if (diff <= 0) return 'now';
+            if (diff < MINUTE) return `${Math.ceil(diff / 1000)}s`;
+            if (diff < HOUR) return `${Math.round(diff / MINUTE)}m`;
+            return `${Math.round(diff / HOUR)}h`;
+        }
+
+        function pluralize(n, word) {
+            return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+        }
+
+        // ============ HTML sanitizer ============
+        // Remote content (Mastodon HTML, Bluesky text) is rebuilt from an
+        // allowlist. DOMParser documents don't run scripts or load resources.
+        const ALLOWED_TAGS = new Set(['P', 'BR', 'A', 'SPAN', 'STRONG', 'EM', 'B', 'I', 'U', 'S', 'DEL',
+            'CODE', 'PRE', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'IMG', 'SUP', 'SUB']);
+        const DROPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'NOSCRIPT',
+            'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'VIDEO', 'AUDIO', 'LINK', 'META']);
+        const SPAN_CLASSES = new Set(['invisible', 'ellipsis', 'h-card']);
+
+        function sanitizeHtml(html) {
+            if (!html) return '';
+            const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+            const out = document.createElement('div');
+
+            const walk = (node, parent) => {
+                for (const child of node.childNodes) {
+                    if (child.nodeType === Node.TEXT_NODE) {
+                        parent.appendChild(document.createTextNode(child.textContent));
+                        continue;
+                    }
+                    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+                    const tag = child.tagName;
+                    if (DROPPED_TAGS.has(tag)) continue;
+                    if (!ALLOWED_TAGS.has(tag)) { walk(child, parent); continue; }
+
+                    if (tag === 'IMG') {
+                        // Only custom emoji images survive.
+                        const src = safeUrl(child.getAttribute('src'));
+                        if (!src || !child.classList.contains('emoji')) continue;
+                        const img = document.createElement('img');
+                        img.src = src;
+                        img.className = 'emoji';
+                        img.alt = child.getAttribute('alt') || '';
+                        img.title = child.getAttribute('title') || '';
+                        img.loading = 'lazy';
+                        parent.appendChild(img);
+                        continue;
+                    }
+
+                    const el = document.createElement(tag);
+                    if (tag === 'A') {
+                        const href = safeUrl(child.getAttribute('href'));
+                        if (href) {
+                            el.href = href;
+                            el.target = '_blank';
+                            el.rel = 'noopener noreferrer nofollow';
+                        }
+                    } else if (tag === 'SPAN') {
+                        const classes = Array.from(child.classList).filter(c => SPAN_CLASSES.has(c));
+                        if (classes.length) el.className = classes.join(' ');
+                    }
+                    walk(child, el);
+                    parent.appendChild(el);
+                }
+            };
+
+            walk(doc.body, out);
+            return out.innerHTML;
+        }
+
+        // ============ Migrations ============
+        const socialiteMigrations = [
+            // v0: Initial schema
+            // Your own identities, one row per service account.
+            `CREATE TABLE IF NOT EXISTS accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL,
+                handle TEXT NOT NULL,
+                remote_id TEXT NOT NULL,
+                config TEXT NOT NULL DEFAULT '{}',
+                follows_count INTEGER NOT NULL DEFAULT 0,
+                follows_synced_at TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (service, remote_id)
+            )`,
+            // People you follow, deduplicated across accounts.
+            // id is '<service>:<remote id>'; endpoint/cursor are adapter JSON.
+            `CREATE TABLE IF NOT EXISTS sources (
+                id TEXT PRIMARY KEY,
+                service TEXT NOT NULL,
+                handle TEXT,
+                display_name TEXT,
+                avatar_url TEXT,
+                profile_url TEXT,
+                endpoint TEXT NOT NULL DEFAULT '{}',
+                cursor TEXT,
+                last_polled_at TEXT,
+                next_poll_at INTEGER NOT NULL DEFAULT 0,
+                last_post_at TEXT,
+                error TEXT,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS follows (
+                account_id INTEGER NOT NULL,
+                source_id TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (account_id, source_id)
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_follows_source ON follows(source_id)`,
+            // The unified timeline. id is '<service>:<uri>'. source_id is who
+            // put it in your feed (for a repost, the reposter; author_* is the
+            // original author). sort_at is when it entered the feed.
+            `CREATE TABLE IF NOT EXISTS posts (
+                id TEXT PRIMARY KEY,
+                service TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                url TEXT,
+                author_id TEXT,
+                author_handle TEXT,
+                author_name TEXT,
+                author_avatar TEXT,
+                author_url TEXT,
+                html TEXT,
+                content_warning TEXT,
+                media TEXT,
+                embed TEXT,
+                reply_to TEXT,
+                reply_to_author TEXT,
+                published_at TEXT NOT NULL,
+                sort_at TEXT NOT NULL,
+                fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_posts_sort ON posts(sort_at)`,
+            `CREATE INDEX IF NOT EXISTS idx_posts_source ON posts(source_id, sort_at)`
+        ];
+
+        // ============ Network ============
+        // Every outbound request goes through Net so we stay polite per host:
+        // a small concurrency cap, a minimum gap between requests, and a
+        // back-off window whenever a server says 429 or reports its budget
+        // is nearly spent.
+        class HttpError extends Error {
+            constructor(status, message) {
+                super(message || `HTTP ${status}`);
+                this.status = status;
+            }
+        }
+
+        const Net = {
+            hosts: new Map(),
+            maxPerHost: 2,
+            minGapMs: 250,
+            timeoutMs: 20000,
+
+            state(host) {
+                if (!this.hosts.has(host)) this.hosts.set(host, { active: 0, nextAt: 0, blockedUntil: 0 });
+                return this.hosts.get(host);
+            },
+
+            isBusy(host) {
+                const st = this.state(host);
+                return st.active >= this.maxPerHost || Date.now() < st.blockedUntil;
+            },
+
+            blockedUntil(host) {
+                return this.state(host).blockedUntil;
+            },
+
+            acquire(host) {
+                return new Promise(resolve => {
+                    const attempt = () => {
+                        const st = this.state(host);
+                        const now = Date.now();
+                        const readyAt = Math.max(st.nextAt, st.blockedUntil);
+                        if (st.active < this.maxPerHost && now >= readyAt) {
+                            st.active++;
+                            st.nextAt = now + this.minGapMs;
+                            resolve();
+                        } else {
+                            setTimeout(attempt, Math.max(50, readyAt - now));
+                        }
+                    };
+                    attempt();
+                });
+            },
+
+            release(host) {
+                this.state(host).active--;
+            },
+
+            noteRateLimit(host, res) {
+                const st = this.state(host);
+                const retryAfter = parseInt(res.headers.get('Retry-After'), 10);
+                const remaining = parseInt(res.headers.get('RateLimit-Remaining') || res.headers.get('X-RateLimit-Remaining'), 10);
+                const resetRaw = res.headers.get('RateLimit-Reset') || res.headers.get('X-RateLimit-Reset');
+                let resetAt = null;
+                if (resetRaw) {
+                    const asNum = Number(resetRaw);
+                    // atproto sends epoch seconds; Mastodon sends an ISO date.
+                    resetAt = Number.isFinite(asNum) ? asNum * 1000 : Date.parse(resetRaw);
+                }
+                if (res.status === 429) {
+                    const until = Number.isFinite(retryAfter) ? Date.now() + retryAfter * 1000
+                        : (resetAt && resetAt > Date.now() ? resetAt : Date.now() + 5 * MINUTE);
+                    st.blockedUntil = Math.max(st.blockedUntil, until);
+                } else if (Number.isFinite(remaining) && remaining < 20 && resetAt && resetAt > Date.now()) {
+                    // Leave headroom for whatever else this person uses the server for.
+                    st.blockedUntil = Math.max(st.blockedUntil, resetAt);
+                }
+            },
+
+            async fetch(url, init) {
+                const host = new URL(url).host;
+                await this.acquire(host);
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+                try {
+                    const res = await fetch(url, Object.assign({ signal: ctrl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' }, init));
+                    this.noteRateLimit(host, res);
+                    return res;
+                } catch (e) {
+                    if (e.name === 'AbortError') throw new Error(`Timed out reaching ${host}`);
+                    // CORS refusals and DNS failures both surface as TypeError.
+                    throw new Error(`Couldn't reach ${host}`);
+                } finally {
+                    clearTimeout(timer);
+                    this.release(host);
+                }
+            },
+
+            async response(url, init) {
+                const res = await this.fetch(url, init);
+                if (!res.ok) {
+                    let message = '';
+                    try {
+                        const body = await res.json();
+                        message = body.message || body.error || '';
+                    } catch (e) { /* not JSON */ }
+                    throw new HttpError(res.status, `${res.status} from ${new URL(url).host}${message ? `: ${message}` : ''}`);
+                }
+                return res;
+            },
+
+            async json(url, init) {
+                const res = await this.response(url, init);
+                return res.json();
+            }
+        };
+
+        // ============ AT Protocol ============
+        // Identity resolution goes DID -> DID document -> PDS, then everything
+        // else is read straight from that PDS. The cache keeps one entry per
+        // DID: { pds, handle, name, avatar, at, profileAt }.
+        const ATP = {
+            cache: new Map(),
+            persistTimer: null,
+
+            loadCache() {
+                const raw = parseJson(localStorage.getItem(`${APP_NAME}_atp_cache`), {});
+                Object.entries(raw).forEach(([did, entry]) => ATP.cache.set(did, entry));
+            },
+
+            // Followed people are persisted in `sources`; this only keeps the
+            // most recent strangers (reposted/quoted authors) on this device.
+            persistSoon() {
+                clearTimeout(ATP.persistTimer);
+                ATP.persistTimer = setTimeout(() => {
+                    const entries = Array.from(ATP.cache.entries())
+                        .filter(([did]) => !App.sources.has(`bluesky:${did}`))
+                        .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
+                        .slice(0, 2000);
+                    try {
+                        localStorage.setItem(`${APP_NAME}_atp_cache`, JSON.stringify(Object.fromEntries(entries)));
+                    } catch (e) { /* storage full; it's only a cache */ }
+                }, 5000);
+            },
+
+            parseUri(uri) {
+                const m = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(uri || '');
+                return m ? { did: m[1], collection: m[2], rkey: m[3] } : {};
+            },
+
+            rkeyOf(uri) {
+                return (uri || '').split('/').pop();
+            },
+
+            postUrl(did, rkey) {
+                return `https://bsky.app/profile/${did}/post/${rkey}`;
+            },
+
+            profileUrl(did) {
+                return `https://bsky.app/profile/${did}`;
+            },
+
+            blobUrl(pds, did, blob) {
+                if (!blob || !pds) return null;
+                const cid = (blob.ref && blob.ref.$link) || blob.cid;
+                if (!cid) return null;
+                return `${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
+            },
+
+            async resolveHandle(handle) {
+                if (handle.startsWith('did:')) return handle;
+                // The two standard methods: a DNS TXT record (via DNS-over-HTTPS,
+                // since browsers can't query DNS directly) and the handle's own
+                // well-known URL. A PDS entryway is the last resort.
+                try {
+                    const dns = await Net.json(`https://dns.google/resolve?name=_atproto.${encodeURIComponent(handle)}&type=TXT`);
+                    const txt = (dns.Answer || []).map(a => String(a.data || '').replace(/^"|"$/g, ''))
+                        .find(t => t.startsWith('did='));
+                    if (txt) return txt.slice('did='.length);
+                } catch (e) { /* fall through */ }
+                try {
+                    const res = await Net.fetch(`https://${handle}/.well-known/atproto-did`);
+                    if (res.ok) {
+                        const text = (await res.text()).trim();
+                        if (text.startsWith('did:')) return text;
+                    }
+                } catch (e) { /* fall through */ }
+                const body = await Net.json(`https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
+                if (!body.did) throw new Error(`Couldn't resolve ${handle}`);
+                return body.did;
+            },
+
+            async resolveDid(did, fresh) {
+                const cached = ATP.cache.get(did);
+                if (cached && cached.pds && !fresh && Date.now() - (cached.at || 0) < 3 * DAY) return cached;
+
+                let doc;
+                if (did.startsWith('did:plc:')) {
+                    doc = await Net.json(`https://plc.directory/${did}`);
+                } else if (did.startsWith('did:web:')) {
+                    const host = decodeURIComponent(did.slice('did:web:'.length));
+                    doc = await Net.json(`https://${host}/.well-known/did.json`);
+                } else {
+                    throw new Error(`Unsupported DID: ${did}`);
+                }
+                const service = (doc.service || []).find(s => s.id === '#atproto_pds' || s.id === `${did}#atproto_pds`);
+                if (!service || !safeUrl(service.serviceEndpoint)) throw new Error('No PDS in DID document');
+                const aka = (doc.alsoKnownAs || []).find(a => a.startsWith('at://'));
+                const entry = Object.assign({}, cached, {
+                    pds: service.serviceEndpoint.replace(/\/+$/, ''),
+                    handle: aka ? aka.slice('at://'.length) : (cached && cached.handle) || null,
+                    at: Date.now()
+                });
+                ATP.cache.set(did, entry);
+                ATP.persistSoon();
+                return entry;
+            },
+
+            // Identity plus display name/avatar from the profile record.
+            async author(did, fresh) {
+                const ident = await ATP.resolveDid(did, fresh);
+                if (fresh || !ident.profileAt || Date.now() - ident.profileAt > DAY) {
+                    try {
+                        const rec = await ATP.getRecord(ident.pds, did, 'app.bsky.actor.profile', 'self');
+                        ident.name = (rec.value && rec.value.displayName) || null;
+                        ident.avatar = ATP.blobUrl(ident.pds, did, rec.value && rec.value.avatar);
+                    } catch (e) {
+                        if (e.status === 429) throw e;
+                        // No profile record is fine; keep whatever we had.
+                    }
+                    ident.profileAt = Date.now();
+                    ATP.persistSoon();
+                }
+                return ident;
+            },
+
+            getRecord(pds, did, collection, rkey) {
+                return Net.json(`${pds}/xrpc/com.atproto.repo.getRecord?repo=${encodeURIComponent(did)}&collection=${collection}&rkey=${encodeURIComponent(rkey)}`);
+            },
+
+            listRecords(pds, did, collection, limit, cursor) {
+                let url = `${pds}/xrpc/com.atproto.repo.listRecords?repo=${encodeURIComponent(did)}&collection=${collection}&limit=${limit}`;
+                if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+                return Net.json(url);
+            },
+
+            // Records newer than `since` (rkeys are time-sortable TIDs), newest
+            // first. Pages back a little if everything on a page is new.
+            async listNew(pds, did, collection, since, limit) {
+                const out = [];
+                let cursor;
+                for (let page = 0; page < 3; page++) {
+                    const body = await ATP.listRecords(pds, did, collection, limit, cursor);
+                    const records = body.records || [];
+                    const fresh = since ? records.filter(r => ATP.rkeyOf(r.uri) > since) : records;
+                    out.push(...fresh);
+                    if (!since || fresh.length < records.length || !body.cursor || !records.length) break;
+                    cursor = body.cursor;
+                }
+                return out;
+            }
+        };
+
+        // ============ Services ============
+        // A service adapter maps one network onto the shared data model.
+        // Adding a network (e.g. an X/Twitter scraper) means adding an entry
+        // here; nothing else in the app knows about specific networks.
+        //
+        //   id, label, placeholder
+        //   resolveAccount(input)   -> { handle, remoteId, config }
+        //   fetchFollows(account)   -> [{ id, handle, displayName, avatarUrl, profileUrl, endpoint }]
+        //   mergeEndpoint(old, new) -> endpoint to keep when a follow resyncs
+        //   pollHost(source)        -> host the next poll will hit (for politeness)
+        //   poll(source, ctx)       -> { posts, cursor, endpoint, profile }
+        //
+        // Posts use the `posts` table's shape in camelCase (see Store.insertPosts).
+
+        // ---- Bluesky helpers ----
+        function bskyRichText(text, facets) {
+            if (!text) return '';
+            const bytes = new TextEncoder().encode(text);
+            const decoder = new TextDecoder();
+            const slice = (a, b) => decoder.decode(bytes.slice(a, b));
+            const sorted = (facets || [])
+                .filter(f => f.index && f.index.byteStart >= 0 && f.index.byteStart < f.index.byteEnd && f.index.byteEnd <= bytes.length)
+                .sort((a, b) => a.index.byteStart - b.index.byteStart);
+
+            let pos = 0;
+            let out = '';
+            for (const f of sorted) {
+                const { byteStart, byteEnd } = f.index;
+                if (byteStart < pos) continue;
+                out += escapeHtml(slice(pos, byteStart));
+                const segment = slice(byteStart, byteEnd);
+                const feature = (f.features || [])[0] || {};
+                let href = '';
+                if (feature.$type === 'app.bsky.richtext.facet#link') href = safeUrl(feature.uri);
+                else if (feature.$type === 'app.bsky.richtext.facet#mention') href = ATP.profileUrl(feature.did);
+                else if (feature.$type === 'app.bsky.richtext.facet#tag') href = `https://bsky.app/hashtag/${encodeURIComponent(feature.tag || '')}`;
+                out += href ? `<a href="${escapeHtml(href)}">${escapeHtml(segment)}</a>` : escapeHtml(segment);
+                pos = byteEnd;
+            }
+            out += escapeHtml(slice(pos, bytes.length));
+            return out.replace(/\n/g, '<br>');
+        }
+
+        function bskyLabels(labels) {
+            const values = ((labels && labels.values) || []).map(l => l.val).filter(Boolean);
+            return values.length ? `Content warning: ${values.join(', ')}` : null;
+        }
+
+        function bskyRecordLink(uri) {
+            const { did, collection, rkey } = ATP.parseUri(uri);
+            if (!did) return null;
+            if (collection === 'app.bsky.feed.post') return { quoteUri: uri };
+            const kinds = {
+                'app.bsky.graph.starterpack': ['Starter pack', `https://bsky.app/starter-pack/${did}/${rkey}`],
+                'app.bsky.feed.generator': ['Custom feed', `https://bsky.app/profile/${did}/feed/${rkey}`],
+                'app.bsky.graph.list': ['List', `https://bsky.app/profile/${did}/lists/${rkey}`]
+            };
+            const k = kinds[collection];
+            return k ? { embed: { type: 'link', url: k[1], title: k[0], description: '' } } : null;
+        }
+
+        // -> { media: [...], embed?, quoteUri? }
+        function bskyEmbed(e, did, pds) {
+            if (!e) return { media: [] };
+            switch (e.$type) {
+                case 'app.bsky.embed.images':
+                    return {
+                        media: (e.images || []).map(img => ({
+                            type: 'image',
+                            url: ATP.blobUrl(pds, did, img.image),
+                            alt: img.alt || ''
+                        })).filter(m => m.url)
+                    };
+                case 'app.bsky.embed.video': {
+                    const url = ATP.blobUrl(pds, did, e.video);
+                    return { media: url ? [{ type: 'video', url, alt: e.alt || '' }] : [] };
+                }
+                case 'app.bsky.embed.external': {
+                    const ext = e.external || {};
+                    return {
+                        media: [],
+                        embed: {
+                            type: 'link',
+                            url: ext.uri,
+                            title: ext.title || '',
+                            description: ext.description || '',
+                            image: ATP.blobUrl(pds, did, ext.thumb)
+                        }
+                    };
+                }
+                case 'app.bsky.embed.record':
+                    return Object.assign({ media: [] }, bskyRecordLink(e.record && e.record.uri));
+                case 'app.bsky.embed.recordWithMedia': {
+                    const m = bskyEmbed(e.media, did, pds);
+                    const r = bskyRecordLink(e.record && e.record.record && e.record.record.uri) || {};
+                    return { media: m.media, embed: r.embed || m.embed, quoteUri: r.quoteUri };
+                }
+                default:
+                    return { media: [] };
+            }
+        }
+
+        async function bskyQuote(uri, budget) {
+            const { did, collection, rkey } = ATP.parseUri(uri);
+            const url = ATP.postUrl(did, rkey);
+            if (budget.quotes <= 0) return { type: 'quote', url };
+            budget.quotes--;
+            try {
+                const author = await ATP.author(did);
+                const rec = await ATP.getRecord(author.pds, did, collection, rkey);
+                const v = rec.value || {};
+                return {
+                    type: 'quote',
+                    url,
+                    authorName: author.name,
+                    authorHandle: author.handle,
+                    authorAvatar: author.avatar,
+                    html: bskyRichText(v.text, v.facets),
+                    media: bskyEmbed(v.embed, did, author.pds).media.filter(m => m.type === 'image').slice(0, 4),
+                    publishedAt: toIso(v.createdAt)
+                };
+            } catch (e) {
+                return { type: 'quote', url };
+            }
+        }
+
+        async function bskyToPost(rec, did, author, sourceId, budget) {
+            const v = rec.value || {};
+            const rkey = ATP.rkeyOf(rec.uri);
+            const parent = v.reply && v.reply.parent && v.reply.parent.uri;
+            const parsedParent = parent ? ATP.parseUri(parent) : null;
+            const em = bskyEmbed(v.embed, did, author.pds);
+            const embed = em.quoteUri ? await bskyQuote(em.quoteUri, budget) : (em.embed || null);
+            const created = toIso(v.createdAt);
+            return {
+                id: `bluesky:${rec.uri}`,
+                service: 'bluesky',
+                sourceId,
+                kind: parent ? 'reply' : 'post',
+                url: ATP.postUrl(did, rkey),
+                authorId: `bluesky:${did}`,
+                authorHandle: author.handle,
+                authorName: author.name,
+                authorAvatar: author.avatar,
+                authorUrl: ATP.profileUrl(did),
+                html: bskyRichText(v.text, v.facets),
+                contentWarning: bskyLabels(v.labels),
+                media: em.media,
+                embed,
+                replyTo: parsedParent && parsedParent.did ? ATP.postUrl(parsedParent.did, parsedParent.rkey) : null,
+                replyToAuthor: parsedParent && parsedParent.did ? `bluesky:${parsedParent.did}` : null,
+                publishedAt: created,
+                sortAt: clampToNow(created)
+            };
+        }
+
+        // ---- Mastodon helpers ----
+        function mastoAcct(acct, host) {
+            return acct && acct.includes('@') ? acct : `${acct}@${host}`;
+        }
+
+        function mastoEmojify(html, emojis) {
+            if (!html || !emojis || !emojis.length) return html || '';
+            const map = {};
+            emojis.forEach(e => { map[e.shortcode] = e.static_url || e.url; });
+            return html.replace(/:([a-zA-Z0-9_]+):/g, (m, code) => {
+                const url = safeUrl(map[code]);
+                return url ? `<img class="emoji" src="${escapeHtml(url)}" alt=":${code}:" title=":${code}:">` : m;
+            });
+        }
+
+        function mastoMedia(list) {
+            return (list || []).map(m => ({
+                type: m.type === 'gifv' ? 'gifv' : (m.type === 'video' ? 'video' : (m.type === 'audio' ? 'audio' : 'image')),
+                url: m.url || m.remote_url,
+                thumb: m.preview_url,
+                alt: m.description || ''
+            })).filter(m => m.url);
+        }
+
+        function mastoToPost(s, host, sourceId) {
+            const orig = s.reblog || s;
+            const a = orig.account || {};
+            const authorFull = mastoAcct(a.acct, host);
+            let replyToAuthor = null;
+            if (orig.in_reply_to_account_id) {
+                if (orig.in_reply_to_account_id === a.id) {
+                    replyToAuthor = s.reblog ? `mastodon:${authorFull.toLowerCase()}` : sourceId;
+                } else {
+                    const m = (orig.mentions || []).find(x => x.id === orig.in_reply_to_account_id);
+                    if (m) replyToAuthor = `mastodon:${mastoAcct(m.acct, host).toLowerCase()}`;
+                }
+            }
+
+            let embed = null;
+            const q = orig.quote && orig.quote.state === 'accepted' && orig.quote.quoted_status;
+            if (q) {
+                embed = {
+                    type: 'quote',
+                    url: q.url || q.uri,
+                    authorName: (q.account && (q.account.display_name || q.account.username)) || '',
+                    authorHandle: q.account ? mastoAcct(q.account.acct, host) : '',
+                    authorAvatar: q.account && q.account.avatar_static,
+                    html: mastoEmojify(q.content, q.emojis),
+                    media: mastoMedia(q.media_attachments).filter(m => m.type === 'image').slice(0, 4),
+                    publishedAt: toIso(q.created_at)
+                };
+            } else if (orig.card && orig.card.url) {
+                embed = {
+                    type: 'link',
+                    url: orig.card.url,
+                    title: orig.card.title || '',
+                    description: orig.card.description || '',
+                    image: orig.card.image
+                };
+            }
+
+            const media = mastoMedia(orig.media_attachments);
+            return {
+                id: `mastodon:${s.uri}`,
+                service: 'mastodon',
+                sourceId,
+                kind: s.reblog ? 'repost' : (orig.in_reply_to_id ? 'reply' : 'post'),
+                url: orig.url || orig.uri,
+                authorId: `mastodon:${authorFull.toLowerCase()}`,
+                authorHandle: authorFull,
+                authorName: a.display_name || a.username,
+                authorAvatar: a.avatar_static || a.avatar,
+                authorUrl: a.url,
+                html: mastoEmojify(orig.content, orig.emojis),
+                contentWarning: orig.spoiler_text || (orig.sensitive && media.length ? 'Sensitive media' : null),
+                media,
+                embed,
+                replyTo: null,
+                replyToAuthor,
+                publishedAt: toIso(orig.created_at),
+                sortAt: clampToNow(toIso(s.created_at))
+            };
+        }
+
+        function maxStatusId(ids) {
+            return ids.reduce((best, id) => {
+                if (!best) return id;
+                try { return BigInt(id) > BigInt(best) ? id : best; }
+                catch (e) { return id > best ? id : best; }
+            }, null);
+        }
+
+        function parseMastoInput(input) {
+            let s = input.trim();
+            const urlMatch = /^https?:\/\/([^/]+)\/@([^/@?#]+)/.exec(s);
+            if (urlMatch) return { user: urlMatch[2], host: urlMatch[1].toLowerCase() };
+            s = s.replace(/^@/, '');
+            const parts = s.split('@');
+            if (parts.length !== 2 || !parts[0] || !parts[1]) throw new Error('Use the form @you@your.instance');
+            return { user: parts[0], host: parts[1].toLowerCase() };
+        }
+
+        const Services = {
+            bluesky: {
+                id: 'bluesky',
+                label: 'Bluesky',
+                placeholder: 'you.bsky.social',
+
+                async resolveAccount(input) {
+                    const handle = input.trim()
+                        .replace(/^https?:\/\/bsky\.app\/profile\//, '')
+                        .replace(/^@/, '')
+                        .replace(/\/.*$/, '')
+                        .toLowerCase();
+                    if (!handle) throw new Error('Enter your Bluesky handle');
+                    const did = await ATP.resolveHandle(handle);
+                    const me = await ATP.author(did, true);
+                    return { handle: me.handle || handle, remoteId: did, config: { pds: me.pds } };
+                },
+
+                async fetchFollows(account) {
+                    const me = await ATP.resolveDid(account.remoteId, true);
+                    const seen = new Set();
+                    const out = [];
+                    let cursor;
+                    for (let page = 0; page < 200; page++) {
+                        const body = await ATP.listRecords(me.pds, account.remoteId, 'app.bsky.graph.follow', 100, cursor);
+                        const records = body.records || [];
+                        records.forEach(rec => {
+                            const did = rec.value && rec.value.subject;
+                            if (typeof did !== 'string' || !did.startsWith('did:') || seen.has(did)) return;
+                            seen.add(did);
+                            const c = ATP.cache.get(did) || {};
+                            out.push({
+                                id: `bluesky:${did}`,
+                                handle: c.handle || null,
+                                displayName: c.name || null,
+                                avatarUrl: c.avatar || null,
+                                profileUrl: ATP.profileUrl(did),
+                                endpoint: {}
+                            });
+                        });
+                        if (!body.cursor || !records.length) break;
+                        cursor = body.cursor;
+                    }
+                    return out;
+                },
+
+                mergeEndpoint(oldEp, newEp) {
+                    return Object.assign({}, newEp, oldEp);
+                },
+
+                pollHost(source) {
+                    const did = source.id.slice('bluesky:'.length);
+                    const c = ATP.cache.get(did);
+                    return c && c.pds ? hostOf(c.pds) : 'plc.directory';
+                },
+
+                async poll(source, ctx) {
+                    const did = source.id.slice('bluesky:'.length);
+                    const me = await ATP.author(did, source.errorCount > 0);
+                    const cur = (source.cursor && typeof source.cursor === 'object') ? source.cursor : {};
+                    const budget = { quotes: 8 };
+
+                    const [postRecs, repostRecs] = await Promise.all([
+                        ATP.listNew(me.pds, did, 'app.bsky.feed.post', cur.post, 25),
+                        ATP.listNew(me.pds, did, 'app.bsky.feed.repost', cur.repost, 15)
+                    ]);
+
+                    const posts = await Promise.all(postRecs
+                        .filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff)
+                        .map(r => bskyToPost(r, did, me, source.id, budget)));
+
+                    // Each repost costs a lookup of the original, so take a
+                    // bounded batch, oldest first, and resume from there next time.
+                    const eligible = repostRecs.filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff);
+                    const wanted = eligible.slice().reverse().slice(0, 12);
+                    const reposts = await Promise.all(wanted.map(async r => {
+                        const subject = ATP.parseUri(r.value && r.value.subject && r.value.subject.uri);
+                        if (subject.collection !== 'app.bsky.feed.post') return null;
+                        try {
+                            const author = await ATP.author(subject.did);
+                            const orig = await ATP.getRecord(author.pds, subject.did, subject.collection, subject.rkey);
+                            const p = await bskyToPost(orig, subject.did, author, source.id, budget);
+                            return Object.assign(p, {
+                                id: `bluesky:${r.uri}`,
+                                kind: 'repost',
+                                sortAt: clampToNow(toIso(r.value.createdAt))
+                            });
+                        } catch (e) {
+                            return null; // the original was deleted or unreachable
+                        }
+                    }));
+
+                    const newestPost = postRecs.length ? ATP.rkeyOf(postRecs[0].uri) : cur.post;
+                    let repostCursor = repostRecs.length ? ATP.rkeyOf(repostRecs[0].uri) : cur.repost;
+                    if (eligible.length > wanted.length) repostCursor = ATP.rkeyOf(wanted[wanted.length - 1].uri);
+
+                    return {
+                        posts: posts.concat(reposts.filter(Boolean)),
+                        cursor: { post: newestPost || null, repost: repostCursor || null },
+                        endpoint: { pds: me.pds, at: me.at, profileAt: me.profileAt },
+                        profile: { handle: me.handle, displayName: me.name, avatarUrl: me.avatar }
+                    };
+                }
+            },
+
+            mastodon: {
+                id: 'mastodon',
+                label: 'Mastodon',
+                placeholder: '@you@mastodon.social',
+
+                async resolveAccount(input) {
+                    const { user, host } = parseMastoInput(input);
+                    const acct = await Net.json(`https://${host}/api/v1/accounts/lookup?acct=${encodeURIComponent(user)}`);
+                    const handle = `${acct.username}@${host}`;
+                    return { handle, remoteId: handle.toLowerCase(), config: { host, accountId: acct.id } };
+                },
+
+                async fetchFollows(account) {
+                    const { host, accountId } = account.config;
+                    const out = [];
+                    let url = `https://${host}/api/v1/accounts/${encodeURIComponent(accountId)}/following?limit=80`;
+                    for (let page = 0; url && page < 200; page++) {
+                        const res = await Net.response(url);
+                        const list = await res.json();
+                        list.forEach(a => {
+                            const full = mastoAcct(a.acct, host);
+                            const profileHost = hostOf(a.url) || host;
+                            const endpoint = { host: profileHost, username: a.username, homeHost: host, homeId: a.id };
+                            if (profileHost === host) endpoint.remoteId = a.id;
+                            out.push({
+                                id: `mastodon:${full.toLowerCase()}`,
+                                handle: full,
+                                displayName: a.display_name || a.username,
+                                avatarUrl: a.avatar_static || a.avatar,
+                                profileUrl: a.url,
+                                endpoint
+                            });
+                        });
+                        const link = res.headers.get('Link') || '';
+                        const next = /<([^>]+)>;\s*rel="next"/.exec(link);
+                        url = next && list.length ? next[1] : null;
+                    }
+                    return out;
+                },
+
+                // Keep the remote lookup if the person is still on the same server.
+                mergeEndpoint(oldEp, newEp) {
+                    if (oldEp && oldEp.host === newEp.host) {
+                        return Object.assign({}, newEp, {
+                            remoteId: oldEp.remoteId || newEp.remoteId,
+                            mode: oldEp.mode,
+                            modeAt: oldEp.modeAt
+                        });
+                    }
+                    return newEp;
+                },
+
+                pollHost(source) {
+                    const ep = source.endpoint || {};
+                    return ep.mode === 'home' ? ep.homeHost : ep.host;
+                },
+
+                // Reads from the person's own server. If it doesn't speak the
+                // Mastodon API (or blocks anonymous reads), falls back to your
+                // home server's copy and retries direct reads weekly.
+                async poll(source, ctx) {
+                    const ep = Object.assign({}, source.endpoint);
+                    const cur = (source.cursor && typeof source.cursor === 'object') ? source.cursor : {};
+                    if (ep.mode === 'home' && Date.now() - (ep.modeAt || 0) > 7 * DAY) {
+                        delete ep.mode;
+                        delete ep.modeAt;
+                    }
+
+                    const fetchStatuses = (host, id) => {
+                        const since = cur.host === host ? cur.id : null;
+                        let url = `https://${host}/api/v1/accounts/${encodeURIComponent(id)}/statuses?limit=${since ? 40 : 20}`;
+                        if (since) url += `&since_id=${encodeURIComponent(since)}`;
+                        return Net.json(url);
+                    };
+
+                    let statuses = null;
+                    let base = null;
+                    let lookedUp = null;
+                    if (ep.mode !== 'home' && ep.host) {
+                        try {
+                            if (!ep.remoteId) {
+                                lookedUp = await Net.json(`https://${ep.host}/api/v1/accounts/lookup?acct=${encodeURIComponent(ep.username)}`);
+                                ep.remoteId = lookedUp.id;
+                            }
+                            statuses = await fetchStatuses(ep.host, ep.remoteId);
+                            base = ep.host;
+                            delete ep.directFails;
+                        } catch (e) {
+                            if (e.status === 429 || !ep.homeHost || ep.homeHost === ep.host) throw e;
+                            // A clear refusal switches to the home copy right away. A
+                            // network/CORS failure (often a rate limit we can't read)
+                            // only does after a few in a row.
+                            ep.directFails = (ep.directFails || 0) + 1;
+                            ep.directError = e.message;
+                            if ((e.status >= 400 && e.status < 500) || ep.directFails >= 3) {
+                                ep.mode = 'home';
+                                ep.modeAt = Date.now();
+                            }
+                        }
+                    }
+                    if (!statuses) {
+                        if (!ep.homeHost) throw new Error('No server to read from');
+                        base = ep.homeHost;
+                        statuses = await fetchStatuses(ep.homeHost, ep.homeId);
+                    }
+                    if (!Array.isArray(statuses)) throw new Error('Unexpected response');
+
+                    const own = statuses.find(s => !s.reblog);
+                    const acct = lookedUp || (own && own.account);
+                    const newest = maxStatusId(statuses.map(s => s.id));
+                    return {
+                        posts: statuses.map(s => mastoToPost(s, base, source.id)).filter(p => p.sortAt >= ctx.cutoff),
+                        cursor: newest ? { host: base, id: newest } : (cur.host === base ? cur : null),
+                        endpoint: ep,
+                        profile: acct ? {
+                            displayName: acct.display_name || acct.username,
+                            avatarUrl: acct.avatar_static || acct.avatar,
+                            profileUrl: acct.url
+                        } : null
+                    };
+                }
+            }
+        };
+
+        // ============ Store (ayb) ============
+        const SOURCE_COLUMNS = ['id', 'service', 'handle', 'display_name', 'avatar_url', 'profile_url', 'endpoint',
+            'cursor', 'last_polled_at', 'next_poll_at', 'last_post_at', 'error', 'error_count'];
+        const POST_COLUMNS = ['id', 'service', 'source_id', 'kind', 'url', 'author_id', 'author_handle', 'author_name',
+            'author_avatar', 'author_url', 'html', 'content_warning', 'media', 'embed', 'reply_to', 'reply_to_author',
+            'published_at', 'sort_at'];
+        const FEED_SELECT = `SELECT p.id, p.service, p.source_id, p.kind, p.url, p.author_id, p.author_handle,
+            p.author_name, p.author_avatar, p.author_url, p.html, p.content_warning, p.media, p.embed,
+            p.reply_to, p.reply_to_author, p.published_at, p.sort_at FROM posts p`;
+
+        function rowToSource(row) {
+            return {
+                id: row[0],
+                service: row[1],
+                handle: row[2],
+                displayName: row[3],
+                avatarUrl: row[4],
+                profileUrl: row[5],
+                endpoint: parseJson(row[6], {}),
+                cursor: parseJson(row[7], null),
+                lastPolledAt: row[8],
+                nextPollAt: Number(row[9]) || 0,
+                lastPostAt: row[10],
+                error: row[11],
+                errorCount: Number(row[12]) || 0
+            };
+        }
+
+        function rowToPost(row) {
+            return {
+                id: row[0],
+                service: row[1],
+                sourceId: row[2],
+                kind: row[3],
+                url: row[4],
+                authorId: row[5],
+                authorHandle: row[6],
+                authorName: row[7],
+                authorAvatar: row[8],
+                authorUrl: row[9],
+                html: row[10],
+                contentWarning: row[11],
+                media: parseJson(row[12], []),
+                embed: parseJson(row[13], null),
+                replyTo: row[14],
+                replyToAuthor: row[15],
+                publishedAt: row[16],
+                sortAt: row[17]
+            };
+        }
+
+        const Store = {
+            async loadAccounts() {
+                const result = await ayb.query(
+                    `SELECT id, service, handle, remote_id, config, follows_count, follows_synced_at FROM accounts ORDER BY id`
+                );
+                return (result.rows || []).map(row => ({
+                    id: Number(row[0]),
+                    service: row[1],
+                    handle: row[2],
+                    remoteId: row[3],
+                    config: parseJson(row[4], {}),
+                    followsCount: Number(row[5]) || 0,
+                    followsSyncedAt: row[6]
+                }));
+            },
+
+            async loadSources() {
+                const result = await ayb.query(`SELECT ${SOURCE_COLUMNS.join(', ')} FROM sources`);
+                return (result.rows || []).map(rowToSource);
+            },
+
+            async loadFollows() {
+                const result = await ayb.query(`SELECT account_id, source_id FROM follows`);
+                return (result.rows || []).map(row => ({ accountId: Number(row[0]), sourceId: row[1] }));
+            },
+
+            async createAccount(service, resolved) {
+                await ayb.query(
+                    `INSERT INTO accounts (service, handle, remote_id, config)
+                     VALUES (${sqlVal(service)}, ${sqlVal(resolved.handle)}, ${sqlVal(resolved.remoteId)}, ${sqlVal(resolved.config)})`
+                );
+                const result = await ayb.query(
+                    `SELECT id FROM accounts WHERE service = ${sqlVal(service)} AND remote_id = ${sqlVal(resolved.remoteId)}`
+                );
+                return Number(result.rows[0][0]);
+            },
+
+            async updateAccountSync(account) {
+                await ayb.query(
+                    `UPDATE accounts SET handle = ${sqlVal(account.handle)}, config = ${sqlVal(account.config)},
+                     follows_count = ${account.followsCount}, follows_synced_at = ${sqlVal(account.followsSyncedAt)}
+                     WHERE id = ${account.id}`
+                );
+            },
+
+            // Unfollowed sources and their posts go with the account.
+            async deleteAccount(id) {
+                await ayb.query(`DELETE FROM follows WHERE account_id = ${id}`);
+                await Promise.all([
+                    ayb.query(`DELETE FROM accounts WHERE id = ${id}`),
+                    ayb.query(`DELETE FROM posts WHERE source_id NOT IN (SELECT source_id FROM follows)`),
+                    ayb.query(`DELETE FROM sources WHERE id NOT IN (SELECT source_id FROM follows)`)
+                ]);
+            },
+
+            // Rewrites an account's follow list. Chunks fire concurrently.
+            async replaceFollows(accountId, sourceIds) {
+                await ayb.query(`DELETE FROM follows WHERE account_id = ${accountId}`);
+                await Promise.all(chunk(sourceIds, 200).map(ids => ayb.query(
+                    `INSERT OR IGNORE INTO follows (account_id, source_id) VALUES
+                     ${ids.map(id => `(${accountId}, ${sqlVal(id)})`).join(', ')}`
+                )));
+                await ayb.query(`DELETE FROM posts WHERE source_id NOT IN (SELECT source_id FROM follows)`);
+            },
+
+            async upsertSources(sources) {
+                if (!sources.length) return;
+                const updates = SOURCE_COLUMNS.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
+                await Promise.all(chunk(sources, 50).map(list => ayb.query(
+                    `INSERT INTO sources (${SOURCE_COLUMNS.join(', ')}) VALUES
+                     ${list.map(s => `(${[s.id, s.service, s.handle, s.displayName, s.avatarUrl, s.profileUrl,
+                        s.endpoint || {}, s.cursor, s.lastPolledAt, s.nextPollAt || 0, s.lastPostAt, s.error,
+                        s.errorCount || 0].map(sqlVal).join(', ')})`).join(', ')}
+                     ON CONFLICT(id) DO UPDATE SET ${updates}`
+                )));
+            },
+
+            async insertPosts(posts) {
+                if (!posts.length) return;
+                await Promise.all(chunk(posts, 25).map(list => ayb.query(
+                    `INSERT OR IGNORE INTO posts (${POST_COLUMNS.join(', ')}) VALUES
+                     ${list.map(p => `(${[p.id, p.service, p.sourceId, p.kind, p.url, p.authorId, p.authorHandle,
+                        p.authorName, p.authorAvatar, p.authorUrl, p.html, p.contentWarning,
+                        p.media && p.media.length ? p.media : null, p.embed, p.replyTo, p.replyToAuthor,
+                        p.publishedAt, p.sortAt].map(sqlVal).join(', ')})`).join(', ')}`
+                )));
+            },
+
+            async prunePosts(retentionDays) {
+                const cutoff = new Date(Date.now() - retentionDays * DAY).toISOString();
+                await ayb.query(`DELETE FROM posts WHERE sort_at < ${sqlVal(cutoff)}`);
+            },
+
+            feedWhere(filter, settings) {
+                const follows = filter.accountId
+                    ? `SELECT source_id FROM follows WHERE account_id = ${Number(filter.accountId)}`
+                    : `SELECT source_id FROM follows`;
+                const where = [`p.source_id IN (${follows})`];
+                if (!settings.showReposts) where.push(`p.kind != 'repost'`);
+                if (settings.replies === 'none') {
+                    where.push(`(p.kind != 'reply' OR p.reply_to_author = p.source_id)`);
+                } else if (settings.replies === 'following') {
+                    where.push(`(p.kind != 'reply' OR p.reply_to_author = p.source_id
+                        OR p.reply_to_author IN (SELECT source_id FROM follows))`);
+                }
+                return where;
+            },
+
+            async feedPage(filter, settings, before) {
+                const where = Store.feedWhere(filter, settings);
+                if (before) {
+                    where.push(`(p.sort_at < ${sqlVal(before.sortAt)} OR (p.sort_at = ${sqlVal(before.sortAt)} AND p.id < ${sqlVal(before.id)}))`);
+                }
+                const result = await ayb.query(
+                    `${FEED_SELECT} WHERE ${where.join(' AND ')} ORDER BY p.sort_at DESC, p.id DESC LIMIT ${FEED_PAGE}`
+                );
+                return (result.rows || []).map(rowToPost);
+            },
+
+            async countNewer(filter, settings, top) {
+                const where = Store.feedWhere(filter, settings);
+                where.push(`p.sort_at > ${sqlVal(top)}`);
+                const result = await ayb.query(`SELECT COUNT(*) FROM posts p WHERE ${where.join(' AND ')}`);
+                return Number(result.rows && result.rows[0] && result.rows[0][0]) || 0;
+            }
+        };
+
+        // ============ Poller ============
+        // While the app is open, repeatedly picks the most overdue followed
+        // people and reads their latest posts, a few at a time. Results are
+        // buffered and written to ayb in batches.
+        const Poller = {
+            timer: null,
+            active: 0,
+            maxActive: 6,
+            inflight: new Set(),
+            pendingPosts: [],
+            dirtySources: new Set(),
+            flushTimer: null,
+            flushing: false,
+
+            start() {
+                if (Poller.timer) return;
+                Poller.timer = setInterval(Poller.pump, 1000);
+                Poller.pump();
+            },
+
+            stop() {
+                clearInterval(Poller.timer);
+                Poller.timer = null;
+            },
+
+            interval(source) {
+                const base = App.settings.pollMinutes * MINUTE;
+                const age = source.lastPostAt ? Date.now() - new Date(source.lastPostAt).getTime() : Infinity;
+                const mult = age < DAY ? 1 : age < 7 * DAY ? 2 : age < 30 * DAY ? 4 : 8;
+                return Math.min(base * mult, 6 * HOUR) * (0.9 + Math.random() * 0.2);
+            },
+
+            pump() {
+                if (!ayb) return;
+                const now = Date.now();
+                const due = [];
+                App.followed.forEach(id => {
+                    const s = App.sources.get(id);
+                    if (s && !Poller.inflight.has(id) && s.nextPollAt <= now) due.push(s);
+                });
+                due.sort((a, b) => a.nextPollAt - b.nextPollAt);
+                for (const s of due) {
+                    if (Poller.active >= Poller.maxActive) break;
+                    const adapter = Services[s.service];
+                    if (!adapter) continue;
+                    const host = adapter.pollHost(s);
+                    if (host && Net.isBusy(host)) continue;
+                    Poller.pollSource(s, adapter);
+                }
+                App.renderStatus();
+            },
+
+            async pollSource(source, adapter) {
+                Poller.inflight.add(source.id);
+                Poller.active++;
+                const ctx = { cutoff: new Date(Date.now() - App.settings.retentionDays * DAY).toISOString() };
+                try {
+                    const res = await adapter.poll(source, ctx);
+                    if (res.endpoint) source.endpoint = res.endpoint;
+                    if (res.cursor !== undefined) source.cursor = res.cursor;
+                    if (res.profile) {
+                        if (res.profile.handle) source.handle = res.profile.handle;
+                        if (res.profile.displayName !== undefined) source.displayName = res.profile.displayName;
+                        if (res.profile.avatarUrl !== undefined) source.avatarUrl = res.profile.avatarUrl;
+                        if (res.profile.profileUrl) source.profileUrl = res.profile.profileUrl;
+                    }
+                    res.posts.forEach(p => {
+                        if (p.kind !== 'repost' && (!source.lastPostAt || p.sortAt > source.lastPostAt)) source.lastPostAt = p.sortAt;
+                    });
+                    source.error = null;
+                    source.errorCount = 0;
+                    source.nextPollAt = Date.now() + Poller.interval(source);
+                    Poller.pendingPosts.push(...res.posts);
+                } catch (e) {
+                    const host = adapter.pollHost(source);
+                    if (e.status === 429 && host) {
+                        // The server's budget, not this person's fault.
+                        source.nextPollAt = Math.max(Net.blockedUntil(host), Date.now() + MINUTE) + Math.random() * MINUTE;
+                    } else {
+                        source.errorCount = (source.errorCount || 0) + 1;
+                        source.error = e.message || String(e);
+                        source.nextPollAt = Date.now() + Math.min(App.settings.pollMinutes * MINUTE * Math.pow(2, source.errorCount), DAY);
+                    }
+                } finally {
+                    source.lastPolledAt = new Date().toISOString();
+                    Poller.inflight.delete(source.id);
+                    Poller.active--;
+                    Poller.dirtySources.add(source.id);
+                    Poller.scheduleFlush();
+                }
+            },
+
+            scheduleFlush() {
+                if (Poller.flushTimer) return;
+                Poller.flushTimer = setTimeout(Poller.flush, 3000);
+            },
+
+            async flush() {
+                Poller.flushTimer = null;
+                if (Poller.flushing) { Poller.scheduleFlush(); return; }
+                const posts = Poller.pendingPosts.splice(0);
+                const sources = Array.from(Poller.dirtySources).map(id => App.sources.get(id)).filter(Boolean);
+                Poller.dirtySources.clear();
+                if (!posts.length && !sources.length) return;
+                Poller.flushing = true;
+                try {
+                    await Promise.all([Store.insertPosts(posts), Store.upsertSources(sources)]);
+                    if (posts.length) await App.onNewPosts();
+                } catch (e) {
+                    console.error('Flush failed:', e);
+                    App.toast('Saving to your database failed; will retry');
+                    Poller.pendingPosts.unshift(...posts);
+                    sources.forEach(s => Poller.dirtySources.add(s.id));
+                    Poller.scheduleFlush();
+                } finally {
+                    Poller.flushing = false;
+                }
+            }
+        };
+
+        // ============ Settings ============
+        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, retentionDays: 30 };
+
+        function getSettings() {
+            const saved = parseJson(localStorage.getItem(`${APP_NAME}_settings`), {});
+            return Object.assign({}, DEFAULT_SETTINGS, saved);
+        }
+
+        function saveSettings(s) {
+            localStorage.setItem(`${APP_NAME}_settings`, JSON.stringify(s));
+        }
+
+        // ============ Rendering ============
+        const ICONS = {
+            repost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>',
+            reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>'
+        };
+
+        function avatarHtml(url, name, href, cls) {
+            const initial = escapeHtml(((name || '?').trim()[0] || '?').toUpperCase());
+            const src = safeUrl(url);
+            const img = src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy">` : '';
+            const tag = href ? `a href="${escapeHtml(safeUrl(href))}" target="_blank" rel="noopener noreferrer"` : 'span';
+            return `<${tag} class="avatar ${cls || ''}">${initial}${img}</${href ? 'a' : 'span'}>`;
+        }
+
+        function mediaHtml(media) {
+            if (!media || !media.length) return '';
+            const items = media.slice(0, 4).map(m => {
+                const url = escapeHtml(safeUrl(m.url));
+                const alt = escapeHtml(m.alt);
+                if (!url) return '';
+                if (m.type === 'video') {
+                    const poster = safeUrl(m.thumb) ? ` poster="${escapeHtml(safeUrl(m.thumb))}"` : '';
+                    return `<video src="${url}"${poster} controls preload="none" playsinline aria-label="${alt}"></video>`;
+                }
+                if (m.type === 'gifv') return `<video src="${url}" autoplay loop muted playsinline aria-label="${alt}"></video>`;
+                if (m.type === 'audio') return `<audio src="${url}" controls preload="none"></audio>`;
+                const thumb = escapeHtml(safeUrl(m.thumb) || safeUrl(m.url));
+                return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img src="${thumb}" alt="${alt}" title="${alt}" loading="lazy"></a>`;
+            }).join('');
+            const n = Math.min(media.length, 4);
+            return `<div class="post-media n${n}">${items}</div>`;
+        }
+
+        function embedHtml(embed) {
+            if (!embed) return '';
+            if (embed.type === 'link') {
+                const url = safeUrl(embed.url);
+                if (!url) return '';
+                const img = safeUrl(embed.image) ? `<img src="${escapeHtml(safeUrl(embed.image))}" alt="" loading="lazy">` : '';
+                return `<a class="link-card" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+                    ${img}
+                    <div class="link-card-body">
+                        <div class="link-card-host">${escapeHtml(hostOf(url))}</div>
+                        <div class="link-card-title">${escapeHtml(embed.title || url)}</div>
+                        ${embed.description ? `<div class="link-card-desc">${escapeHtml(embed.description)}</div>` : ''}
+                    </div>
+                </a>`;
+            }
+            if (embed.type === 'quote') {
+                const url = escapeHtml(safeUrl(embed.url));
+                if (!embed.html && !embed.authorHandle) {
+                    return `<a class="quote" href="${url}" target="_blank" rel="noopener noreferrer"><span class="quote-missing">Quoted post →</span></a>`;
+                }
+                // A div, not a link: the quoted content has links of its own.
+                return `<div class="quote">
+                    <div class="post-head">
+                        ${avatarHtml(embed.authorAvatar, embed.authorName || embed.authorHandle, null, 'small')}
+                        <span class="post-author">${escapeHtml(embed.authorName || embed.authorHandle)}</span>
+                        <span class="post-handle">@${escapeHtml(embed.authorHandle)}</span>
+                        <a class="post-time" href="${url}" target="_blank" rel="noopener noreferrer" data-time="${escapeHtml(embed.publishedAt)}">${relativeTime(embed.publishedAt)}</a>
+                    </div>
+                    <div class="post-content">${sanitizeHtml(embed.html)}</div>
+                    ${mediaHtml(embed.media)}
+                </div>`;
+            }
+            return '';
+        }
+
+        function contextHtml(post) {
+            const source = App.sources.get(post.sourceId);
+            const who = source ? (source.displayName || source.handle || post.sourceId) : 'Someone you follow';
+            if (post.kind === 'repost') {
+                return `<div class="post-context">${ICONS.repost}<span>${escapeHtml(who)} reposted</span></div>`;
+            }
+            if (post.kind === 'reply') {
+                if (post.replyToAuthor && post.replyToAuthor === post.sourceId) {
+                    return `<div class="post-context">${ICONS.reply}<span>Continued thread</span></div>`;
+                }
+                const target = post.replyToAuthor && App.sources.get(post.replyToAuthor);
+                const label = target ? `Replying to ${target.displayName || target.handle}` : 'Reply';
+                const link = safeUrl(post.replyTo);
+                const inner = link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${escapeHtml(label)}</a>` : escapeHtml(label);
+                return `<div class="post-context">${ICONS.reply}<span>${inner}</span></div>`;
+            }
+            return '';
+        }
+
+        function postHtml(post) {
+            const svc = Services[post.service];
+            const name = post.authorName || post.authorHandle || 'Unknown';
+            const content = sanitizeHtml(post.html);
+            const body = `${content ? `<div class="post-content">${content}</div>` : ''}${mediaHtml(post.media)}${embedHtml(post.embed)}`;
+            const wrapped = post.contentWarning
+                ? `<details class="cw"><summary>⚠ ${escapeHtml(post.contentWarning)}</summary>${body}</details>`
+                : body;
+            return `<article class="post" data-id="${escapeHtml(post.id)}">
+                ${contextHtml(post)}
+                <div class="post-row">
+                    ${avatarHtml(post.authorAvatar, name, post.authorUrl)}
+                    <div class="post-body">
+                        <div class="post-head">
+                            <a class="post-author" href="${escapeHtml(safeUrl(post.authorUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(name)}</a>
+                            <span class="post-handle">${post.authorHandle ? `@${escapeHtml(post.authorHandle)}` : ''}</span>
+                            <span class="svc-dot ${escapeHtml(post.service)}" title="${escapeHtml(svc ? svc.label : post.service)}"></span>
+                            <a class="post-time" href="${escapeHtml(safeUrl(post.url))}" target="_blank" rel="noopener noreferrer" data-time="${escapeHtml(post.sortAt)}" title="${escapeHtml(new Date(post.publishedAt).toLocaleString())}">${relativeTime(post.sortAt)}</a>
+                        </div>
+                        ${wrapped}
+                    </div>
+                </div>
+            </article>`;
+        }
+
+        // ============ App ============
+        const App = {
+            settings: null,
+            accounts: [],
+            sources: new Map(),
+            followed: new Set(),
+            follows: [],
+            feed: { posts: [], loading: false, done: false, top: null },
+            filter: { accountId: null },
+            syncing: new Set(),
+            pendingConfirm: null,
+            addService: 'bluesky',
+            lastAutoRefresh: 0,
+
+            // ---------- Screens ----------
+            showScreen(screenId) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById(screenId).classList.add('active');
+                window.scrollTo(0, 0);
+            },
+
+            showModal(id) { document.getElementById(id).classList.add('active'); },
+            hideModal(id) { document.getElementById(id).classList.remove('active'); },
+
+            // ---------- Auth / boot ----------
+            async init() {
+                App.settings = getSettings();
+                App.filter.accountId = parseInt(localStorage.getItem(`${APP_NAME}_filter_account`), 10) || null;
+                ATP.loadCache();
+
+                if ('serviceWorker' in navigator) {
+                    try { await navigator.serviceWorker.register('sw.js'); }
+                    catch (e) { console.log('Service worker registration failed:', e); }
+                }
+
+                try {
+                    ayb = await restoreOAuth({
+                        appName: 'Socialite',
+                        queryPermissionLevel: 'read-write',
+                    });
+                } catch (e) {
+                    console.error('OAuth restore error:', e);
+                }
+
+                if (ayb && ayb.isConnected()) {
+                    const lastHash = localStorage.getItem(`${APP_NAME}_last_hash`);
+                    if (lastHash && !window.location.hash) history.replaceState(null, '', lastHash);
+                    await App.tryConnect();
+                } else {
+                    App.showScreen('setup-screen');
+                }
+            },
+
+            async tryConnect() {
+                try {
+                    await runMigrations(ayb, 'socialite', socialiteMigrations);
+                    await App.loadState();
+                    Store.prunePosts(App.settings.retentionDays).catch(e => console.error('Prune failed:', e));
+                    await App.handleRoute();
+                    Poller.start();
+                    App.resyncStaleAccounts();
+                } catch (e) {
+                    console.error('Connection error:', e);
+                    App.showError(e.message);
+                }
+            },
+
+            showError(message) {
+                document.getElementById('error-message').textContent = message;
+                App.showScreen('error-screen');
+            },
+
+            async loadState() {
+                const [accounts, sources, follows] = await Promise.all([
+                    Store.loadAccounts(), Store.loadSources(), Store.loadFollows()
+                ]);
+                App.accounts = accounts;
+                App.sources = new Map(sources.map(s => [s.id, s]));
+                App.follows = follows;
+                App.followed = new Set(follows.map(f => f.sourceId));
+                if (App.filter.accountId && !accounts.some(a => a.id === App.filter.accountId)) App.filter.accountId = null;
+
+                // Followed Bluesky people seed the identity cache.
+                sources.forEach(s => {
+                    if (s.service !== 'bluesky' || !s.endpoint || !s.endpoint.pds) return;
+                    ATP.cache.set(s.id.slice('bluesky:'.length), {
+                        pds: s.endpoint.pds,
+                        handle: s.handle,
+                        name: s.displayName,
+                        avatar: s.avatarUrl,
+                        at: s.endpoint.at || 0,
+                        profileAt: s.endpoint.profileAt || 0
+                    });
+                });
+            },
+
+            // ---------- Routing ----------
+            async handleRoute() {
+                const hash = window.location.hash;
+                if (hash !== localStorage.getItem(`${APP_NAME}_last_hash`)) localStorage.setItem(`${APP_NAME}_last_hash`, hash);
+
+                if (hash === '#accounts') {
+                    App.showScreen('accounts-screen');
+                    App.renderAccounts();
+                } else if (hash === '#sources') {
+                    App.showScreen('sources-screen');
+                    App.renderSources();
+                } else {
+                    App.showScreen('feed-screen');
+                    App.renderChips();
+                    await App.reloadFeed();
+                }
+            },
+
+            navigate(hash) {
+                if (window.location.hash === hash) App.handleRoute();
+                else window.location.hash = hash;
+            },
+
+            // ---------- Accounts ----------
+            async addAccount(service, input) {
+                const adapter = Services[service];
+                const resolved = await adapter.resolveAccount(input);
+                if (App.accounts.some(a => a.service === service && a.remoteId === resolved.remoteId)) {
+                    throw new Error(`${resolved.handle} is already added`);
+                }
+                const id = await Store.createAccount(service, resolved);
+                const account = Object.assign({ id, service, followsCount: 0, followsSyncedAt: null }, resolved);
+                App.accounts.push(account);
+                App.renderAccounts();
+                await App.syncAccount(account);
+            },
+
+            async syncAccount(account) {
+                if (App.syncing.has(account.id)) return;
+                App.syncing.add(account.id);
+                App.renderAccounts();
+                try {
+                    const adapter = Services[account.service];
+                    const list = await adapter.fetchFollows(account);
+                    const changed = [];
+                    list.forEach(d => {
+                        const existing = App.sources.get(d.id);
+                        if (existing) {
+                            existing.handle = d.handle || existing.handle;
+                            existing.displayName = d.displayName || existing.displayName;
+                            existing.avatarUrl = d.avatarUrl || existing.avatarUrl;
+                            existing.profileUrl = d.profileUrl || existing.profileUrl;
+                            existing.endpoint = adapter.mergeEndpoint(existing.endpoint, d.endpoint);
+                            changed.push(existing);
+                        } else {
+                            const s = {
+                                id: d.id,
+                                service: account.service,
+                                handle: d.handle,
+                                displayName: d.displayName,
+                                avatarUrl: d.avatarUrl,
+                                profileUrl: d.profileUrl,
+                                endpoint: d.endpoint || {},
+                                cursor: null,
+                                lastPolledAt: null,
+                                nextPollAt: 0,
+                                lastPostAt: null,
+                                error: null,
+                                errorCount: 0
+                            };
+                            App.sources.set(s.id, s);
+                            changed.push(s);
+                        }
+                    });
+                    await Store.upsertSources(changed);
+                    const ids = list.map(d => d.id);
+                    await Store.replaceFollows(account.id, ids);
+
+                    account.followsCount = ids.length;
+                    account.followsSyncedAt = new Date().toISOString();
+                    await Store.updateAccountSync(account);
+
+                    App.follows = App.follows.filter(f => f.accountId !== account.id)
+                        .concat(ids.map(sourceId => ({ accountId: account.id, sourceId })));
+                    App.followed = new Set(App.follows.map(f => f.sourceId));
+                    if (!ids.length) App.toast(`No public follows found for ${account.handle}`);
+                    Poller.pump();
+                } catch (e) {
+                    console.error('Follow sync failed:', e);
+                    App.toast(`Couldn't read follows for ${account.handle}: ${e.message}`);
+                } finally {
+                    App.syncing.delete(account.id);
+                    App.renderAccounts();
+                    App.renderChips();
+                    App.renderStatus();
+                }
+            },
+
+            resyncStaleAccounts() {
+                const stale = App.accounts.filter(a =>
+                    !a.followsSyncedAt || Date.now() - new Date(a.followsSyncedAt).getTime() > FOLLOW_RESYNC_MS);
+                Promise.all(stale.map(a => App.syncAccount(a)));
+            },
+
+            removeAccount(account) {
+                App.confirm(
+                    'Remove account?',
+                    `Socialite will stop following people through ${account.handle}. Posts from people only it follows are removed.`,
+                    async () => {
+                        await Store.deleteAccount(account.id);
+                        if (App.filter.accountId === account.id) App.setFilter(null);
+                        await App.loadState();
+                        App.renderAccounts();
+                    }
+                );
+            },
+
+            renderAccounts() {
+                const picker = document.getElementById('service-picker');
+                picker.innerHTML = Object.values(Services).map(s =>
+                    `<button type="button" data-service="${s.id}" class="${s.id === App.addService ? 'active' : ''}">
+                        <span class="svc-dot ${s.id}"></span>${escapeHtml(s.label)}
+                    </button>`).join('');
+                document.getElementById('account-handle').placeholder = Services[App.addService].placeholder;
+
+                const container = document.getElementById('account-list');
+                if (!App.accounts.length) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="padding:24px 20px 8px;">
+                            <div class="empty-state-title">No accounts yet</div>
+                            <div class="empty-state-text" style="margin-bottom:0;">Add the accounts whose follows you want in your timeline. You can mix services.</div>
+                        </div>`;
+                    return;
+                }
+                container.innerHTML = App.accounts.map(a => {
+                    const svc = Services[a.service];
+                    const syncing = App.syncing.has(a.id);
+                    const meta = syncing ? 'Reading follow list…'
+                        : `${pluralize(a.followsCount, 'follow')} · ${a.followsSyncedAt ? `synced ${relativeTime(a.followsSyncedAt)} ago`.replace('now ago', 'just now') : 'not synced'}`;
+                    return `<div class="item-card" data-id="${a.id}">
+                        <div class="item-main">
+                            <div class="item-title"><span class="svc-dot ${escapeHtml(a.service)}" title="${escapeHtml(svc ? svc.label : a.service)}"></span>@${escapeHtml(a.handle)}</div>
+                            <div class="item-meta">${escapeHtml(meta)}</div>
+                        </div>
+                        <div class="item-actions">
+                            <button class="btn btn-secondary btn-small" data-action="sync" ${syncing ? 'disabled' : ''}>Resync</button>
+                            <button class="btn btn-secondary btn-small" data-action="remove">Remove</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            },
+
+            // ---------- Sources ----------
+            renderSources() {
+                const q = document.getElementById('sources-search').value.trim().toLowerCase();
+                const all = Array.from(App.followed).map(id => App.sources.get(id)).filter(Boolean);
+                const errors = all.filter(s => s.errorCount > 0).length;
+                const viaHome = all.filter(s => s.endpoint && s.endpoint.mode === 'home').length;
+                document.getElementById('sources-summary').textContent =
+                    `${pluralize(all.length, 'person')} · ${errors} unreachable${viaHome ? ` · ${viaHome} via home server` : ''}`.replace('persons', 'people');
+
+                const list = all
+                    .filter(s => !q || `${s.displayName || ''} ${s.handle || ''} ${s.id}`.toLowerCase().includes(q))
+                    .sort((a, b) => (b.errorCount > 0) - (a.errorCount > 0)
+                        || (a.displayName || a.handle || a.id).localeCompare(b.displayName || b.handle || b.id));
+
+                const container = document.getElementById('source-list');
+                if (!list.length) {
+                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">${all.length ? 'No matches' : 'Nobody yet'}</div></div>`;
+                    return;
+                }
+                container.innerHTML = list.slice(0, 500).map(s => {
+                    const name = s.displayName || s.handle || s.id;
+                    const polled = s.lastPolledAt ? `checked ${relativeTime(s.lastPolledAt)}`.replace('checked now', 'checked just now') : 'not checked yet';
+                    const next = Poller.inflight.has(s.id) ? 'checking now' : `next in ${relativeFuture(s.nextPollAt)}`;
+                    const host = Services[s.service] ? Services[s.service].pollHost(s) : '';
+                    const via = s.endpoint && s.endpoint.mode === 'home'
+                        ? `<span class="tag" title="${escapeHtml(s.endpoint.directError || '')}">via ${escapeHtml(s.endpoint.homeHost)}</span>` : '';
+                    return `<div class="item-card">
+                        ${avatarHtml(s.avatarUrl, name, s.profileUrl)}
+                        <div class="item-main">
+                            <div class="item-title"><span class="svc-dot ${escapeHtml(s.service)}"></span><span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</span>${via}</div>
+                            <div class="item-meta">${s.handle ? `@${escapeHtml(s.handle)} · ` : ''}${escapeHtml(host || '')}</div>
+                            ${s.error ? `<div class="item-meta error">${escapeHtml(s.error)}</div>` : `<div class="item-meta">${escapeHtml(polled)} · ${escapeHtml(next)}${s.lastPostAt ? ` · last post ${escapeHtml(relativeTime(s.lastPostAt))}` : ''}</div>`}
+                        </div>
+                    </div>`;
+                }).join('') + (list.length > 500 ? `<div class="feed-footer">Showing 500 of ${list.length}. Filter to find someone.</div>` : '');
+            },
+
+            // ---------- Feed ----------
+            setFilter(accountId) {
+                App.filter.accountId = accountId;
+                if (accountId) localStorage.setItem(`${APP_NAME}_filter_account`, String(accountId));
+                else localStorage.removeItem(`${APP_NAME}_filter_account`);
+                App.renderChips();
+                App.reloadFeed();
+            },
+
+            renderChips() {
+                const container = document.getElementById('feed-chips');
+                if (App.accounts.length < 2) { container.innerHTML = ''; return; }
+                container.innerHTML = `<button class="chip ${App.filter.accountId ? '' : 'active'}" data-account="">Everyone</button>` +
+                    App.accounts.map(a => `<button class="chip ${App.filter.accountId === a.id ? 'active' : ''}" data-account="${a.id}">
+                        <span class="svc-dot ${escapeHtml(a.service)}"></span>@${escapeHtml(a.handle)}
+                    </button>`).join('');
+            },
+
+            renderStatus() {
+                const el = document.getElementById('status-bar');
+                if (!el || !document.getElementById('feed-screen').classList.contains('active')) return;
+                const ids = Array.from(App.followed);
+                if (!ids.length) {
+                    el.textContent = App.syncing.size ? 'Reading follow lists…' : '';
+                    return;
+                }
+                let checked = 0;
+                let errors = 0;
+                ids.forEach(id => {
+                    const s = App.sources.get(id);
+                    if (!s) return;
+                    if (s.lastPolledAt) checked++;
+                    if (s.errorCount > 0) errors++;
+                });
+                const parts = [`Following ${ids.length.toLocaleString()}`];
+                if (checked < ids.length) parts.push(`${checked.toLocaleString()} checked`);
+                if (Poller.active) parts.push(`${Poller.active} fetching`);
+                else if (checked === ids.length) parts.push('up to date');
+                el.innerHTML = escapeHtml(parts.join(' · ')) +
+                    (errors ? ` · <a data-nav="#sources">${errors} unreachable</a>` : '');
+                document.getElementById('refresh-btn').classList.toggle('spinning', Poller.active > 0);
+            },
+
+            async reloadFeed() {
+                App.feed = { posts: [], loading: true, done: false, top: null };
+                App.hideNewPill();
+                try {
+                    const posts = await Store.feedPage(App.filter, App.settings, null);
+                    App.feed.posts = posts;
+                    App.feed.done = posts.length < FEED_PAGE;
+                    App.feed.top = posts.length ? posts[0].sortAt : new Date(0).toISOString();
+                } catch (e) {
+                    console.error('Feed load failed:', e);
+                    App.toast(`Couldn't load timeline: ${e.message}`);
+                } finally {
+                    App.feed.loading = false;
+                }
+                App.renderFeed();
+            },
+
+            async loadMore() {
+                const f = App.feed;
+                if (f.loading || f.done || !f.posts.length) return;
+                f.loading = true;
+                try {
+                    const last = f.posts[f.posts.length - 1];
+                    const more = await Store.feedPage(App.filter, App.settings, last);
+                    f.posts.push(...more);
+                    f.done = more.length < FEED_PAGE;
+                    document.getElementById('feed').insertAdjacentHTML('beforeend', more.map(postHtml).join(''));
+                } catch (e) {
+                    console.error('Load more failed:', e);
+                } finally {
+                    f.loading = false;
+                    App.renderFeedFooter();
+                }
+            },
+
+            renderFeed() {
+                const container = document.getElementById('feed');
+                if (!App.feed.posts.length) {
+                    if (!App.accounts.length) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1v2l-3-2h-4"/></svg>
+                                <div class="empty-state-title">Add an account to begin</div>
+                                <div class="empty-state-text">Give Socialite your Bluesky or Mastodon handle. It reads who you follow and checks their servers directly.</div>
+                                <button class="btn" data-nav="#accounts">Add an account</button>
+                            </div>`;
+                    } else {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-title">Fetching posts…</div>
+                                <div class="empty-state-text">Socialite is visiting each server you follow people on. New posts appear here as they arrive.</div>
+                            </div>`;
+                    }
+                } else {
+                    container.innerHTML = App.feed.posts.map(postHtml).join('');
+                }
+                App.renderFeedFooter();
+                App.renderStatus();
+            },
+
+            renderFeedFooter() {
+                const el = document.getElementById('feed-footer');
+                if (!App.feed.posts.length) { el.textContent = ''; return; }
+                el.textContent = App.feed.loading ? 'Loading…' : (App.feed.done ? 'You\'re all caught up.' : '');
+            },
+
+            // Called after each batch of posts is saved.
+            async onNewPosts() {
+                if (!document.getElementById('feed-screen').classList.contains('active') || App.feed.loading) return;
+                const count = await Store.countNewer(App.filter, App.settings, App.feed.top);
+                if (!count) return;
+                const atTop = window.scrollY < 120;
+                const anyModal = document.querySelector('.modal-overlay.active');
+                if ((atTop && !anyModal && Date.now() - App.lastAutoRefresh > 8000) || !App.feed.posts.length) {
+                    App.lastAutoRefresh = Date.now();
+                    await App.reloadFeed();
+                } else {
+                    const pill = document.getElementById('new-pill');
+                    pill.textContent = `↑ ${pluralize(count, 'new post')}`;
+                    pill.classList.add('show');
+                }
+            },
+
+            hideNewPill() {
+                document.getElementById('new-pill').classList.remove('show');
+            },
+
+            refreshNow() {
+                // Re-check people not checked in the last two minutes.
+                const recent = Date.now() - 2 * MINUTE;
+                let n = 0;
+                App.followed.forEach(id => {
+                    const s = App.sources.get(id);
+                    if (!s || Poller.inflight.has(id)) return;
+                    if (!s.lastPolledAt || new Date(s.lastPolledAt).getTime() < recent) {
+                        s.nextPollAt = Date.now();
+                        n++;
+                    }
+                });
+                Poller.pump();
+                App.toast(n ? `Checking ${pluralize(n, 'person')}`.replace('persons', 'people') : 'Everyone was checked moments ago');
+            },
+
+            // ---------- Settings ----------
+            openSettings() {
+                document.getElementById('setting-poll').value = String(App.settings.pollMinutes);
+                document.getElementById('setting-replies').value = App.settings.replies;
+                document.getElementById('setting-retention').value = String(App.settings.retentionDays);
+                document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
+                App.showModal('settings-modal');
+            },
+
+            updateSetting(key, value) {
+                App.settings[key] = value;
+                saveSettings(App.settings);
+                document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
+                if (key === 'replies' || key === 'showReposts') App.reloadFeed();
+                if (key === 'retentionDays') Store.prunePosts(value).then(() => App.reloadFeed());
+            },
+
+            // ---------- Misc ----------
+            confirm(title, message, onConfirm) {
+                document.getElementById('confirm-title').textContent = title;
+                document.getElementById('confirm-message').textContent = message;
+                App.pendingConfirm = onConfirm;
+                App.showModal('confirm-modal');
+            },
+
+            async runConfirm() {
+                const fn = App.pendingConfirm;
+                App.pendingConfirm = null;
+                App.hideModal('confirm-modal');
+                if (fn) {
+                    try { await fn(); }
+                    catch (e) { App.toast(e.message); }
+                }
+            },
+
+            toast(message) {
+                const el = document.createElement('div');
+                el.textContent = message;
+                el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:0.9rem;z-index:200;box-shadow:var(--shadow-lg);opacity:0;transition:opacity 200ms;max-width:90vw;';
+                document.body.appendChild(el);
+                requestAnimationFrame(() => { el.style.opacity = '1'; });
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 250);
+                }, 2600);
+            },
+
+            disconnect() {
+                Poller.stop();
+                ayb.disconnect();
+                ayb = null;
+                App.showScreen('setup-screen');
+            }
+        };
+
+        window.App = App;
+
+        // ============ Event wiring ============
+        document.getElementById('setup-btn').addEventListener('click', () => {
+            createServerSelectionModal({
+                appName: 'Socialite',
+                queryPermissionLevel: 'read-write',
+            });
+        });
+
+        document.getElementById('retry-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('retry-btn');
+            btn.disabled = true;
+            btn.textContent = 'Connecting...';
+            try { await App.tryConnect(); }
+            finally { btn.disabled = false; btn.textContent = 'Try again'; }
+        });
+
+        document.getElementById('change-db-btn').addEventListener('click', () => App.disconnect());
+
+        // Any element with data-nav navigates (back links, empty-state buttons, status links).
+        document.addEventListener('click', (e) => {
+            const nav = e.target.closest('[data-nav]');
+            if (nav) { e.preventDefault(); App.navigate(nav.dataset.nav); }
+        });
+
+        document.getElementById('accounts-btn').addEventListener('click', () => App.navigate('#accounts'));
+        document.getElementById('refresh-btn').addEventListener('click', () => App.refreshNow());
+        document.getElementById('new-pill').addEventListener('click', async () => {
+            App.hideNewPill();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            await App.reloadFeed();
+        });
+
+        document.getElementById('feed-chips').addEventListener('click', (e) => {
+            const chip = e.target.closest('.chip');
+            if (chip) App.setFilter(parseInt(chip.dataset.account, 10) || null);
+        });
+
+        document.getElementById('service-picker').addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-service]');
+            if (!btn) return;
+            App.addService = btn.dataset.service;
+            App.renderAccounts();
+            document.getElementById('account-handle').focus();
+        });
+
+        document.getElementById('add-account-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('account-handle');
+            const btn = document.getElementById('add-account-btn');
+            const value = input.value.trim();
+            if (!value) return;
+            btn.disabled = true;
+            btn.textContent = 'Adding…';
+            try {
+                await App.addAccount(App.addService, value);
+                input.value = '';
+            } catch (err) {
+                console.error('Add account failed:', err);
+                App.toast(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Add';
+            }
+        });
+
+        document.getElementById('account-list').addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const card = btn.closest('.item-card');
+            const account = App.accounts.find(a => a.id === parseInt(card.dataset.id, 10));
+            if (!account) return;
+            if (btn.dataset.action === 'sync') App.syncAccount(account);
+            if (btn.dataset.action === 'remove') App.removeAccount(account);
+        });
+
+        document.getElementById('sources-search').addEventListener('input', () => App.renderSources());
+
+        // Broken avatar images fall back to the initial underneath.
+        document.addEventListener('error', (e) => {
+            if (e.target.tagName === 'IMG' && e.target.parentElement && e.target.parentElement.classList.contains('avatar')) {
+                e.target.remove();
+            }
+        }, true);
+
+        document.getElementById('confirm-cancel').addEventListener('click', () => {
+            App.pendingConfirm = null;
+            App.hideModal('confirm-modal');
+        });
+        document.getElementById('confirm-ok').addEventListener('click', () => App.runConfirm());
+
+        document.getElementById('settings-btn').addEventListener('click', () => App.openSettings());
+        document.getElementById('settings-close').addEventListener('click', () => App.hideModal('settings-modal'));
+        document.getElementById('setting-poll').addEventListener('change', (e) => App.updateSetting('pollMinutes', parseInt(e.target.value, 10)));
+        document.getElementById('setting-replies').addEventListener('change', (e) => App.updateSetting('replies', e.target.value));
+        document.getElementById('setting-retention').addEventListener('change', (e) => App.updateSetting('retentionDays', parseInt(e.target.value, 10)));
+        document.getElementById('setting-reposts').addEventListener('click', () => App.updateSetting('showReposts', !App.settings.showReposts));
+        document.getElementById('disconnect-btn').addEventListener('click', () => {
+            App.hideModal('settings-modal');
+            App.disconnect();
+        });
+
+        // Close modal when clicking the dimmed backdrop
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('active');
+                    if (overlay.id === 'confirm-modal') App.pendingConfirm = null;
+                }
+            });
+        });
+
+        // Infinite scroll, and keep relative times fresh.
+        window.addEventListener('scroll', () => {
+            if (!document.getElementById('feed-screen').classList.contains('active')) return;
+            if (window.innerHeight + window.scrollY > document.body.offsetHeight - 800) App.loadMore();
+            if (window.scrollY < 40) {
+                const pill = document.getElementById('new-pill');
+                if (pill.classList.contains('show') && Date.now() - App.lastAutoRefresh > 8000) {
+                    App.lastAutoRefresh = Date.now();
+                    App.reloadFeed();
+                }
+            }
+        }, { passive: true });
+
+        setInterval(() => {
+            document.querySelectorAll('[data-time]').forEach(el => { el.textContent = relativeTime(el.dataset.time); });
+            if (document.getElementById('sources-screen').classList.contains('active')
+                && !document.getElementById('sources-search').value) App.renderSources();
+        }, MINUTE);
+
+        window.addEventListener('hashchange', App.handleRoute);
+        window.addEventListener('beforeunload', () => { if (Poller.flushTimer) Poller.flush(); });
+
+        App.init();
+    </script>
+</body>
+</html>

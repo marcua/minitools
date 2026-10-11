@@ -12,8 +12,8 @@ Published at <https://marcua.net/minitools/>; source at
 - **No bundlers / no npm install for most tools.** Libraries are loaded from a
   CDN (e.g. `@aybdb/client` via jsDelivr). Don't add tooling casually.
 - **Client-side only.** Never introduce a server dependency unless the tool is
-  explicitly backend-backed (currently only `todos/` and `streaks/`, which talk
-  to the ayb REST API).
+  explicitly backend-backed (currently `todos/`, `streaks/`, `timely/`, and
+  `socialite/`, which talk to the ayb REST API).
 - **Privacy-first.** Secrets (e.g. OpenAI keys in `rich/`) stay in the browser.
 - **Video assets are not checked in.** `*.mp4` is gitignored; keep screenshots
   as `*.gif`.
@@ -27,6 +27,7 @@ Published at <https://marcua.net/minitools/>; source at
 | Todos | `todos/` | Todo PWA with recurring tasks, reminders, drag-and-drop; syncs to ayb database | `todos/README.md`, `todos/CLAUDE.md` |
 | Streaks | `streaks/` | Habit/streak tracker PWA with GitHub-style heatmaps; ayb database backend | `streaks/README.md`, `streaks/CLAUDE.md` |
 | Timely | `timely/` | Step-by-step routine timer with synthesized chimes; ayb database backend | `timely/README.md`, `timely/CLAUDE.md` |
+| Socialite | `socialite/` | Unified Bluesky + Mastodon timeline read directly from each person's PDS/instance; ayb database backend | `socialite/README.md`, `socialite/CLAUDE.md` |
 | Duck Time | `ducktime/` | Visual timer with presets and a duck-quack alert | — (see `index.html`) |
 | Review | `review/` | Bookmarklet that extracts GitHub PR review comments as Markdown for pasting into a coding agent | `review/README.md` |
 | Rich | `rich/` | Client-side CSV enrichment using the OpenAI API | `rich/README.md` |
@@ -40,11 +41,11 @@ short marketing descriptions.
 
 ## Working in This Repo
 
-- **Per-tool instructions live in the tool's own directory.** `todos/CLAUDE.md`
-  and `streaks/CLAUDE.md` contain important per-project rules (service-worker
+- **Per-tool instructions live in the tool's own directory.** `todos/CLAUDE.md`,
+  `streaks/CLAUDE.md`, `timely/CLAUDE.md`, and `socialite/CLAUDE.md` contain important per-project rules (service-worker
   cache bumping, SQL escaping, etc.). Start your agent session inside the tool
   directory, or read that file before editing, so those instructions load.
-- **The two ayb-backed PWAs share critical gotchas:**
+- **The ayb-backed PWAs share critical gotchas:**
   - Always bump `CACHE_NAME` in the tool's `sw.js` after changing its
     `index.html`, or users won't see updates.
   - Use `AybClient.escapeSQL()` (static method) for all SQL string escaping.
