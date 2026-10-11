@@ -1,4 +1,4 @@
-const CACHE_NAME = 'socialite-v5';
+const CACHE_NAME = 'socialite-v6';
 const AYB_CLIENT = 'https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js';
 const ASSETS = [
     './',
@@ -7,6 +7,31 @@ const ASSETS = [
     './manifest.json',
     './icon.svg'
 ];
+
+const NAVIGATE_TIMEOUT_MS = 2500;
+
+function networkFirst(event) {
+    let saved = Promise.resolve();
+    const network = fetch(event.request, { cache: 'no-cache' }).then(response => {
+        if (response.ok) {
+            const copy = response.clone();
+            saved = caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+    });
+    // Keep the worker alive until the cache is refreshed, even when the
+    // cached copy wins the race.
+    event.waitUntil(network.then(() => saved).catch(() => {}));
+
+    const cached = () => caches.match(event.request).then(c => c || caches.match('./index.html'));
+    const timeout = new Promise(resolve => setTimeout(resolve, NAVIGATE_TIMEOUT_MS)).then(cached);
+    // Whichever comes first: a network response, or the cache after the
+    // timeout. If the network fails outright, use the cache.
+    return Promise.race([
+        network.catch(() => cached().then(c => c || Response.error())),
+        timeout.then(c => c || network)
+    ]);
+}
 
 // Install - cache assets
 self.addEventListener('install', (event) => {
@@ -45,18 +70,12 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // The page itself - network first so updates show on the next load;
-    // the cached copy is only for offline.
+    // The page itself - network first so updates show on the next load,
+    // but never wait more than NAVIGATE_TIMEOUT_MS on a slow connection:
+    // then the cached copy is served (and offline it always is). The
+    // network response still refreshes the cache for next time.
     if (event.request.mode === 'navigate') {
-        event.respondWith(
-            fetch(event.request, { cache: 'no-cache' }).then(response => {
-                if (response.ok) {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-                }
-                return response;
-            }).catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
-        );
+        event.respondWith(networkFirst(event));
         return;
     }
 

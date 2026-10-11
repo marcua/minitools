@@ -503,8 +503,8 @@
         .segmented button + button { border-left: 1px solid var(--border); }
         .segmented button.active { background: var(--signal-light); color: var(--signal); font-weight: 500; }
 
-        .add-row { display: flex; gap: 8px; }
-        .add-row input { margin: 0; }
+        .add-row { display: flex; gap: 8px; align-items: stretch; }
+        .add-row input[type="text"] { margin: 0; min-width: 0; }
 
         .section-label {
             font-family: var(--font-mono);
@@ -2969,7 +2969,7 @@
                         : `${pluralize(a.followsCount, 'follow')} · ${a.followsSyncedAt ? `synced ${relativeTime(a.followsSyncedAt)} ago`.replace('now ago', 'just now') : 'not synced'}`;
                     return `<div class="item-card" data-id="${a.id}">
                         <div class="item-main">
-                            <div class="item-title"><span class="svc-dot ${escapeHtml(a.service)}" title="${escapeHtml(svc ? svc.label : a.service)}"></span>@${escapeHtml(a.handle)}</div>
+                            <div class="item-title"><span class="svc-dot ${escapeHtml(a.service)}" title="${escapeHtml(svc ? svc.label : a.service)}"></span><span style="overflow:hidden;text-overflow:ellipsis;">@${escapeHtml(a.handle)}</span></div>
                             <div class="item-meta">${escapeHtml(meta)}</div>
                         </div>
                         <div class="item-actions">
