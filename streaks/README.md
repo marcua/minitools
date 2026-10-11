@@ -69,6 +69,10 @@ _ayb_migrations (app_id, version, applied_at)
 ### 1. Service Worker Caching
 **MUST bump `CACHE_NAME` in `sw.js` after every change** (e.g., `streaks-v16` → `streaks-v17`). Users won't see changes otherwise.
 
+The page itself is fetched network-first (falling back to the cache after
+2.5s or when offline), and the worker bypasses the HTTP cache, so a deploy
+shows up on the next reload.
+
 ### 2. SQL String Escaping
 - Use `AybClient.escapeSQL(str)` for user input in queries (escapes single quotes, handles null/undefined)
 - Use `escapeHtml(str)` for display
