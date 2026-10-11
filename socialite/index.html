@@ -401,6 +401,21 @@
         .quote .post-media img { max-height: 220px; }
         .quote-missing { font-size: 0.85rem; color: var(--ink-muted); }
 
+        #feed-new:not(:empty) { margin-bottom: 10px; }
+        .feed-divider {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-muted);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .feed-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .feed-divider.new { color: var(--signal); font-weight: 500; }
+        .feed-divider.new::after { background: var(--signal-medium); }
+
         .feed-footer {
             text-align: center;
             color: var(--ink-muted);
@@ -684,6 +699,7 @@
             <div class="status-bar" id="status-bar"></div>
             <div class="chips" id="feed-chips"></div>
             <button class="new-pill" id="new-pill"></button>
+            <div class="feed" id="feed-new"></div>
             <div class="feed" id="feed"></div>
             <div class="feed-footer" id="feed-footer"></div>
         </div>
@@ -1030,7 +1046,11 @@
                 fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
             )`,
             `CREATE INDEX IF NOT EXISTS idx_posts_sort ON posts(sort_at)`,
-            `CREATE INDEX IF NOT EXISTS idx_posts_source ON posts(source_id, sort_at)`
+            `CREATE INDEX IF NOT EXISTS idx_posts_source ON posts(source_id, sort_at)`,
+            // v7: when a post arrived while you had the app open (client clock,
+            // ISO). NULL for backfill and catch-up, which belong in time order.
+            `ALTER TABLE posts ADD COLUMN arrived_at TEXT`,
+            `CREATE INDEX IF NOT EXISTS idx_posts_arrived ON posts(arrived_at)`
         ];
 
         // ============ Network ============
@@ -1951,7 +1971,7 @@
             'cursor', 'last_polled_at', 'next_poll_at', 'last_post_at', 'error', 'error_count'];
         const POST_COLUMNS = ['id', 'service', 'source_id', 'kind', 'url', 'author_id', 'author_handle', 'author_name',
             'author_avatar', 'author_url', 'html', 'content_warning', 'media', 'embed', 'reply_to', 'reply_to_author',
-            'published_at', 'sort_at'];
+            'published_at', 'sort_at', 'arrived_at'];
         const FEED_SELECT = `SELECT p.id, p.service, p.source_id, p.kind, p.url, p.author_id, p.author_handle,
             p.author_name, p.author_avatar, p.author_url, p.html, p.content_warning, p.media, p.embed,
             p.reply_to, p.reply_to_author, p.published_at, p.sort_at FROM posts p`;
@@ -2081,7 +2101,7 @@
                      ${list.map(p => `(${[p.id, p.service, p.sourceId, p.kind, p.url, p.authorId, p.authorHandle,
                         p.authorName, p.authorAvatar, p.authorUrl, p.html, p.contentWarning,
                         p.media && p.media.length ? p.media : null, p.embed, p.replyTo, p.replyToAuthor,
-                        p.publishedAt, p.sortAt].map(sqlVal).join(', ')})`).join(', ')}`
+                        p.publishedAt, p.sortAt, p.arrivedAt].map(sqlVal).join(', ')})`).join(', ')}`
                 )));
             },
 
@@ -2111,8 +2131,11 @@
                 return where;
             },
 
-            async feedPage(filter, settings, before) {
+            // The time-ordered timeline as of `asOf`: anything that arrived
+            // later is shown in the "New" group instead.
+            async feedPage(filter, settings, before, asOf) {
                 const where = Store.feedWhere(filter, settings);
+                if (asOf) where.push(`(p.arrived_at IS NULL OR p.arrived_at <= ${sqlVal(asOf)})`);
                 if (before) {
                     where.push(`(p.sort_at < ${sqlVal(before.sortAt)} OR (p.sort_at = ${sqlVal(before.sortAt)} AND p.id < ${sqlVal(before.id)}))`);
                 }
@@ -2122,9 +2145,20 @@
                 return (result.rows || []).map(rowToPost);
             },
 
-            async countNewer(filter, settings, top) {
+            // Posts that arrived after `since`, most recent arrival first.
+            async arrivals(filter, settings, since) {
+                const where = Store.feedWhere(filter, settings);
+                where.push(`p.arrived_at > ${sqlVal(since)}`);
+                const result = await ayb.query(
+                    `${FEED_SELECT} WHERE ${where.join(' AND ')} ORDER BY p.arrived_at DESC, p.sort_at DESC LIMIT 200`
+                );
+                return (result.rows || []).map(rowToPost);
+            },
+
+            async countNewer(filter, settings, top, asOf) {
                 const where = Store.feedWhere(filter, settings);
                 where.push(`p.sort_at > ${sqlVal(top)}`);
+                if (asOf) where.push(`(p.arrived_at IS NULL OR p.arrived_at <= ${sqlVal(asOf)})`);
                 const result = await ayb.query(`SELECT COUNT(*) FROM posts p WHERE ${where.join(' AND ')}`);
                 return Number(result.rows && result.rows[0] && result.rows[0][0]) || 0;
             }
@@ -2217,6 +2251,11 @@
             async pollSource(source, adapter) {
                 Poller.inflight.add(source.id);
                 Poller.active++;
+                // A first-ever poll is backfill, and the first poll of people
+                // who were already due when the app opened is catch-up. Both
+                // go into the timeline in time order; everything later is a
+                // live arrival.
+                const catchUp = !source.lastPolledAt || App.catchUpIds.has(source.id);
                 const ctx = { cutoff: new Date(Date.now() - App.settings.retentionDays * DAY).toISOString() };
                 try {
                     const res = await adapter.poll(source, ctx);
@@ -2234,6 +2273,7 @@
                     source.error = null;
                     source.errorCount = 0;
                     source.nextPollAt = Date.now() + Poller.interval(source);
+                    App.stampArrivals(res.posts, catchUp);
                     Poller.pendingPosts.push(...res.posts);
                 } catch (e) {
                     const host = adapter.pollHost(source);
@@ -2248,6 +2288,7 @@
                 } finally {
                     source.lastPolledAt = new Date().toISOString();
                     Poller.inflight.delete(source.id);
+                    App.catchUpIds.delete(source.id);
                     Poller.active--;
                     Poller.dirtySources.add(source.id);
                     Poller.scheduleFlush();
@@ -2380,6 +2421,9 @@
                     const sources = Array.from(f.ids).map(id => App.sources.get(id)).filter(Boolean);
                     const ctx = { cutoff: new Date(Date.now() - App.settings.retentionDays * DAY).toISOString() };
                     const res = await Services[f.service].hostFeed.poll(f, sources, ctx);
+                    // The first run this session only catches up.
+                    App.stampArrivals(res.posts || [], !f.ranThisSession);
+                    f.ranThisSession = true;
                     if (res.cursor !== undefined) f.cursor = res.cursor;
                     f.status = 'ok';
                     f.reason = null;
@@ -2561,6 +2605,7 @@
                     ? await bskyToPost(rec, ev.did, await ATP.author(ev.did), sourceId, budget)
                     : await bskyRepostToPost(rec, sourceId, budget);
                 if (!post) return;
+                App.stampArrivals([post], ev.time_us && ev.time_us < App.bootAt * 1000);
                 // Cursors are left alone: if the stream missed something, the
                 // next direct poll still finds it.
                 if (post.kind !== 'repost' && (!source.lastPostAt || post.sortAt > source.lastPostAt)) {
@@ -2594,6 +2639,11 @@
 
             become() {
                 Leader.isLeader = true;
+                const now = Date.now();
+                App.followed.forEach(id => {
+                    const s = App.sources.get(id);
+                    if (s && s.nextPollAt <= now) App.catchUpIds.add(id);
+                });
                 Poller.start();
                 Live.sync();
                 App.renderStatus();
@@ -2731,7 +2781,12 @@
             sources: new Map(),
             followed: new Set(),
             follows: [],
-            feed: { posts: [], loading: false, done: false, top: null },
+            // posts: the time-ordered timeline as of loadedAt. newPosts: the
+            // "New" group of arrivals since then, newest arrival first.
+            feed: { posts: [], newPosts: [], loading: false, done: false, top: null, loadedAt: null },
+            bootAt: Date.now(),
+            catchUpIds: new Set(),
+            pendingArrivals: 0,
             filter: { accountId: null },
             syncing: new Set(),
             pendingConfirm: null,
@@ -3080,11 +3135,18 @@
                 document.getElementById('refresh-btn').classList.toggle('spinning', Poller.active > 0);
             },
 
+            stampArrivals(posts, catchUp) {
+                const at = catchUp ? null : new Date().toISOString();
+                posts.forEach(p => { p.arrivedAt = at; });
+            },
+
             async reloadFeed() {
-                App.feed = { posts: [], loading: true, done: false, top: null };
+                const loadedAt = new Date().toISOString();
+                App.feed = { posts: [], newPosts: [], loading: true, done: false, top: null, loadedAt };
+                App.pendingArrivals = 0;
                 App.hideNewPill();
                 try {
-                    const posts = await Store.feedPage(App.filter, App.settings, null);
+                    const posts = await Store.feedPage(App.filter, App.settings, null, loadedAt);
                     App.feed.posts = posts;
                     App.feed.done = posts.length < FEED_PAGE;
                     App.feed.top = posts.length ? posts[0].sortAt : new Date(0).toISOString();
@@ -3103,7 +3165,7 @@
                 f.loading = true;
                 try {
                     const last = f.posts[f.posts.length - 1];
-                    const more = await Store.feedPage(App.filter, App.settings, last);
+                    const more = await Store.feedPage(App.filter, App.settings, last, f.loadedAt);
                     f.posts.push(...more);
                     f.done = more.length < FEED_PAGE;
                     document.getElementById('feed').insertAdjacentHTML('beforeend', more.map(postHtml).join(''));
@@ -3136,8 +3198,36 @@
                 } else {
                     container.innerHTML = App.feed.posts.map(postHtml).join('');
                 }
+                App.renderNewGroup();
                 App.renderFeedFooter();
                 App.renderStatus();
+            },
+
+            renderNewGroup() {
+                const el = document.getElementById('feed-new');
+                const list = App.feed.newPosts;
+                if (!list.length) { el.innerHTML = ''; return; }
+                el.innerHTML = `<div class="feed-divider new">New · ${list.length.toLocaleString()}</div>`
+                    + list.map(postHtml).join('')
+                    + `<div class="feed-divider">Earlier</div>`;
+            },
+
+            // Moves arrivals that haven't been shown yet into the New group.
+            async showArrivals() {
+                const shown = new Set(App.feed.newPosts.map(p => p.id));
+                const fresh = (await Store.arrivals(App.filter, App.settings, App.feed.loadedAt))
+                    .filter(p => !shown.has(p.id));
+                App.pendingArrivals = 0;
+                App.hideNewPill();
+                if (!fresh.length) return;
+                // Arrivals stay out of the time-ordered list until the next reload.
+                const ids = new Set(fresh.map(p => p.id));
+                if (App.feed.posts.some(p => ids.has(p.id))) {
+                    App.feed.posts = App.feed.posts.filter(p => !ids.has(p.id));
+                    document.querySelectorAll('#feed .post').forEach(el => { if (ids.has(el.dataset.id)) el.remove(); });
+                }
+                App.feed.newPosts = fresh.concat(App.feed.newPosts);
+                App.renderNewGroup();
             },
 
             renderFeedFooter() {
@@ -3147,26 +3237,59 @@
             },
 
             // Called after each batch of posts is saved.
+            //
+            // Live arrivals go to the New group at the top: right away if
+            // you're at the top, else behind the "N new posts" pill. They
+            // never slip into the middle of the timeline, where you'd miss
+            // them. Backfill and catch-up posts have no arrival time; they go
+            // into time order, refreshing the timeline in place only while
+            // you're at the top and there's no New group to disturb.
             async onNewPosts() {
-                if (!document.getElementById('feed-screen').classList.contains('active') || App.feed.loading) return;
-                const count = await Store.countNewer(App.filter, App.settings, App.feed.top);
+                if (!document.getElementById('feed-screen').classList.contains('active') || App.feed.loading || !App.feed.loadedAt) return;
+                const atTop = window.scrollY < 120 && !document.querySelector('.modal-overlay.active');
+                const shown = new Set(App.feed.newPosts.map(p => p.id));
+                const pending = (await Store.arrivals(App.filter, App.settings, App.feed.loadedAt))
+                    .filter(p => !shown.has(p.id)).length;
+                if (pending) {
+                    if (atTop) {
+                        await App.showArrivals();
+                    } else {
+                        App.pendingArrivals = pending;
+                        App.showNewPill(`↑ ${pluralize(pending, 'new post')}`);
+                    }
+                    return;
+                }
+                if (App.feed.newPosts.length) return;
+                const count = await Store.countNewer(App.filter, App.settings, App.feed.top, App.feed.loadedAt);
                 if (!count) return;
-                const atTop = window.scrollY < 120;
-                const anyModal = document.querySelector('.modal-overlay.active');
-                if ((atTop && !anyModal && Date.now() - App.lastAutoRefresh > 8000) || !App.feed.posts.length) {
+                if (!App.feed.posts.length || (atTop && Date.now() - App.lastAutoRefresh > 8000)) {
                     App.lastAutoRefresh = Date.now();
                     await App.reloadFeed();
-                } else {
-                    const pill = document.getElementById('new-pill');
-                    pill.textContent = `↑ ${pluralize(count, 'new post')}`;
-                    pill.classList.add('show');
+                } else if (!atTop) {
+                    App.showNewPill(`↑ ${pluralize(count, 'new post')}`);
                 }
+            },
+
+            showNewPill(text) {
+                const pill = document.getElementById('new-pill');
+                pill.textContent = text;
+                pill.classList.add('show');
+            },
+
+            // The pill either reveals arrivals or, for catch-up posts, reloads.
+            async onPillClick() {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                if (App.pendingArrivals) await App.showArrivals();
+                else await App.reloadFeed();
             },
 
             // Deletions seen on the live stream.
             removePosts(ids) {
                 const gone = new Set(ids);
                 App.feed.posts = App.feed.posts.filter(p => !gone.has(p.id));
+                const hadNew = App.feed.newPosts.length;
+                App.feed.newPosts = App.feed.newPosts.filter(p => !gone.has(p.id));
+                if (hadNew !== App.feed.newPosts.length) App.renderNewGroup();
                 document.querySelectorAll('#feed .post').forEach(el => {
                     if (gone.has(el.dataset.id)) el.remove();
                 });
@@ -3279,11 +3402,7 @@
 
         document.getElementById('accounts-btn').addEventListener('click', () => App.navigate('#accounts'));
         document.getElementById('refresh-btn').addEventListener('click', () => App.refreshNow());
-        document.getElementById('new-pill').addEventListener('click', async () => {
-            App.hideNewPill();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            await App.reloadFeed();
-        });
+        document.getElementById('new-pill').addEventListener('click', () => App.onPillClick());
 
         document.getElementById('feed-chips').addEventListener('click', (e) => {
             const chip = e.target.closest('.chip');
@@ -3373,7 +3492,7 @@
                 const pill = document.getElementById('new-pill');
                 if (pill.classList.contains('show') && Date.now() - App.lastAutoRefresh > 8000) {
                     App.lastAutoRefresh = Date.now();
-                    App.reloadFeed();
+                    App.onPillClick();
                 }
             }
         }, { passive: true });

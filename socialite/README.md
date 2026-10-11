@@ -41,7 +41,7 @@ sources  (id, service, handle, display_name, avatar_url, profile_url, endpoint, 
 follows  (account_id, source_id, created_at)          -- PK (account_id, source_id)
 posts    (id, service, source_id, kind, url, author_id, author_handle, author_name,
           author_avatar, author_url, html, content_warning, media, embed,
-          reply_to, reply_to_author, published_at, sort_at, fetched_at)
+          reply_to, reply_to_author, published_at, sort_at, fetched_at, arrived_at)
 _ayb_migrations (app_id, version, applied_at)
 ```
 
@@ -236,9 +236,23 @@ backfill, including reposted and quoted originals and identity lookups.
 
 - Paged from ayb, 40 at a time, keyset-paginated on `(sort_at, id)`, with
   infinite scroll.
-- After each flush the app counts posts newer than the top of the current view.
-  At the top of the page it reloads in place (at most every 8s); otherwise it
-  shows an "N new posts" pill.
+- **Live arrivals never slip into the middle of the timeline.** Polling means a
+  post can arrive long after it was written (a quiet person checked hourly), so
+  sorting it by time would bury it where you'd never see it. Instead:
+  - Each post gets `arrived_at`, stamped from the client clock when it comes
+    from a live poll, host feed, or stream event. Backfill (a person's first-ever
+    poll), catch-up (the first poll of people already due when the app opened,
+    a host feed's first run, Jetstream replay from before the app opened) gets
+    `NULL`. Those posts belong in time order.
+  - The timeline (`feed.posts`) is everything as of `feed.loadedAt`. Arrivals
+    after that go into a **New** group above it, newest arrival first, with a
+    "New · N" header and an "Earlier" divider. If you're at the top they appear
+    right away; otherwise the "↑ N new posts" pill reveals them and scrolls up.
+  - Reloading (opening the app, changing a filter, or the settings that reload)
+    merges everything back into true time order.
+  - Backfill and catch-up posts newer than the top refresh the timeline in
+    place while you're at the top (at most every 8s), and only when there's no
+    New group to disturb. Otherwise they wait for the pill or the next reload.
 - Filter chips (shown when you have 2+ accounts) narrow the timeline to one
   account's follows. Settings (stored per device in `localStorage`) cover the
   poll interval, the replies filter, reposts on/off, and retention.
