@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todos-v42';
+const CACHE_NAME = 'todos-v43';
 const ASSETS = [
     './',
     './index.html',
@@ -7,11 +7,40 @@ const ASSETS = [
     './icon.svg'
 ];
 
+const NAVIGATE_TIMEOUT_MS = 2500;
+
+// The page itself loads network first so updates show on the next load, but
+// never waits more than NAVIGATE_TIMEOUT_MS on a slow connection: then the
+// cached copy is served (and offline it always is). The network response
+// still refreshes the cache for next time.
+function networkFirst(event) {
+    let saved = Promise.resolve();
+    const network = fetch(event.request, { cache: 'no-cache' }).then(response => {
+        if (response.ok) {
+            const copy = response.clone();
+            saved = caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+    });
+    // Keep the worker alive until the cache is refreshed, even when the
+    // cached copy wins the race.
+    event.waitUntil(network.then(() => saved).catch(() => {}));
+
+    const cached = () => caches.match(event.request).then(c => c || caches.match('./index.html'));
+    const timeout = new Promise(resolve => setTimeout(resolve, NAVIGATE_TIMEOUT_MS)).then(cached);
+    return Promise.race([
+        network.catch(() => cached().then(c => c || Response.error())),
+        timeout.then(c => c || network)
+    ]);
+}
+
 // Install - cache assets
 self.addEventListener('install', (event) => {
     event.waitUntil(
+        // cache: 'reload' skips the browser's HTTP cache (the site sends
+        // max-age=600), so a new worker never stores a stale page.
         caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(ASSETS))
+            .then(cache => cache.addAll(ASSETS.map(url => new Request(url, { cache: 'reload' }))))
             .then(() => self.skipWaiting())
     );
 });
@@ -39,13 +68,18 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    if (event.request.mode === 'navigate') {
+        event.respondWith(networkFirst(event));
+        return;
+    }
+
     // Static assets - cache first, network fallback
     event.respondWith(
         caches.match(event.request)
             .then(cached => {
                 if (cached) {
                     // Return cached, but also update cache in background
-                    fetch(event.request).then(response => {
+                    fetch(event.request, { cache: 'no-cache' }).then(response => {
                         if (response.ok) {
                             caches.open(CACHE_NAME).then(cache => {
                                 cache.put(event.request, response);

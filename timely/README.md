@@ -62,6 +62,10 @@ _ayb_migrations (app_id, version, applied_at)
 **MUST bump `CACHE_NAME` in `sw.js` after every change** (e.g. `timely-v1` →
 `timely-v2`). Users won't see changes otherwise.
 
+The page itself is fetched network-first (falling back to the cache after
+2.5s or when offline), and the worker bypasses the HTTP cache, so a deploy
+shows up on the next reload.
+
 ### 2. SQL String Escaping
 Use `escapeSql()` (wrapping `AybClient.escapeSQL`) for user input and
 `escapeHtml()` for display.
