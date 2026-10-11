@@ -24,6 +24,9 @@ There is no build step. The JS is organized in layers:
 | `Services` | One adapter per network (`bluesky`, `mastodon`). Converts that network into the shared data model. |
 | `Store` | All ayb SQL. |
 | `Poller` | Decides who to check next, runs a few polls at a time, buffers results, flushes to ayb in batches. |
+| `HostFeeds` | One request that covers everyone you follow on a server (Mastodon local timelines, small-PDS revision lists). |
+| `Live` | Opt-in realtime for Bluesky over Jetstream, including deletions. |
+| `Leader` | Web Locks election so only one open tab polls. |
 | `App` | Screens, rendering, routing, settings. |
 
 Routes: empty hash = timeline, `#accounts`, `#sources` (everyone you follow,
@@ -97,10 +100,22 @@ color in the CSS for the new service.
 - **Follows:** `com.atproto.repo.listRecords` for `app.bsky.graph.follow` on
   your PDS, 100 per page.
 - **Each person:** their DID document (cached 3 days) points at their PDS. Each
-  poll calls `listRecords` for `app.bsky.feed.post` and `app.bsky.feed.repost`.
+  poll first asks for the repo's latest revision (`com.atproto.sync.getLatestCommit`,
+  a tiny response). If it hasn't changed since last time, that's the whole
+  poll. Otherwise it calls `listRecords` for `app.bsky.feed.post` and
+  `app.bsky.feed.repost`. Revisions change on *any* write, including likes, so
+  for people whose repo changes on nearly every check, the revision check is
+  skipped after 3 misses in a row (`cursor.revMisses`) and retried once a poll
+  finds nothing new.
+- **Handles are verified.** A DID document's `alsoKnownAs` is only a claim.
+  It's checked (every 3 days) against the handle's DNS TXT record or
+  well-known URL, and a handle that resolves to a different DID shows as
+  `handle.invalid`, like in the Bluesky app. Many custom-domain well-known URLs
+  don't send CORS headers, so when neither method can be read in a browser, the
+  handle stays shown but unverified rather than marked invalid.
   The display name and avatar come from their `app.bsky.actor.profile/self`
   record, refreshed daily.
-- **Cursor:** `{post, repost}` record keys. Record keys are time-sortable TIDs,
+- **Cursor:** `{post, repost, rev, revMisses}`: record keys plus the last seen revision. Record keys are time-sortable TIDs,
   so a poll keeps only records newer than the cursor and pages back (up to 3
   pages) if a whole page is new.
 - **Reposts and quotes** need the original record from the original author's
@@ -139,8 +154,12 @@ color in the CSS for the new service.
   sources and starts up to 6 polls at once, skipping any whose host is busy or
   backing off.
 - The next poll is scheduled adaptively from the base interval (setting, default
-  15 min). People who posted in the last day get the base interval, in the last
-  week 2×, in the last month 4×, otherwise 8×, capped at 6h, with ±10% jitter.
+  15 min). People who posted in the last hour get 0.5× (catches threads), in
+  the last day 1×, in the last week 2×, in the last month 4×, otherwise 8×.
+  Then, if something cheaper covers them, the per-person poll becomes a
+  backstop: 8× when Bluesky realtime is connected and 4× when a host feed covers
+  them. Hidden tabs use 4×. The cap is 12h, with ±10% jitter. Returning to a
+  hidden tab pulls overdue people forward (`Poller.catchUp`).
 - Errors back off exponentially (capped at a day) and show on the Following
   screen. A `429` reschedules after the host's back-off window without counting
   as the person's error.
@@ -150,6 +169,68 @@ color in the CSS for the new service.
 - Follow lists resync on startup if they're older than 12 hours, or with
   **Resync** on the Accounts screen.
 - The refresh button re-queues everyone not checked in the last 2 minutes.
+
+## Host Feeds (batching per server)
+
+The one real advantage of centralization is amortization: one fetch serves many
+readers. `HostFeeds` gets some of that within one reader, since many people you
+follow share a server.
+
+- **Mastodon:** `GET /api/v1/timelines/public?local=true` returns the
+  server's recent public posts from *all* its local accounts in one request,
+  and the ones from people you follow are kept. It omits boosts, most replies,
+  and unlisted posts, so per-person polls continue as a 4× slower backstop.
+  `min_id` paging walks forward from the cursor, so a busy server makes us fall
+  behind rather than skip anything. After 3 overflowing runs in a row the server
+  counts as too busy and is retried in a day. Some servers (mastodon.social,
+  mastodon.online, …) require login for this endpoint (`422`); those are
+  marked unavailable for a day.
+- **Bluesky:** a self-hosted PDS (not `*.bsky.network`) with fewer than 1,000
+  accounts answers `com.atproto.sync.listRepos` with every repo's revision in
+  one request. Only people whose revision moved get polled right away.
+- **Cost-neutral by construction:** batching cuts each covered person's own
+  polls to a quarter. The batch request spends exactly the freed 3/4 budget
+  (`HostFeeds.feedInterval`), never faster than every 2 minutes and never slower
+  than the base interval. So batching never adds load; it turns savings into
+  latency. With 29 people followed on one server it's checked every 2 minutes;
+  with 3 people, roughly every 10.
+- Feed state (cursor, availability) is a per-device cache in `localStorage`
+  (`socialite_host_feeds`).
+
+## Realtime (Jetstream, opt-in)
+
+Settings → **Realtime Bluesky** opens one WebSocket to Bluesky's
+[Jetstream](https://github.com/bluesky-social/jetstream), filtered to the DIDs
+you follow (`wantedDids`, up to 10,000) and to posts/reposts.
+
+- New posts arrive within seconds, and **deletions propagate** (polling can't
+  see deletes).
+- While connected, direct PDS polls drop to an 8× backstop. In testing, a
+  17-person Bluesky follow list went from about 90 PDS requests an hour to about
+  11.
+- The connection resumes from the last seen `time_us` cursor (Jetstream keeps
+  roughly a day of backlog), so posts made while the app was closed still
+  arrive. It rotates among the public instances on reconnect, with back-off.
+- **Never subscribe with an empty `wantedDids`**: Jetstream treats that as
+  "everything" (the whole network). `Live.sync()` closes the socket instead.
+- Live events never advance polling cursors, so if the stream drops something
+  the backstop poll still finds it.
+- This is deliberately opt-in. It's the one place Socialite leans on shared
+  infrastructure, and Jetstream records arrive without signatures or proofs.
+
+## One Poller per Browser
+
+`Leader` takes a Web Lock (`socialite-poller`). Only the tab holding it polls
+or streams. Other tabs read new posts from ayb every 30s and show "another tab
+is fetching". Two tabs never double the load on anyone's server. (Two
+*devices* still poll independently. See Known Limits.)
+
+## Measuring Load
+
+`Net` logs every request. The Following screen shows the requests made in the
+last hour, plus which servers are batched and whether Bluesky is live. An
+initial sync is the expensive part: 158 people took about 820 requests to
+backfill, including reposted and quoted originals and identity lookups.
 
 ## Timeline
 
@@ -200,22 +281,96 @@ screen with a retry.
 
 ## Known Limits
 
-- Deleted or edited posts aren't updated after they're stored.
+- Deleted posts are only removed for Bluesky with realtime on. Edits are never
+  picked up.
 - Only *public* posts and *public* follow lists are visible (by design, until
   there's a write/auth path).
 - The same post can appear more than once if several people you follow repost
   it, and people bridged across networks (e.g. Bridgy Fed) can show up twice.
 - Polling only happens while a tab is open.
+- Each device polls independently. One reader with a phone and a laptop open
+  is two readers as far as servers are concerned.
+
+## Tradeoffs and Criticisms
+
+Socialite is an experiment, so here's an honest accounting.
+
+**Technical**
+
+- **Fan-out-on-read scales badly.** One AppView or home server fetches a post
+  once for all its readers. Socialite fetches it once *per reader*. If 10,000
+  Socialite users follow someone on a small server, that server gets 10,000×
+  the polls, all anonymous and indistinguishable from scrapers. (Browsers
+  can't set a `User-Agent`, and a custom header would force a CORS preflight on
+  every request.)
+- **ActivityPub is already push-based and already deduplicated.** Your home
+  server receives each post once and shares it with all its users. Reading from
+  each author's own server adds load compared with reading from your home
+  server. It buys independence from your home admin, not efficiency.
+- **Latency vs. politeness is a hard tradeoff for polling.** Host feeds and
+  revision checks narrow it, but only streaming closes it, and for Bluesky the
+  only practical streams (relay/Jetstream) are shared infrastructure.
+- **What you can't build without an index:** notifications and mentions (they
+  come from strangers), replies *to* a post, like/repost counts, threads,
+  search, discovery. These all need someone to index the whole network. A
+  personal reader can only ever be a timeline.
+- **Moderation is missing.** Bluesky's labelers and Mastodon admins' domain
+  blocks and filters are applied server-side. Socialite shows only self-labels
+  and content warnings. Exposure is limited to people you chose to follow and
+  what they repost or quote.
+- **Trust and verification.** Records from `listRecords` and Jetstream aren't
+  checked against repo signatures. The PDS is authoritative anyway, but a
+  shared cache or relay would need proofs. Handles are checked, but some can't
+  be verified from a browser (CORS).
+- **Browser constraints.** Everything depends on servers keeping permissive
+  CORS. There's no background polling, and mobile browsers suspend tabs.
+  Full-size images come straight from PDSes, which costs those servers more
+  bandwidth than the CDN would.
+- **Deletes and edits.** Without streaming, a deleted post stays in your
+  database until retention prunes it.
+
+**Social**
+
+- **Consent and norms.** Fediverse users and admins choose instance-level
+  norms: authorized fetch, opting out of search, defederating from bad actors.
+  Anonymous direct reads sidestep some of that intent, even though the API is
+  public. The fediverse has a history of pushing back hard on
+  aggregators/scrapers.
+- **Free-riding.** Admins pay to serve their users. Socialite readers add load
+  to servers they don't belong to or support.
+- **Blocks and deletes.** If someone blocks you, their public posts still show
+  here. Keeping deleted posts runs against what people expect when they delete.
+- **Moderation shifts to the individual,** which is freeing for some people
+  and a burden (or a harassment vector) for others.
+- **Who it's for.** It requires running an ayb database, so it's for
+  technical users. That's fine for an experiment, but it's not a model for
+  everyone.
+
+**Where it lands.** Owning the *read side* (your storage, your ranking, your
+filters, your client) is valuable, and it shows that the data really is
+portable. Doing all the *transport* yourself is the expensive part, and it's
+the part where sharing helps. The atproto design already separates these: a
+relay is a shared, neutral fan-out of signed data, while the AppView is the
+opinionated index. Using a relay or Jetstream for transport and polling PDSes
+only as a backstop keeps most of the independence at a fraction of the load.
 
 ## Future Directions
+
+- **Shared, verifiable cache:** readers could pool their fetches (for example
+  a shared ayb database of recently polled records) so each server is polled
+  once per cooperative rather than once per reader. For atproto, entries would
+  need commit proofs (`com.atproto.sync.getRecord` returns a verifiable CAR)
+  so peers can't forge posts. Mastodon has no signatures on the API, so a pool
+  there means trusting its members.
+- **Mastodon streaming** with per-account auth (`wss://…/api/v1/streaming`).
+- **Signature verification** of atproto records.
 
 - **Write path:** authenticate per account (atproto OAuth / Mastodon OAuth) and
   post through each service. `accounts.config` is where tokens or session info
   would go.
-- **Streaming:** Mastodon's streaming API needs auth for user timelines, and a
-  PDS firehose (`com.atproto.sync.subscribeRepos`) carries every repo on that
-  host, so polling is the honest option for now. Relays and Jetstream can filter
-  by DID, but they reintroduce an aggregator.
+- **Small-PDS streaming:** `com.atproto.sync.subscribeRepos` on a
+  self-hosted PDS carries only that host's handful of repos. It could replace
+  polling there, but it needs CBOR/CAR decoding in the browser.
 - **Background fetching:** a scheduled worker that polls while the app is
   closed.
 - **More services:** X/Twitter via scrapers, RSS/Atom feeds, and Threads are all

@@ -464,6 +464,8 @@
             flex: none;
         }
 
+        .tag.live { color: var(--signal); border-color: var(--signal-medium); background: var(--signal-light); }
+
         .panel {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -767,6 +769,13 @@
                     <div class="setting-label">Show reposts &amp; boosts</div>
                 </div>
                 <button class="switch" id="setting-reposts" role="switch" aria-label="Show reposts"></button>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Realtime Bluesky</div>
+                    <div class="setting-sub">Streams new posts and deletions from Jetstream, a shared Bluesky-run relay, instead of waiting for the next check. Faster and lighter on everyone's servers, but routes through shared infrastructure.</div>
+                </div>
+                <button class="switch" id="setting-realtime" role="switch" aria-label="Realtime Bluesky"></button>
             </div>
             <div class="setting-row" style="border-bottom:none;">
                 <div>
@@ -1088,13 +1097,25 @@
                 }
             },
 
+            // Timestamps of recent requests, so the app can show what load it puts on the network.
+            log: [],
+
+            recentCount(windowMs) {
+                const since = Date.now() - windowMs;
+                while (this.log.length && this.log[0] < since - HOUR) this.log.shift();
+                return this.log.filter(t => t >= since).length;
+            },
+
             async fetch(url, init) {
                 const host = new URL(url).host;
                 await this.acquire(host);
+                this.log.push(Date.now());
                 const ctrl = new AbortController();
                 const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
                 try {
-                    const res = await fetch(url, Object.assign({ signal: ctrl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' }, init));
+                    // 'no-cache' lets the browser revalidate with the ETag it has
+                    // (a 304 instead of a full body) without a CORS preflight.
+                    const res = await fetch(url, Object.assign({ signal: ctrl.signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-cache' }, init));
                     this.noteRateLimit(host, res);
                     return res;
                 } catch (e) {
@@ -1178,24 +1199,70 @@
                 return `${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
             },
 
+            // The two standard handle methods: a DNS TXT record (via
+            // DNS-over-HTTPS, since browsers can't query DNS directly) and the
+            // handle's own well-known URL. Returns the DID, or null if the
+            // well-known URL answered without one. Throws when the result is
+            // inconclusive: no DNS record and a well-known URL we couldn't
+            // read (many sites don't send CORS headers for it).
+            async lookupHandle(handle) {
+                // *.bsky.social handles never use DNS; skip the wasted query.
+                let dnsChecked = handle.endsWith('.bsky.social');
+                if (!dnsChecked) {
+                    try {
+                        const dns = await Net.json(`https://dns.google/resolve?name=_atproto.${encodeURIComponent(handle)}&type=TXT`);
+                        const txt = (dns.Answer || []).map(a => String(a.data || '').replace(/^"|"$/g, ''))
+                            .find(t => t.startsWith('did='));
+                        if (txt) return txt.slice('did='.length);
+                        dnsChecked = true;
+                    } catch (e) { /* try the next method */ }
+                }
+                const res = await Net.fetch(`https://${handle}/.well-known/atproto-did`);
+                if (!res.ok) {
+                    if (!dnsChecked) throw new Error(`Couldn't check ${handle}`);
+                    return null;
+                }
+                const text = (await res.text()).trim();
+                return text.startsWith('did:') ? text : null;
+            },
+
+            // A DID document's handle is only a claim; it counts once the
+            // handle points back at the DID. Otherwise anyone could put
+            // "nytimes.com" in their DID document. Rechecked every 3 days.
+            async verifyHandle(entry, did) {
+                if (!entry.handle || Date.now() - (entry.handleCheckedAt || 0) < 3 * DAY) return;
+                try {
+                    entry.handleOk = (await ATP.lookupHandle(entry.handle)) === did;
+                } catch (e) {
+                    // Inconclusive: keep the previous verdict.
+                }
+                entry.handleCheckedAt = Date.now();
+                ATP.persistSoon();
+            },
+
+            // What to show: Bluesky shows unverified handles as handle.invalid.
+            displayHandle(entry) {
+                return entry.handleOk === false ? 'handle.invalid' : entry.handle;
+            },
+
+            // The identity fields we persist on a followed source.
+            endpointFor(entry) {
+                return {
+                    pds: entry.pds,
+                    at: entry.at,
+                    profileAt: entry.profileAt,
+                    handle: entry.handle,
+                    handleOk: entry.handleOk,
+                    handleCheckedAt: entry.handleCheckedAt
+                };
+            },
+
             async resolveHandle(handle) {
                 if (handle.startsWith('did:')) return handle;
-                // The two standard methods: a DNS TXT record (via DNS-over-HTTPS,
-                // since browsers can't query DNS directly) and the handle's own
-                // well-known URL. A PDS entryway is the last resort.
-                try {
-                    const dns = await Net.json(`https://dns.google/resolve?name=_atproto.${encodeURIComponent(handle)}&type=TXT`);
-                    const txt = (dns.Answer || []).map(a => String(a.data || '').replace(/^"|"$/g, ''))
-                        .find(t => t.startsWith('did='));
-                    if (txt) return txt.slice('did='.length);
-                } catch (e) { /* fall through */ }
-                try {
-                    const res = await Net.fetch(`https://${handle}/.well-known/atproto-did`);
-                    if (res.ok) {
-                        const text = (await res.text()).trim();
-                        if (text.startsWith('did:')) return text;
-                    }
-                } catch (e) { /* fall through */ }
+                let did = null;
+                try { did = await ATP.lookupHandle(handle); } catch (e) { /* fall through */ }
+                if (did) return did;
+                // A PDS entryway can do the lookup for us as a last resort.
                 const body = await Net.json(`https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
                 if (!body.did) throw new Error(`Couldn't resolve ${handle}`);
                 return body.did;
@@ -1217,11 +1284,17 @@
                 const service = (doc.service || []).find(s => s.id === '#atproto_pds' || s.id === `${did}#atproto_pds`);
                 if (!service || !safeUrl(service.serviceEndpoint)) throw new Error('No PDS in DID document');
                 const aka = (doc.alsoKnownAs || []).find(a => a.startsWith('at://'));
+                const handle = aka ? aka.slice('at://'.length) : (cached && cached.handle) || null;
                 const entry = Object.assign({}, cached, {
                     pds: service.serviceEndpoint.replace(/\/+$/, ''),
-                    handle: aka ? aka.slice('at://'.length) : (cached && cached.handle) || null,
+                    handle,
                     at: Date.now()
                 });
+                if (!cached || cached.handle !== handle) {
+                    // A new handle claim needs its own check.
+                    delete entry.handleOk;
+                    delete entry.handleCheckedAt;
+                }
                 ATP.cache.set(did, entry);
                 ATP.persistSoon();
                 return entry;
@@ -1230,6 +1303,7 @@
             // Identity plus display name/avatar from the profile record.
             async author(did, fresh) {
                 const ident = await ATP.resolveDid(did, fresh);
+                await ATP.verifyHandle(ident, did);
                 if (fresh || !ident.profileAt || Date.now() - ident.profileAt > DAY) {
                     try {
                         const rec = await ATP.getRecord(ident.pds, did, 'app.bsky.actor.profile', 'self');
@@ -1387,7 +1461,7 @@
                     type: 'quote',
                     url,
                     authorName: author.name,
-                    authorHandle: author.handle,
+                    authorHandle: ATP.displayHandle(author),
                     authorAvatar: author.avatar,
                     html: bskyRichText(v.text, v.facets),
                     media: bskyEmbed(v.embed, did, author.pds).media.filter(m => m.type === 'image').slice(0, 4),
@@ -1413,7 +1487,7 @@
                 kind: parent ? 'reply' : 'post',
                 url: ATP.postUrl(did, rkey),
                 authorId: `bluesky:${did}`,
-                authorHandle: author.handle,
+                authorHandle: ATP.displayHandle(author),
                 authorName: author.name,
                 authorAvatar: author.avatar,
                 authorUrl: ATP.profileUrl(did),
@@ -1426,6 +1500,25 @@
                 publishedAt: created,
                 sortAt: clampToNow(created)
             };
+        }
+
+        // A repost record only points at the original, which lives on the
+        // original author's PDS.
+        async function bskyRepostToPost(rec, sourceId, budget) {
+            const subject = ATP.parseUri(rec.value && rec.value.subject && rec.value.subject.uri);
+            if (subject.collection !== 'app.bsky.feed.post') return null;
+            try {
+                const author = await ATP.author(subject.did);
+                const orig = await ATP.getRecord(author.pds, subject.did, subject.collection, subject.rkey);
+                const p = await bskyToPost(orig, subject.did, author, sourceId, budget);
+                return Object.assign(p, {
+                    id: `bluesky:${rec.uri}`,
+                    kind: 'repost',
+                    sortAt: clampToNow(toIso(rec.value.createdAt))
+                });
+            } catch (e) {
+                return null; // the original was deleted or unreachable
+            }
         }
 
         // ---- Mastodon helpers ----
@@ -1545,7 +1638,7 @@
                     if (!handle) throw new Error('Enter your Bluesky handle');
                     const did = await ATP.resolveHandle(handle);
                     const me = await ATP.author(did, true);
-                    return { handle: me.handle || handle, remoteId: did, config: { pds: me.pds } };
+                    return { handle: ATP.displayHandle(me) || handle, remoteId: did, config: { pds: me.pds } };
                 },
 
                 async fetchFollows(account) {
@@ -1563,7 +1656,7 @@
                             const c = ATP.cache.get(did) || {};
                             out.push({
                                 id: `bluesky:${did}`,
-                                handle: c.handle || null,
+                                handle: c.handle ? ATP.displayHandle(c) : null,
                                 displayName: c.name || null,
                                 avatarUrl: c.avatar || null,
                                 profileUrl: ATP.profileUrl(did),
@@ -1590,8 +1683,26 @@
                     const did = source.id.slice('bluesky:'.length);
                     const me = await ATP.author(did, source.errorCount > 0);
                     const cur = (source.cursor && typeof source.cursor === 'object') ? source.cursor : {};
-                    const budget = { quotes: 8 };
+                    const endpoint = ATP.endpointFor(me);
+                    const profile = { handle: ATP.displayHandle(me), displayName: me.name, avatarUrl: me.avatar };
 
+                    // The repo revision changes on every write (posts, likes,
+                    // follows). If it hasn't moved, nothing is new: one tiny
+                    // request instead of two listings. For people whose repo
+                    // changes on almost every check (heavy likers), the check is
+                    // a wasted request, so it's skipped after 3 misses in a row
+                    // and retried once a poll finds nothing new.
+                    const misses = cur.revMisses || 0;
+                    let rev = null;
+                    if (misses < 3) {
+                        const commit = await Net.json(`${me.pds}/xrpc/com.atproto.sync.getLatestCommit?did=${encodeURIComponent(did)}`);
+                        if (cur.rev && commit.rev === cur.rev) {
+                            return { posts: [], cursor: Object.assign({}, cur, { revMisses: 0 }), endpoint, profile };
+                        }
+                        rev = commit.rev;
+                    }
+
+                    const budget = { quotes: 8 };
                     const [postRecs, repostRecs] = await Promise.all([
                         ATP.listNew(me.pds, did, 'app.bsky.feed.post', cur.post, 25),
                         ATP.listNew(me.pds, did, 'app.bsky.feed.repost', cur.repost, 15)
@@ -1605,33 +1716,52 @@
                     // bounded batch, oldest first, and resume from there next time.
                     const eligible = repostRecs.filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff);
                     const wanted = eligible.slice().reverse().slice(0, 12);
-                    const reposts = await Promise.all(wanted.map(async r => {
-                        const subject = ATP.parseUri(r.value && r.value.subject && r.value.subject.uri);
-                        if (subject.collection !== 'app.bsky.feed.post') return null;
-                        try {
-                            const author = await ATP.author(subject.did);
-                            const orig = await ATP.getRecord(author.pds, subject.did, subject.collection, subject.rkey);
-                            const p = await bskyToPost(orig, subject.did, author, source.id, budget);
-                            return Object.assign(p, {
-                                id: `bluesky:${r.uri}`,
-                                kind: 'repost',
-                                sortAt: clampToNow(toIso(r.value.createdAt))
-                            });
-                        } catch (e) {
-                            return null; // the original was deleted or unreachable
-                        }
-                    }));
+                    const reposts = await Promise.all(wanted.map(r => bskyRepostToPost(r, source.id, budget)));
 
                     const newestPost = postRecs.length ? ATP.rkeyOf(postRecs[0].uri) : cur.post;
                     let repostCursor = repostRecs.length ? ATP.rkeyOf(repostRecs[0].uri) : cur.repost;
-                    if (eligible.length > wanted.length) repostCursor = ATP.rkeyOf(wanted[wanted.length - 1].uri);
+                    const capped = eligible.length > wanted.length;
+                    if (capped) repostCursor = ATP.rkeyOf(wanted[wanted.length - 1].uri);
 
                     return {
                         posts: posts.concat(reposts.filter(Boolean)),
-                        cursor: { post: newestPost || null, repost: repostCursor || null },
-                        endpoint: { pds: me.pds, at: me.at, profileAt: me.profileAt },
-                        profile: { handle: me.handle, displayName: me.name, avatarUrl: me.avatar }
+                        // Leave rev unset while reposts are still being worked through,
+                        // so the next poll doesn't skip them.
+                        cursor: {
+                            post: newestPost || null,
+                            repost: repostCursor || null,
+                            rev: capped ? null : rev,
+                            revMisses: misses < 3 ? (cur.rev ? misses + 1 : 0) : (postRecs.length || repostRecs.length ? misses : 0)
+                        },
+                        endpoint,
+                        profile
                     };
+                },
+
+                // Self-hosted PDSes are small enough that one listRepos call
+                // returns every account's revision. Only people whose
+                // revision moved get polled. (Bluesky's own hosts carry
+                // hundreds of thousands of accounts, so they're skipped.)
+                hostFeed: {
+                    minSources: 2,
+
+                    key(source) {
+                        const c = ATP.cache.get(source.id.slice('bluesky:'.length));
+                        const host = c && c.pds ? hostOf(c.pds) : '';
+                        return host && !host.endsWith('.bsky.network') ? c.pds : null;
+                    },
+
+                    async poll(feed, sources) {
+                        const body = await Net.json(`${feed.host}/xrpc/com.atproto.sync.listRepos?limit=1000`);
+                        const repos = body.repos || [];
+                        if (repos.length >= 1000) throw new HttpError(413, 'Too many accounts on this server to batch');
+                        const revs = new Map(repos.map(r => [r.did, r.rev]));
+                        const touched = sources.filter(s => {
+                            const rev = revs.get(s.id.slice('bluesky:'.length));
+                            return rev && (!s.cursor || s.cursor.rev !== rev);
+                        }).map(s => s.id);
+                        return { posts: [], touched };
+                    }
                 }
             },
 
@@ -1690,6 +1820,52 @@
                 pollHost(source) {
                     const ep = source.endpoint || {};
                     return ep.mode === 'home' ? ep.homeHost : ep.host;
+                },
+
+                // One request to a server's local public timeline covers every
+                // followed person there. It omits boosts, most replies, and
+                // unlisted posts, so per-person polls continue at a slower pace.
+                // Some servers (e.g. mastodon.social) require a login for it.
+                hostFeed: {
+                    minSources: 3,
+
+                    key(source) {
+                        const ep = source.endpoint || {};
+                        return ep.host && ep.username && ep.mode !== 'home' ? ep.host : null;
+                    },
+
+                    async poll(feed, sources, ctx) {
+                        const byUser = new Map(sources.map(s => [String(s.endpoint.username).toLowerCase(), s]));
+                        const base = `https://${feed.host}/api/v1/timelines/public?local=true&limit=40`;
+                        let statuses = [];
+                        let overflow = false;
+                        if (!feed.cursor) {
+                            statuses = await Net.json(base);
+                        } else {
+                            // min_id walks forward from the cursor, so a busy
+                            // server makes us fall behind rather than skip posts.
+                            let min = feed.cursor;
+                            for (let page = 0; ; page++) {
+                                if (page === 4) { overflow = true; break; }
+                                const list = await Net.json(`${base}&min_id=${encodeURIComponent(min)}`);
+                                if (!Array.isArray(list)) break;
+                                statuses.push(...list);
+                                if (list.length < 40) break;
+                                min = maxStatusId(list.map(x => x.id));
+                            }
+                        }
+                        if (!Array.isArray(statuses)) throw new Error('Unexpected response');
+                        const posts = [];
+                        statuses.forEach(st => {
+                            const a = st.account || {};
+                            if (!a.acct || a.acct.includes('@')) return;
+                            const source = byUser.get(String(a.username).toLowerCase());
+                            if (!source) return;
+                            const post = mastoToPost(st, feed.host, source.id);
+                            if (post.sortAt >= ctx.cutoff) posts.push(post);
+                        });
+                        return { posts, cursor: maxStatusId(statuses.map(x => x.id)) || feed.cursor, overflow };
+                    }
                 },
 
                 // Reads from the person's own server. If it doesn't speak the
@@ -1898,6 +2074,12 @@
                 )));
             },
 
+            async deletePosts(ids) {
+                await Promise.all(chunk(ids, 100).map(list => ayb.query(
+                    `DELETE FROM posts WHERE id IN (${list.map(sqlVal).join(', ')})`
+                )));
+            },
+
             async prunePosts(retentionDays) {
                 const cutoff = new Date(Date.now() - retentionDays * DAY).toISOString();
                 await ayb.query(`DELETE FROM posts WHERE sort_at < ${sqlVal(cutoff)}`);
@@ -1947,7 +2129,9 @@
             maxActive: 6,
             inflight: new Set(),
             pendingPosts: [],
+            pendingDeletes: [],
             dirtySources: new Set(),
+            lastRebuild: 0,
             flushTimer: null,
             flushing: false,
 
@@ -1962,16 +2146,46 @@
                 Poller.timer = null;
             },
 
-            interval(source) {
+            // How often this person deserves a check on their own merits.
+            activityInterval(source) {
                 const base = App.settings.pollMinutes * MINUTE;
                 const age = source.lastPostAt ? Date.now() - new Date(source.lastPostAt).getTime() : Infinity;
-                const mult = age < DAY ? 1 : age < 7 * DAY ? 2 : age < 30 * DAY ? 4 : 8;
-                return Math.min(base * mult, 6 * HOUR) * (0.9 + Math.random() * 0.2);
+                // People mid-thread get checked sooner; quiet people much less.
+                const mult = age < HOUR ? 0.5 : age < DAY ? 1 : age < 7 * DAY ? 2 : age < 30 * DAY ? 4 : 8;
+                return base * mult;
+            },
+
+            interval(source) {
+                let mult = 1;
+                // When something cheaper already covers this person, a
+                // per-person poll is only a backstop.
+                if (Live.covers(source)) mult *= 8;
+                else if (HostFeeds.covers(source)) mult *= 4;
+                if (document.hidden) mult *= 4;
+                return Math.min(Poller.activityInterval(source) * mult, 12 * HOUR) * (0.9 + Math.random() * 0.2);
+            },
+
+            // Coming back to a hidden tab: pull forward anyone who'd be due
+            // by now at the visible pace, spread over a minute.
+            catchUp() {
+                const now = Date.now();
+                App.followed.forEach(id => {
+                    const s = App.sources.get(id);
+                    if (!s || !s.lastPolledAt || Poller.inflight.has(id)) return;
+                    const dueAt = new Date(s.lastPolledAt).getTime() + Poller.interval(s);
+                    if (dueAt < s.nextPollAt) s.nextPollAt = Math.max(dueAt, now + Math.random() * MINUTE);
+                });
+                Poller.pump();
             },
 
             pump() {
                 if (!ayb) return;
                 const now = Date.now();
+                if (now - Poller.lastRebuild > 5 * MINUTE) {
+                    Poller.lastRebuild = now;
+                    HostFeeds.rebuild();
+                }
+                HostFeeds.pump();
                 const due = [];
                 App.followed.forEach(id => {
                     const s = App.sources.get(id);
@@ -2038,17 +2252,24 @@
                 Poller.flushTimer = null;
                 if (Poller.flushing) { Poller.scheduleFlush(); return; }
                 const posts = Poller.pendingPosts.splice(0);
+                const deletes = Poller.pendingDeletes.splice(0);
                 const sources = Array.from(Poller.dirtySources).map(id => App.sources.get(id)).filter(Boolean);
                 Poller.dirtySources.clear();
-                if (!posts.length && !sources.length) return;
+                if (!posts.length && !sources.length && !deletes.length) return;
                 Poller.flushing = true;
                 try {
                     await Promise.all([Store.insertPosts(posts), Store.upsertSources(sources)]);
+                    // After inserts, so a post created and deleted in one batch stays gone.
+                    if (deletes.length) {
+                        await Store.deletePosts(deletes);
+                        App.removePosts(deletes);
+                    }
                     if (posts.length) await App.onNewPosts();
                 } catch (e) {
                     console.error('Flush failed:', e);
                     App.toast('Saving to your database failed; will retry');
                     Poller.pendingPosts.unshift(...posts);
+                    Poller.pendingDeletes.unshift(...deletes);
                     sources.forEach(s => Poller.dirtySources.add(s.id));
                     Poller.scheduleFlush();
                 } finally {
@@ -2057,8 +2278,319 @@
             }
         };
 
+        // ============ Host feeds ============
+        // When several people you follow share a server, one request can
+        // sometimes cover all of them: a Mastodon server's local timeline,
+        // or a small PDS's list of repo revisions. Adapters opt in with a
+        // `hostFeed` ({ minSources, key(source), poll(feed, sources, ctx) ->
+        // { posts?, touched?, cursor?, overflow? } }). Feed state is a
+        // per-device cache in localStorage.
+        const HostFeeds = {
+            feeds: new Map(),
+            bySource: new Map(),
+            saved: {},
+            active: 0,
+            minIntervalMs: 2 * MINUTE,
+
+            load() {
+                HostFeeds.saved = parseJson(localStorage.getItem(`${APP_NAME}_host_feeds`), {});
+            },
+
+            save() {
+                const out = {};
+                HostFeeds.feeds.forEach((f, key) => {
+                    out[key] = { cursor: f.cursor, status: f.status, retryAt: f.retryAt, strikes: f.strikes, reason: f.reason };
+                });
+                try { localStorage.setItem(`${APP_NAME}_host_feeds`, JSON.stringify(out)); } catch (e) { /* only a cache */ }
+            },
+
+            rebuild() {
+                const groups = new Map();
+                App.followed.forEach(id => {
+                    const s = App.sources.get(id);
+                    const hf = s && Services[s.service] && Services[s.service].hostFeed;
+                    const host = hf && hf.key(s);
+                    if (!host) return;
+                    const key = `${s.service}|${host}`;
+                    if (!groups.has(key)) groups.set(key, { service: s.service, host, ids: [] });
+                    groups.get(key).ids.push(id);
+                });
+                const feeds = new Map();
+                const bySource = new Map();
+                groups.forEach((g, key) => {
+                    if (g.ids.length < Services[g.service].hostFeed.minSources) return;
+                    const feed = HostFeeds.feeds.get(key)
+                        || Object.assign({ cursor: null, status: 'unknown', retryAt: 0, strikes: 0, nextAt: 0 }, HostFeeds.saved[key]);
+                    Object.assign(feed, { key, service: g.service, host: g.host, ids: new Set(g.ids) });
+                    feeds.set(key, feed);
+                    g.ids.forEach(id => bySource.set(id, feed));
+                });
+                HostFeeds.feeds = feeds;
+                HostFeeds.bySource = bySource;
+            },
+
+            covers(source) {
+                const f = HostFeeds.bySource.get(source.id);
+                return f && f.status === 'ok' ? f : null;
+            },
+
+            // Batching slows covered people's own polls to a quarter, freeing
+            // 3/4 of their requests. The batch request spends exactly that
+            // budget, so batching never adds load. It just turns the savings
+            // into speed: the more people on one server, the more often it's
+            // checked (never more than every 2 minutes, never slower than
+            // the base interval).
+            feedInterval(f) {
+                let perHour = 0;
+                f.ids.forEach(id => {
+                    const s = App.sources.get(id);
+                    if (s) perHour += HOUR / Poller.activityInterval(s);
+                });
+                const budget = perHour * 0.75;
+                const interval = budget > 0 ? HOUR / budget : Infinity;
+                return Math.min(Math.max(interval, HostFeeds.minIntervalMs), App.settings.pollMinutes * MINUTE);
+            },
+
+            pump() {
+                const now = Date.now();
+                HostFeeds.feeds.forEach(f => {
+                    if (f.running || HostFeeds.active >= 2 || (f.nextAt || 0) > now) return;
+                    if (f.status === 'unavailable' && now < f.retryAt) return;
+                    if (Net.isBusy(hostOf(f.host) || f.host)) return;
+                    HostFeeds.run(f);
+                });
+            },
+
+            async run(f) {
+                f.running = true;
+                HostFeeds.active++;
+                let retryAfter = 0;
+                try {
+                    const sources = Array.from(f.ids).map(id => App.sources.get(id)).filter(Boolean);
+                    const ctx = { cutoff: new Date(Date.now() - App.settings.retentionDays * DAY).toISOString() };
+                    const res = await Services[f.service].hostFeed.poll(f, sources, ctx);
+                    if (res.cursor !== undefined) f.cursor = res.cursor;
+                    f.status = 'ok';
+                    f.reason = null;
+                    f.strikes = res.overflow ? f.strikes + 1 : 0;
+                    if (f.strikes >= 3) {
+                        f.status = 'unavailable';
+                        f.reason = 'Too busy to batch';
+                        f.retryAt = Date.now() + DAY;
+                    }
+                    const posts = res.posts || [];
+                    posts.forEach(p => {
+                        const s = App.sources.get(p.sourceId);
+                        if (s && p.kind !== 'repost' && (!s.lastPostAt || p.sortAt > s.lastPostAt)) {
+                            s.lastPostAt = p.sortAt;
+                            Poller.dirtySources.add(s.id);
+                        }
+                    });
+                    if (posts.length) {
+                        Poller.pendingPosts.push(...posts);
+                        Poller.scheduleFlush();
+                    }
+                    // Changed repos get polled right away.
+                    (res.touched || []).forEach(id => {
+                        const s = App.sources.get(id);
+                        if (s) s.nextPollAt = Math.min(s.nextPollAt, Date.now());
+                    });
+                } catch (e) {
+                    if (e.status === 429) {
+                        retryAfter = Net.blockedUntil(hostOf(f.host) || f.host);
+                    } else if (e.status >= 400 && e.status < 500) {
+                        f.status = 'unavailable';
+                        f.reason = e.message;
+                        f.retryAt = Date.now() + DAY;
+                    } else if (++f.strikes >= 3) {
+                        f.status = 'unavailable';
+                        f.reason = e.message;
+                        f.retryAt = Date.now() + HOUR;
+                    }
+                } finally {
+                    f.nextAt = Math.max(retryAfter, Date.now() + HostFeeds.feedInterval(f) * (document.hidden ? 4 : 1) * (0.9 + Math.random() * 0.2));
+                    f.running = false;
+                    HostFeeds.active--;
+                    HostFeeds.save();
+                }
+            }
+        };
+
+        // ============ Live (Jetstream) ============
+        // Opt-in realtime for Bluesky. Jetstream is a Bluesky-run service
+        // that re-broadcasts the relay's firehose as JSON, filtered to the
+        // DIDs we ask for. One shared connection replaces repeated polling,
+        // so it's faster for us and lighter on everyone's PDS. The tradeoff:
+        // it routes through shared infrastructure that could drop events, and
+        // records arrive unsigned. Direct PDS polls continue as a slow backstop.
+        const Live = {
+            ws: null,
+            connected: false,
+            wantedKey: '',
+            retryMs: 5000,
+            retryTimer: null,
+            hostIndex: 0,
+            hosts: ['jetstream2.us-east.bsky.network', 'jetstream1.us-east.bsky.network',
+                'jetstream1.us-west.bsky.network', 'jetstream2.us-west.bsky.network'],
+            cursorUs: Number(localStorage.getItem(`${APP_NAME}_jetstream_cursor`)) || 0,
+            lastSaved: 0,
+            events: 0,
+
+            enabled() {
+                return !!(App.settings.realtime && ayb && Leader.isLeader);
+            },
+
+            covers(source) {
+                return Live.connected && source.service === 'bluesky';
+            },
+
+            wantedDids() {
+                const out = [];
+                App.followed.forEach(id => { if (id.startsWith('bluesky:')) out.push(id.slice('bluesky:'.length)); });
+                return out.sort().slice(0, 10000);
+            },
+
+            sync() {
+                const dids = Live.enabled() ? Live.wantedDids() : [];
+                // Never subscribe with an empty list: Jetstream reads that as
+                // "everything".
+                if (!dids.length) { Live.close(); return; }
+                if (!Live.ws) { Live.connect(); return; }
+                if (Live.connected && dids.join(',') !== Live.wantedKey) Live.sendOptions(dids);
+            },
+
+            connect() {
+                clearTimeout(Live.retryTimer);
+                const host = Live.hosts[Live.hostIndex % Live.hosts.length];
+                let url = `wss://${host}/subscribe?requireHello=true`;
+                // Jetstream keeps about a day of backlog; resume just before
+                // where we left off so a closed tab doesn't lose posts.
+                if (Live.cursorUs && Date.now() * 1000 - Live.cursorUs < 20 * HOUR * 1000) {
+                    url += `&cursor=${Live.cursorUs - 5000000}`;
+                }
+                const ws = new WebSocket(url);
+                Live.ws = ws;
+                ws.onopen = () => {
+                    Live.connected = true;
+                    Live.retryMs = 5000;
+                    Live.sendOptions(Live.wantedDids());
+                    App.renderStatus();
+                };
+                ws.onmessage = (e) => {
+                    let ev;
+                    try { ev = JSON.parse(e.data); } catch (err) { return; }
+                    Live.handle(ev).catch(err => console.error('Live event failed:', err));
+                };
+                ws.onclose = () => {
+                    if (Live.ws !== ws) return;
+                    Live.ws = null;
+                    Live.connected = false;
+                    Live.wantedKey = '';
+                    App.renderStatus();
+                    if (Live.enabled()) {
+                        Live.hostIndex++;
+                        Live.retryTimer = setTimeout(Live.sync, Live.retryMs);
+                        Live.retryMs = Math.min(Live.retryMs * 2, 5 * MINUTE);
+                    }
+                };
+            },
+
+            close() {
+                clearTimeout(Live.retryTimer);
+                const ws = Live.ws;
+                Live.ws = null;
+                Live.connected = false;
+                Live.wantedKey = '';
+                if (ws) ws.close();
+            },
+
+            sendOptions(dids) {
+                if (!dids.length) { Live.close(); return; }
+                Live.wantedKey = dids.join(',');
+                Live.ws.send(JSON.stringify({
+                    type: 'options_update',
+                    payload: {
+                        wantedCollections: ['app.bsky.feed.post', 'app.bsky.feed.repost'],
+                        wantedDids: dids,
+                        maxMessageSizeBytes: 0
+                    }
+                }));
+            },
+
+            async handle(ev) {
+                if (ev.time_us) {
+                    Live.cursorUs = ev.time_us;
+                    if (Date.now() - Live.lastSaved > 10000) {
+                        Live.lastSaved = Date.now();
+                        try { localStorage.setItem(`${APP_NAME}_jetstream_cursor`, String(ev.time_us)); } catch (e) { /* ignore */ }
+                    }
+                }
+                if (ev.kind !== 'commit' || !ev.commit) return;
+                const sourceId = `bluesky:${ev.did}`;
+                const source = App.sources.get(sourceId);
+                if (!source || !App.followed.has(sourceId)) return;
+                const c = ev.commit;
+                if (c.collection !== 'app.bsky.feed.post' && c.collection !== 'app.bsky.feed.repost') return;
+                const uri = `at://${ev.did}/${c.collection}/${c.rkey}`;
+                Live.events++;
+
+                // Polling can't see deletions; the stream can.
+                if (c.operation === 'delete') {
+                    Poller.pendingDeletes.push(`bluesky:${uri}`);
+                    Poller.scheduleFlush();
+                    return;
+                }
+                if (c.operation !== 'create' || !c.record) return;
+                const cutoff = new Date(Date.now() - App.settings.retentionDays * DAY).toISOString();
+                if (toIso(c.record.createdAt) < cutoff) return;
+
+                const rec = { uri, cid: c.cid, value: c.record };
+                const budget = { quotes: 2 };
+                const post = c.collection === 'app.bsky.feed.post'
+                    ? await bskyToPost(rec, ev.did, await ATP.author(ev.did), sourceId, budget)
+                    : await bskyRepostToPost(rec, sourceId, budget);
+                if (!post) return;
+                // Cursors are left alone: if the stream missed something, the
+                // next direct poll still finds it.
+                if (post.kind !== 'repost' && (!source.lastPostAt || post.sortAt > source.lastPostAt)) {
+                    source.lastPostAt = post.sortAt;
+                    Poller.dirtySources.add(sourceId);
+                }
+                Poller.pendingPosts.push(post);
+                Poller.scheduleFlush();
+            }
+        };
+
+        // ============ Leader ============
+        // Only one tab polls at a time (Web Locks); other tabs just read new
+        // posts from ayb. Two open tabs shouldn't double the load on anyone.
+        const Leader = {
+            isLeader: false,
+            requested: false,
+
+            start() {
+                if (Leader.requested) {
+                    if (Leader.isLeader) Leader.become();
+                    return;
+                }
+                Leader.requested = true;
+                if (!navigator.locks) { Leader.become(); return; }
+                navigator.locks.request(`${APP_NAME}-poller`, () => {
+                    Leader.become();
+                    return new Promise(() => {}); // held until the tab closes
+                });
+            },
+
+            become() {
+                Leader.isLeader = true;
+                Poller.start();
+                Live.sync();
+                App.renderStatus();
+            }
+        };
+
         // ============ Settings ============
-        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, retentionDays: 30 };
+        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, retentionDays: 30, realtime: false };
 
         function getSettings() {
             const saved = parseJson(localStorage.getItem(`${APP_NAME}_settings`), {});
@@ -2210,6 +2742,7 @@
                 App.settings = getSettings();
                 App.filter.accountId = parseInt(localStorage.getItem(`${APP_NAME}_filter_account`), 10) || null;
                 ATP.loadCache();
+                HostFeeds.load();
 
                 if ('serviceWorker' in navigator) {
                     try { await navigator.serviceWorker.register('sw.js'); }
@@ -2240,7 +2773,7 @@
                     await App.loadState();
                     Store.prunePosts(App.settings.retentionDays).catch(e => console.error('Prune failed:', e));
                     await App.handleRoute();
-                    Poller.start();
+                    Leader.start();
                     App.resyncStaleAccounts();
                 } catch (e) {
                     console.error('Connection error:', e);
@@ -2268,13 +2801,18 @@
                     if (s.service !== 'bluesky' || !s.endpoint || !s.endpoint.pds) return;
                     ATP.cache.set(s.id.slice('bluesky:'.length), {
                         pds: s.endpoint.pds,
-                        handle: s.handle,
                         name: s.displayName,
                         avatar: s.avatarUrl,
                         at: s.endpoint.at || 0,
-                        profileAt: s.endpoint.profileAt || 0
+                        profileAt: s.endpoint.profileAt || 0,
+                        // The raw claimed handle; s.handle may be 'handle.invalid'.
+                        handle: s.endpoint.handle || s.handle,
+                        handleOk: s.endpoint.handleOk,
+                        handleCheckedAt: s.endpoint.handleCheckedAt || 0
                     });
                 });
+                HostFeeds.rebuild();
+                Live.sync();
             },
 
             // ---------- Routing ----------
@@ -2363,6 +2901,8 @@
                         .concat(ids.map(sourceId => ({ accountId: account.id, sourceId })));
                     App.followed = new Set(App.follows.map(f => f.sourceId));
                     if (!ids.length) App.toast(`No public follows found for ${account.handle}`);
+                    HostFeeds.rebuild();
+                    Live.sync();
                     Poller.pump();
                 } catch (e) {
                     console.error('Follow sync failed:', e);
@@ -2435,8 +2975,16 @@
                 const all = Array.from(App.followed).map(id => App.sources.get(id)).filter(Boolean);
                 const errors = all.filter(s => s.errorCount > 0).length;
                 const viaHome = all.filter(s => s.endpoint && s.endpoint.mode === 'home').length;
-                document.getElementById('sources-summary').textContent =
-                    `${pluralize(all.length, 'person')} · ${errors} unreachable${viaHome ? ` · ${viaHome} via home server` : ''}`.replace('persons', 'people');
+                const batched = Array.from(HostFeeds.feeds.values()).filter(f => f.status === 'ok');
+                const summary = [
+                    `${pluralize(all.length, 'person')}`.replace('persons', 'people'),
+                    `${errors} unreachable`,
+                    viaHome ? `${viaHome} via home server` : '',
+                    Live.connected ? 'Bluesky live via Jetstream' : '',
+                    batched.length ? `batched: ${batched.map(f => `${hostOf(f.host) || f.host} (${f.ids.size})`).join(', ')}` : '',
+                    Leader.isLeader ? `${Net.recentCount(HOUR).toLocaleString()} requests in the last hour` : 'another tab is fetching'
+                ];
+                document.getElementById('sources-summary').textContent = summary.filter(Boolean).join(' · ');
 
                 const list = all
                     .filter(s => !q || `${s.displayName || ''} ${s.handle || ''} ${s.id}`.toLowerCase().includes(q))
@@ -2453,8 +3001,11 @@
                     const polled = s.lastPolledAt ? `checked ${relativeTime(s.lastPolledAt)}`.replace('checked now', 'checked just now') : 'not checked yet';
                     const next = Poller.inflight.has(s.id) ? 'checking now' : `next in ${relativeFuture(s.nextPollAt)}`;
                     const host = Services[s.service] ? Services[s.service].pollHost(s) : '';
-                    const via = s.endpoint && s.endpoint.mode === 'home'
-                        ? `<span class="tag" title="${escapeHtml(s.endpoint.directError || '')}">via ${escapeHtml(s.endpoint.homeHost)}</span>` : '';
+                    const feed = HostFeeds.covers(s);
+                    const via = (s.endpoint && s.endpoint.mode === 'home'
+                        ? `<span class="tag" title="${escapeHtml(s.endpoint.directError || '')}">via ${escapeHtml(s.endpoint.homeHost)}</span>` : '')
+                        + (Live.covers(s) ? '<span class="tag live" title="New posts stream in via Jetstream">live</span>' : '')
+                        + (feed ? `<span class="tag live" title="Checked every few minutes with one request for everyone on ${escapeHtml(hostOf(feed.host) || feed.host)}">batched</span>` : '');
                     return `<div class="item-card">
                         ${avatarHtml(s.avatarUrl, name, s.profileUrl)}
                         <div class="item-main">
@@ -2501,9 +3052,14 @@
                     if (s.errorCount > 0) errors++;
                 });
                 const parts = [`Following ${ids.length.toLocaleString()}`];
-                if (checked < ids.length) parts.push(`${checked.toLocaleString()} checked`);
-                if (Poller.active) parts.push(`${Poller.active} fetching`);
-                else if (checked === ids.length) parts.push('up to date');
+                if (!Leader.isLeader) {
+                    parts.push('another tab is fetching');
+                } else {
+                    if (Live.connected) parts.push('● live');
+                    if (checked < ids.length) parts.push(`${checked.toLocaleString()} checked`);
+                    if (Poller.active) parts.push(`${Poller.active} fetching`);
+                    else if (checked === ids.length && !Live.connected) parts.push('up to date');
+                }
                 el.innerHTML = escapeHtml(parts.join(' · ')) +
                     (errors ? ` · <a data-nav="#sources">${errors} unreachable</a>` : '');
                 document.getElementById('refresh-btn').classList.toggle('spinning', Poller.active > 0);
@@ -2592,6 +3148,15 @@
                 }
             },
 
+            // Deletions seen on the live stream.
+            removePosts(ids) {
+                const gone = new Set(ids);
+                App.feed.posts = App.feed.posts.filter(p => !gone.has(p.id));
+                document.querySelectorAll('#feed .post').forEach(el => {
+                    if (gone.has(el.dataset.id)) el.remove();
+                });
+            },
+
             hideNewPill() {
                 document.getElementById('new-pill').classList.remove('show');
             },
@@ -2618,6 +3183,7 @@
                 document.getElementById('setting-replies').value = App.settings.replies;
                 document.getElementById('setting-retention').value = String(App.settings.retentionDays);
                 document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
+                document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
                 App.showModal('settings-modal');
             },
 
@@ -2625,6 +3191,8 @@
                 App.settings[key] = value;
                 saveSettings(App.settings);
                 document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
+                document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
+                if (key === 'realtime') { Live.sync(); App.renderStatus(); }
                 if (key === 'replies' || key === 'showReposts') App.reloadFeed();
                 if (key === 'retentionDays') Store.prunePosts(value).then(() => App.reloadFeed());
             },
@@ -2661,6 +3229,7 @@
 
             disconnect() {
                 Poller.stop();
+                Live.close();
                 ayb.disconnect();
                 ayb = null;
                 App.showScreen('setup-screen');
@@ -2765,6 +3334,7 @@
         document.getElementById('setting-replies').addEventListener('change', (e) => App.updateSetting('replies', e.target.value));
         document.getElementById('setting-retention').addEventListener('change', (e) => App.updateSetting('retentionDays', parseInt(e.target.value, 10)));
         document.getElementById('setting-reposts').addEventListener('click', () => App.updateSetting('showReposts', !App.settings.showReposts));
+        document.getElementById('setting-realtime').addEventListener('click', () => App.updateSetting('realtime', !App.settings.realtime));
         document.getElementById('disconnect-btn').addEventListener('click', () => {
             App.hideModal('settings-modal');
             App.disconnect();
@@ -2798,6 +3368,16 @@
             if (document.getElementById('sources-screen').classList.contains('active')
                 && !document.getElementById('sources-search').value) App.renderSources();
         }, MINUTE);
+
+        // Hidden tabs poll a quarter as often; catch up on return.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && Leader.isLeader && ayb) Poller.catchUp();
+        });
+
+        // Tabs that aren't polling still pick up what the polling tab saves.
+        setInterval(() => {
+            if (ayb && !Leader.isLeader && Store && App.feed.top) App.onNewPosts().catch(() => {});
+        }, 30000);
 
         window.addEventListener('hashchange', App.handleRoute);
         window.addEventListener('beforeunload', () => { if (Poller.flushTimer) Poller.flush(); });

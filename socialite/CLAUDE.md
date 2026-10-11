@@ -9,7 +9,8 @@ via jsDelivr CDN) for OAuth authentication and database queries.
 See [README.md](./README.md) for the full developer guide including:
 - Architecture and the service-adapter interface
 - Database schema (`accounts`, `sources`, `follows`, `posts`)
-- Poller and per-host politeness (`Net`)
+- Poller and per-host politeness (`Net`), host feeds, realtime (Jetstream), tab leader
+- Tradeoffs and criticisms of the model
 - How each service is read (AT Protocol, Mastodon API) and their fallbacks
 - Common gotchas (service worker caching, SQL escaping, HTML sanitizing)
 
@@ -33,6 +34,10 @@ See [README.md](./README.md) for the full developer guide including:
   and rate-limit back-off apply. Don't call `fetch()` directly for remote data.
 - All remote HTML goes through `sanitizeHtml()` at render time. Build
   attributes with `escapeHtml()` and URLs with `safeUrl()`.
+- Never open Jetstream with an empty `wantedDids`; Jetstream reads that as the
+  whole network. `Live.sync()` closes the socket instead.
+- Load-reduction features must not add load: host feeds spend only the budget
+  they free (`HostFeeds.feedInterval`), and only the `Leader` tab polls.
 - Network-specific code lives only in a `Services` adapter. The rest of the
   app works on the normalized post/source shape.
 - The global `ayb` variable is the `AybOAuth` instance; use `ayb.query()`.
