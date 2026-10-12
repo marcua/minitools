@@ -494,6 +494,7 @@
         .now-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
         .now-row span:last-child { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-muted); white-space: nowrap; flex: none; }
         .now-row.warn span:last-child { color: var(--warm); }
+        .now-row.log span:first-child { white-space: normal; overflow-wrap: anywhere; font-size: 0.78rem; }
 
         .panel {
             background: var(--surface);
@@ -834,7 +835,7 @@
         const APP_NAME = 'socialite';
         // Shown in Settings so you can tell which version a device runs.
         // Keep in step with CACHE_NAME in sw.js.
-        const BUILD = 12;
+        const BUILD = 13;
         const MINUTE = 60 * 1000;
         const HOUR = 60 * MINUTE;
         const DAY = 24 * HOUR;
@@ -1081,6 +1082,67 @@
             }
         }
 
+        // ============ Diagnostics ============
+        // A small on-device log (localStorage) shown in the Following
+        // screen's Right now panel: errors, failed saves, and moments the page
+        // was unresponsive. A heartbeat records what synchronous work was in
+        // progress, so if the page ever freezes outright, the next load can
+        // say where.
+        const Diag = {
+            key: `${APP_NAME}_diag`,
+            entries: [],
+            phase: '',
+            lastTick: Date.now(),
+
+            load() {
+                Diag.entries = parseJson(localStorage.getItem(Diag.key), []);
+                const beat = parseJson(localStorage.getItem(`${Diag.key}_beat`), null);
+                if (beat && !beat.clean) {
+                    Diag.log('crash', `Last session ended without closing (${relativeTime(new Date(beat.t).toISOString())} ago)${beat.phase ? `, while ${beat.phase}` : ''}. State: ${beat.state}`);
+                }
+                window.addEventListener('pagehide', () => Diag.beat(true));
+                window.addEventListener('error', e => Diag.log('error', `${e.message} (${(e.filename || '').split('/').pop()}:${e.lineno})`));
+                window.addEventListener('unhandledrejection', e => Diag.log('error', `Unhandled: ${(e.reason && e.reason.message) || e.reason}`));
+                document.addEventListener('visibilitychange', () => { Diag.lastTick = Date.now(); });
+                setInterval(Diag.tick, 1000);
+            },
+
+            log(kind, message) {
+                Diag.entries.push({ t: Date.now(), kind, message: String(message).slice(0, 300) });
+                Diag.entries = Diag.entries.slice(-40);
+                try { localStorage.setItem(Diag.key, JSON.stringify(Diag.entries)); } catch (e) { /* full */ }
+            },
+
+            state() {
+                return `fetching ${Poller.active}, unsaved ${Poller.pendingPosts.length} posts, ` +
+                    `live queue ${Live.queue.length}, ${Leader.isLeader ? 'polling tab' : 'reading tab'}`;
+            },
+
+            beat(clean) {
+                try {
+                    localStorage.setItem(`${Diag.key}_beat`, JSON.stringify({ t: Date.now(), phase: Diag.phase, state: Diag.state(), clean: !!clean }));
+                } catch (e) { /* full */ }
+            },
+
+            // Notices when the page couldn't run for a while (ignoring
+            // hidden tabs, which browsers throttle on purpose).
+            tick() {
+                const now = Date.now();
+                const gap = now - Diag.lastTick - 1000;
+                Diag.lastTick = now;
+                if (gap > 3000 && !document.hidden) Diag.log('stall', `Page unresponsive for ${(gap / 1000).toFixed(1)}s (${Diag.state()})`);
+                Diag.beat(false);
+            },
+
+            // Runs a synchronous step with a breadcrumb for the heartbeat.
+            during(phase, fn) {
+                const prev = Diag.phase;
+                Diag.phase = phase;
+                Diag.beat(false);
+                try { return fn(); } finally { Diag.phase = prev; }
+            }
+        };
+
         class StalledError extends Error {}
 
         // Rejects with StalledError if `promise` hasn't settled within `ms`,
@@ -1100,52 +1162,62 @@
             timeoutMs: 20000,
 
             state(host) {
-                if (!this.hosts.has(host)) this.hosts.set(host, { active: 0, nextAt: 0, blockedUntil: 0 });
+                if (!this.hosts.has(host)) this.hosts.set(host, { active: 0, nextAt: 0, blockedUntil: 0, queue: [], timer: null });
                 return this.hosts.get(host);
             },
 
             isBusy(host) {
                 const st = this.state(host);
-                return st.active >= this.maxPerHost || Date.now() < st.blockedUntil;
+                return st.active >= this.maxPerHost || st.queue.length > 4 || Date.now() < st.blockedUntil;
             },
 
             blockedUntil(host) {
                 return this.state(host).blockedUntil;
             },
 
-            // Waits for a slot on `host`. If the host has asked us to back off
-            // for more than a few seconds, fails right away with a 429 instead
-            // of holding a polling slot; the poller reschedules for after the
-            // back-off.
+            // Waits for a slot on `host`, in order. If the host has asked us to
+            // back off for more than a few seconds, waiting requests fail right
+            // away with a 429 instead of holding polling slots; the poller
+            // reschedules them for after the back-off.
             acquire(host) {
                 const st = this.state(host);
-                st.waiting = (st.waiting || 0) + 1;
                 return new Promise((resolve, reject) => {
-                    const attempt = () => {
-                        const now = Date.now();
-                        if (st.blockedUntil - now > 5000) {
-                            st.waiting--;
-                            const err = new HttpError(429, `${host} asked us to wait until ${new Date(st.blockedUntil).toLocaleTimeString()}`);
-                            err.host = host;
-                            reject(err);
-                            return;
-                        }
-                        const readyAt = Math.max(st.nextAt, st.blockedUntil);
-                        if (st.active < this.maxPerHost && now >= readyAt) {
-                            st.active++;
-                            st.waiting--;
-                            st.nextAt = now + this.minGapMs;
-                            resolve();
-                        } else {
-                            setTimeout(attempt, Math.max(50, readyAt - now));
-                        }
-                    };
-                    attempt();
+                    st.queue.push({ resolve, reject });
+                    this.drain(host);
                 });
+            },
+
+            // Grants slots to queued requests as capacity and spacing allow,
+            // with at most one timer per host (no polling).
+            drain(host) {
+                const st = this.state(host);
+                clearTimeout(st.timer);
+                st.timer = null;
+                const now = Date.now();
+                if (st.blockedUntil - now > 5000) {
+                    const until = new Date(st.blockedUntil).toLocaleTimeString();
+                    st.queue.splice(0).forEach(w => {
+                        const err = new HttpError(429, `${host} asked us to wait until ${until}`);
+                        err.host = host;
+                        w.reject(err);
+                    });
+                    return;
+                }
+                while (st.queue.length && st.active < this.maxPerHost) {
+                    const readyAt = Math.max(st.nextAt, st.blockedUntil);
+                    if (now < readyAt) {
+                        st.timer = setTimeout(() => this.drain(host), readyAt - now);
+                        return;
+                    }
+                    st.active++;
+                    st.nextAt = now + this.minGapMs;
+                    st.queue.shift().resolve();
+                }
             },
 
             release(host) {
                 this.state(host).active--;
+                this.drain(host);
             },
 
             noteRateLimit(host, res) {
@@ -1458,10 +1530,19 @@
             // Every record created or changed since revision `since`, in one
             // request: { rev, records: [{ path, cid, value }] }. rev is null
             // when nothing changed.
+            // Diffs are normally a few KB; anything huge (say, a server that
+            // ignores `since` and sends the whole repo) is refused, and the
+            // caller falls back to listings.
             async getRepoDiff(pds, did, since) {
                 const res = await Net.response(`${pds}/xrpc/com.atproto.sync.getRepo?did=${encodeURIComponent(did)}&since=${encodeURIComponent(since)}`);
-                return Car.diffRecords(new Uint8Array(await Net.read(res, 'arrayBuffer')));
+                const declared = Number(res.headers.get('Content-Length'));
+                if (declared > ATP.maxDiffBytes) throw new Error(`Diff too large (${declared} bytes)`);
+                const buf = new Uint8Array(await Net.read(res, 'arrayBuffer'));
+                if (buf.length > ATP.maxDiffBytes) throw new Error(`Diff too large (${buf.length} bytes)`);
+                return Diag.during(`decoding ${buf.length}-byte diff from ${hostOf(pds)}`, () => Car.diffRecords(buf));
             },
+
+            maxDiffBytes: 5 * 1024 * 1024,
 
             getRecord(pds, did, collection, rkey) {
                 return Net.json(`${pds}/xrpc/com.atproto.repo.getRecord?repo=${encodeURIComponent(did)}&collection=${collection}&rkey=${encodeURIComponent(rkey)}`);
@@ -1524,6 +1605,7 @@
                 let value = 0;
                 let shift = 0;
                 for (;;) {
+                    if (pos >= buf.length || shift > 49) throw new Error('Malformed CAR');
                     const b = buf[pos++];
                     value += (b & 0x7f) * Math.pow(2, shift);
                     if (b < 0x80) return [value, pos];
@@ -1541,6 +1623,7 @@
                 let len;
                 [len, pos] = Car.varint(buf, pos);        // digest length
                 pos += len;
+                if (pos > buf.length) throw new Error('Malformed CAR');
                 return [buf.subarray(start, pos), pos];
             },
 
@@ -1548,25 +1631,35 @@
                 const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
                 const text = new TextDecoder();
                 let pos = 0;
+                // Every length is checked against what's left, so malformed
+                // input throws instead of looping or allocating forever.
+                const need = (n) => { if (!(n >= 0) || pos + n > buf.length) throw new Error('Malformed CBOR'); };
                 const arg = (info) => {
                     if (info < 24) return info;
+                    need(info === 24 ? 1 : info === 25 ? 2 : info === 26 ? 4 : 8);
                     if (info === 24) return buf[pos++];
                     if (info === 25) { const v = view.getUint16(pos); pos += 2; return v; }
                     if (info === 26) { const v = view.getUint32(pos); pos += 4; return v; }
                     if (info === 27) { const v = view.getUint32(pos) * 4294967296 + view.getUint32(pos + 4); pos += 8; return v; }
                     throw new Error('Bad CBOR length');
                 };
+                let depth = 0;
                 const item = () => {
+                    need(1);
+                    if (++depth > 64) throw new Error('CBOR nested too deeply');
+                    try { return itemInner(); } finally { depth--; }
+                };
+                const itemInner = () => {
                     const head = buf[pos++];
                     const major = head >> 5;
                     const info = head & 31;
                     switch (major) {
                         case 0: return arg(info);
                         case 1: return -1 - arg(info);
-                        case 2: { const n = arg(info); const b = buf.subarray(pos, pos + n); pos += n; return { $bytes: b }; }
-                        case 3: { const n = arg(info); const s = text.decode(buf.subarray(pos, pos + n)); pos += n; return s; }
-                        case 4: { const n = arg(info); const a = []; for (let i = 0; i < n; i++) a.push(item()); return a; }
-                        case 5: { const n = arg(info); const o = {}; for (let i = 0; i < n; i++) { const k = item(); o[k] = item(); } return o; }
+                        case 2: { const n = arg(info); need(n); const b = buf.subarray(pos, pos + n); pos += n; return { $bytes: b }; }
+                        case 3: { const n = arg(info); need(n); const s = text.decode(buf.subarray(pos, pos + n)); pos += n; return s; }
+                        case 4: { const n = arg(info); need(n); const a = []; for (let i = 0; i < n; i++) a.push(item()); return a; }
+                        case 5: { const n = arg(info); need(n * 2); const o = {}; for (let i = 0; i < n; i++) { const k = item(); o[k] = item(); } return o; }
                         case 6: {
                             const tag = arg(info);
                             const v = item();
@@ -1613,6 +1706,7 @@
                 while (pos < buf.length) {
                     [len, pos] = Car.varint(buf, pos);
                     const end = pos + len;
+                    if (end > buf.length) throw new Error('Malformed CAR');
                     const [cid, dataStart] = Car.readCid(buf, pos);
                     blocks.set(Car.hex(cid), buf.subarray(dataStart, end));
                     pos = end;
@@ -1636,9 +1730,13 @@
                 if (!commit) return { rev: null, records: [] };
                 const records = [];
                 const text = new TextDecoder();
+                const seen = new Set();
                 const walk = (cid) => {
+                    const h = cid && Car.hex(cid);
+                    if (!h || seen.has(h)) return;
+                    seen.add(h);
                     const node = get(cid);
-                    if (!node) return;
+                    if (!node || !Array.isArray(node.e)) return;
                     if (node.l) walk(node.l.$cid);
                     let key = '';
                     for (const e of node.e || []) {
@@ -2076,15 +2174,20 @@
                     // After the first poll, one getRepo diff per check covers
                     // posts, reposts, and profile changes. Very old revisions
                     // fall back to listings, which stay bounded in size.
-                    const useDiff = cur.rev && Date.now() - ATP.tidTime(cur.rev) < 2 * DAY;
+                    const useDiff = cur.rev && Date.now() - ATP.tidTime(cur.rev) < 2 * DAY && !(cur.noDiffUntil > Date.now());
                     const me = await ATP.author(did, source.errorCount > 0, useDiff ? Infinity : DAY);
                     const budget = { quotes: 8 };
                     if (useDiff) {
                         try {
                             return await bskyPollDiff(source, did, me, cur, ctx, budget);
                         } catch (e) {
-                            if (e.status === 429) throw e;
-                            // E.g. a revision the server no longer knows: list instead.
+                            if (e.status === 429 || e instanceof StalledError) throw e;
+                            // E.g. a revision the server no longer knows, or a bad
+                            // response: list instead, and skip diffs for a day.
+                            Diag.log('diff', `${sourceName(source)}: ${e.message}; using listings for a day`);
+                            const res = await bskyPollListings(source, did, me, cur, ctx, budget);
+                            res.cursor.noDiffUntil = Date.now() + DAY;
+                            return res;
                         }
                     }
                     return bskyPollListings(source, did, me, cur, ctx, budget);
@@ -2403,8 +2506,11 @@
                 await ayb.query(`DELETE FROM posts WHERE source_id NOT IN (SELECT source_id FROM follows)`);
             },
 
+            // Both writers return the items whose chunk failed, so one bad
+            // chunk doesn't make the whole batch retry.
             async upsertSources(sources) {
-                if (!sources.length) return;
+                if (!sources.length) return [];
+                const failed = [];
                 const updates = SOURCE_COLUMNS.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
                 await Promise.all(chunk(sources, 50).map(list => ayb.query(
                     `INSERT INTO sources (${SOURCE_COLUMNS.join(', ')}) VALUES
@@ -2412,18 +2518,21 @@
                         s.endpoint || {}, s.cursor, s.lastPolledAt, s.nextPollAt || 0, s.lastPostAt, s.error,
                         s.errorCount || 0].map(sqlVal).join(', ')})`).join(', ')}
                      ON CONFLICT(id) DO UPDATE SET ${updates}`
-                )));
+                ).catch(e => { failed.push(...list); Diag.log('save', `Saving ${list.length} people failed: ${e.message}`); })));
+                return failed;
             },
 
             async insertPosts(posts) {
-                if (!posts.length) return;
+                if (!posts.length) return [];
+                const failed = [];
                 await Promise.all(chunk(posts, 25).map(list => ayb.query(
                     `INSERT OR IGNORE INTO posts (${POST_COLUMNS.join(', ')}) VALUES
                      ${list.map(p => `(${[p.id, p.service, p.sourceId, p.kind, p.url, p.authorId, p.authorHandle,
                         p.authorName, p.authorAvatar, p.authorUrl, p.html, p.contentWarning,
                         p.media && p.media.length ? p.media : null, p.embed, p.replyTo, p.replyToAuthor,
                         p.publishedAt, p.sortAt, p.arrivedAt].map(sqlVal).join(', ')})`).join(', ')}`
-                )));
+                ).catch(e => { failed.push(...list); Diag.log('save', `Saving ${list.length} posts failed: ${e.message}`); })));
+                return failed;
             },
 
             async deletePosts(ids) {
@@ -2638,20 +2747,28 @@
                 if (!posts.length && !sources.length && !deletes.length) return;
                 Poller.flushing = true;
                 try {
-                    await Promise.all([Store.insertPosts(posts), Store.upsertSources(sources)]);
+                    const [failedPosts, failedSources] = await Promise.all([Store.insertPosts(posts), Store.upsertSources(sources)]);
+                    // Only what failed is retried, a few times; posts that keep
+                    // failing are dropped (a later poll can bring them back).
+                    const retry = failedPosts.filter(p => (p._tries = (p._tries || 0) + 1) < 3);
+                    if (failedPosts.length || failedSources.length) {
+                        Poller.pendingPosts.unshift(...retry);
+                        failedSources.forEach(src => Poller.dirtySources.add(src.id));
+                        if (Date.now() - (Poller.lastSaveToast || 0) > MINUTE) {
+                            Poller.lastSaveToast = Date.now();
+                            App.toast('Some saves to your database failed; retrying');
+                        }
+                        Poller.flushTimer = setTimeout(Poller.flush, 15000);
+                    }
                     // After inserts, so a post created and deleted in one batch stays gone.
                     if (deletes.length) {
                         await Store.deletePosts(deletes);
                         App.removePosts(deletes);
                     }
-                    if (posts.length) await App.onNewPosts();
+                    if (posts.length > failedPosts.length) await App.onNewPosts();
                 } catch (e) {
-                    console.error('Flush failed:', e);
-                    App.toast('Saving to your database failed; will retry');
-                    Poller.pendingPosts.unshift(...posts);
+                    Diag.log('save', `Saving failed: ${e.message}`);
                     Poller.pendingDeletes.unshift(...deletes);
-                    sources.forEach(s => Poller.dirtySources.add(s.id));
-                    Poller.scheduleFlush();
                 } finally {
                     Poller.flushing = false;
                 }
@@ -2821,8 +2938,38 @@
             lastSaved: 0,
             events: 0,
 
+            // Events are handled a few at a time: a replayed backlog can be
+            // thousands of events, each of which may fetch an original post.
+            queue: [],
+            working: 0,
+
+            enqueue(ev) {
+                if (ev.time_us) {
+                    Live.cursorUs = ev.time_us;
+                    if (Date.now() - Live.lastSaved > 10000) {
+                        Live.lastSaved = Date.now();
+                        try { localStorage.setItem(`${APP_NAME}_jetstream_cursor`, String(ev.time_us)); } catch (e) { /* ignore */ }
+                    }
+                }
+                if (ev.kind !== 'commit' || !App.followed.has(`bluesky:${ev.did}`)) return;
+                // Beyond this, drop the oldest; direct polls will still find them.
+                if (Live.queue.length > 2000) Live.queue.shift();
+                Live.queue.push(ev);
+                Live.work();
+            },
+
+            work() {
+                while (Live.working < 3 && Live.queue.length) {
+                    const ev = Live.queue.shift();
+                    Live.working++;
+                    Live.handle(ev)
+                        .catch(err => Diag.log('live', err.message || String(err)))
+                        .finally(() => { Live.working--; Live.work(); });
+                }
+            },
+
             enabled() {
-                return !!(App.settings.realtime && ayb && Leader.isLeader);
+                return !!(App.settings.realtime && ayb && Leader.isLeader && !App.safeMode);
             },
 
             covers(source) {
@@ -2864,7 +3011,7 @@
                 ws.onmessage = (e) => {
                     let ev;
                     try { ev = JSON.parse(e.data); } catch (err) { return; }
-                    Live.handle(ev).catch(err => console.error('Live event failed:', err));
+                    Live.enqueue(ev);
                 };
                 ws.onclose = () => {
                     if (Live.ws !== ws) return;
@@ -2881,6 +3028,7 @@
             },
 
             close() {
+                Live.queue = [];
                 clearTimeout(Live.retryTimer);
                 const ws = Live.ws;
                 Live.ws = null;
@@ -2903,13 +3051,6 @@
             },
 
             async handle(ev) {
-                if (ev.time_us) {
-                    Live.cursorUs = ev.time_us;
-                    if (Date.now() - Live.lastSaved > 10000) {
-                        Live.lastSaved = Date.now();
-                        try { localStorage.setItem(`${APP_NAME}_jetstream_cursor`, String(ev.time_us)); } catch (e) { /* ignore */ }
-                    }
-                }
                 if (ev.kind !== 'commit' || !ev.commit) return;
                 const sourceId = `bluesky:${ev.did}`;
                 const source = App.sources.get(sourceId);
@@ -3192,6 +3333,8 @@
 
             // ---------- Auth / boot ----------
             async init() {
+                App.safeMode = /[?&]safe\b/.test(window.location.search);
+                Diag.load();
                 App.settings = getSettings();
                 App.filter.accountId = parseInt(localStorage.getItem(`${APP_NAME}_filter_account`), 10) || null;
                 ATP.loadCache();
@@ -3224,6 +3367,11 @@
                 try {
                     await runMigrations(ayb, 'socialite', socialiteMigrations);
                     await App.loadState();
+                    if (App.safeMode) {
+                        // Open with ?safe to look around without fetching anything.
+                        await App.handleRoute();
+                        return;
+                    }
                     Store.prunePosts(App.settings.retentionDays).catch(e => console.error('Prune failed:', e));
                     await App.handleRoute();
                     Leader.start();
@@ -3342,7 +3490,7 @@
                             changed.push(s);
                         }
                     });
-                    await Store.upsertSources(changed);
+                    if ((await Store.upsertSources(changed)).length) throw new Error('Saving people to your database failed');
                     const ids = list.map(d => d.id);
                     await Store.replaceFollows(account.id, ids);
 
@@ -3427,8 +3575,13 @@
             // every server we're waiting on. Refreshes every 2s.
             renderNow() {
                 const el = document.getElementById('sources-now');
-                if (!Leader.isLeader) {
-                    el.innerHTML = `<div class="panel now"><div class="now-title">Right now</div><div class="item-meta">Another tab is fetching; open this screen there.</div></div>`;
+                const log = Diag.entries.slice(-12).reverse().map(e =>
+                    `<div class="now-row log"><span>${escapeHtml(e.kind)} · ${escapeHtml(e.message)}</span><span>${escapeHtml(relativeTime(new Date(e.t).toISOString()))}</span></div>`).join('');
+                const logHtml = `<div class="now-title" style="margin-top:8px">Recent problems</div>${log || '<div class="item-meta">None recorded.</div>'}`;
+                if (App.safeMode || !Leader.isLeader) {
+                    el.innerHTML = `<div class="panel now"><div class="now-title">Right now · build ${BUILD}</div>
+                        <div class="item-meta">${App.safeMode ? 'Safe mode: nothing is being fetched.' : 'Another tab is fetching; open this screen there for live activity.'}</div>
+                        ${logHtml}</div>`;
                     return;
                 }
                 const now = Date.now();
@@ -3445,12 +3598,13 @@
                 const waits = [];
                 Net.hosts.forEach((st, host) => {
                     if (st.blockedUntil > now) waits.push(`<div class="now-row warn"><span>${escapeHtml(host)}</span><span>backing off ${relativeFuture(st.blockedUntil)}</span></div>`);
-                    else if (st.waiting > 0) waits.push(`<div class="now-row"><span>${escapeHtml(host)}</span><span>${st.waiting} queued</span></div>`);
+                    else if (st.queue.length) waits.push(`<div class="now-row"><span>${escapeHtml(host)}</span><span>${st.queue.length} queued</span></div>`);
                 });
                 el.innerHTML = `<div class="panel now">
                     <div class="now-title">Right now · build ${BUILD}</div>
                     ${rows.length ? rows.join('') : '<div class="item-meta">Nothing being checked.</div>'}
                     ${waits.length ? `<div class="now-title" style="margin-top:8px">Servers</div>${waits.join('')}` : ''}
+                    ${logHtml}
                 </div>`;
             },
 
@@ -3467,7 +3621,7 @@
                     viaHome ? `${viaHome} via home server` : '',
                     Live.connected ? 'Bluesky live via Jetstream' : '',
                     batched.length ? `batched: ${batched.map(f => `${hostOf(f.host) || f.host} (${f.ids.size})`).join(', ')}` : '',
-                    Leader.isLeader ? `${Net.recentCount(HOUR).toLocaleString()} requests in the last hour` : 'another tab is fetching'
+                    App.safeMode ? 'safe mode' : Leader.isLeader ? `${Net.recentCount(HOUR).toLocaleString()} requests in the last hour` : 'another tab is fetching'
                 ];
                 document.getElementById('sources-summary').textContent = summary.filter(Boolean).join(' · ');
 
@@ -3541,6 +3695,10 @@
                     if (s.errorCount > 0) errors++;
                 });
                 const parts = [`Following ${ids.length.toLocaleString()}`];
+                if (App.safeMode) {
+                    el.innerHTML = `${escapeHtml(parts[0])} · Safe mode: not fetching · <a class="status-link" data-nav="#sources">diagnostics</a>`;
+                    return;
+                }
                 if (!Leader.isLeader) {
                     parts.push('another tab is fetching');
                 } else {
@@ -3615,7 +3773,9 @@
                             </div>`;
                     }
                 } else {
-                    container.innerHTML = App.feed.posts.map(postHtml).join('');
+                    Diag.during(`rendering ${App.feed.posts.length} posts`, () => {
+                        container.innerHTML = App.feed.posts.map(postHtml).join('');
+                    });
                 }
                 App.renderNewGroup();
                 App.renderFeedFooter();

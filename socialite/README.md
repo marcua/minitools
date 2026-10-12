@@ -263,6 +263,32 @@ Stalls can't hold polling slots:
 
 `BUILD` in `index.html` is shown in Settings; bump it along with `CACHE_NAME`.
 
+### Diagnostics and safe mode
+
+- `Diag` keeps the last 40 problems in `localStorage` (`socialite_diag`), and
+  the Right now panel shows them: uncaught errors, failed saves, diff
+  fallbacks, failed stream events, and any moment the visible page was
+  unresponsive for more than 3s.
+- A heartbeat (`socialite_diag_beat`) is written every second with what
+  synchronous work is in progress (`Diag.during(...)`, e.g. decoding a diff or
+  rendering posts). If a session ends without a clean `pagehide`, the next
+  load logs where it was.
+- Opening the app with `?safe` loads everything but fetches nothing (no
+  polling, no stream), so the UI stays usable for reading diagnostics even if
+  something in polling is freezing the page.
+
+### Robustness rules
+
+- The CAR/CBOR decoder checks every length against the remaining bytes, caps
+  nesting, and never revisits a tree node, so malformed input throws rather
+  than looping. Diffs over 5 MB are refused. A diff failure falls back to
+  listings and skips diffs for that person for a day (`cursor.noDiffUntil`).
+- `Net` queues requests per host in order, with one timer per host and no
+  polling waiters.
+- Jetstream events go through a queue with 3 workers (at most 2,000 queued).
+- Saves are per chunk: only failed chunks are retried, every 15s. A post that
+  fails 3 times is dropped (a later poll can bring it back).
+
 `Net` logs every request. The Following screen shows the requests made in the
 last hour, plus which servers are batched and whether Bluesky is live. An
 initial sync is the expensive part: 158 people took about 820 requests to
