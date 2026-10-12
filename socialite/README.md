@@ -99,14 +99,25 @@ color in the CSS for the new service.
   (`did:plc`) or `/.well-known/did.json` (`did:web`) gives the PDS.
 - **Follows:** `com.atproto.repo.listRecords` for `app.bsky.graph.follow` on
   your PDS, 100 per page.
-- **Each person:** their DID document (cached 3 days) points at their PDS. Each
-  poll first asks for the repo's latest revision (`com.atproto.sync.getLatestCommit`,
-  a tiny response). If it hasn't changed since last time, that's the whole
-  poll. Otherwise it calls `listRecords` for `app.bsky.feed.post` and
-  `app.bsky.feed.repost`. Revisions change on *any* write, including likes, so
-  for people whose repo changes on nearly every check, the revision check is
-  skipped after 3 misses in a row (`cursor.revMisses`) and retried once a poll
-  finds nothing new.
+- **Each person:** their DID document (cached 3 days) points at their PDS.
+  - **First poll** (and fallback): `listRecords` for `app.bsky.feed.post` and
+    `app.bsky.feed.repost`, plus `getLatestCommit` to note the repo revision.
+  - **Every poll after that is one request:** `com.atproto.sync.getRepo?since=<rev>`
+    returns a CAR file of everything written since that revision. `Car`
+    (a small CAR + DAG-CBOR decoder) walks the repo's Merkle Search Tree from
+    the new commit, following only the nodes included in the diff, and yields
+    the created or changed records with their paths. Posts, reposts, and profile
+    changes all come from that one response, and an unchanged repo costs
+    about 60 bytes. Diffs don't include deletions. Revisions older than 2 days
+    use listings instead, to keep responses bounded. A diff hydrates at most the
+    20 newest reposts.
+  - **Profiles** (display name and avatar) for followed people are only
+    refetched when the diff contains `app.bsky.actor.profile/self`. Strangers'
+    profiles (reposted or quoted authors) refresh daily.
+  - **Originals are fetched once.** Reposted and quoted posts go through
+    `ATP.getRecordCached`, an in-memory cache of the 3,000 most recent posts by
+    URI that holds promises, so concurrent lookups share a request. Posts seen
+    in anyone's listing, diff, or stream are added to it.
 - **Handles are verified.** A DID document's `alsoKnownAs` is only a claim.
   It's checked (every 3 days) against the handle's DNS TXT record or
   well-known URL, and a handle that resolves to a different DID shows as
@@ -115,7 +126,7 @@ color in the CSS for the new service.
   handle stays shown but unverified rather than marked invalid.
   The display name and avatar come from their `app.bsky.actor.profile/self`
   record, refreshed daily.
-- **Cursor:** `{post, repost, rev, revMisses}`: record keys plus the last seen revision. Record keys are time-sortable TIDs,
+- **Cursor:** `{post, repost, rev}`: newest record keys plus the last-seen revision. Record keys are time-sortable TIDs,
   so a poll keeps only records newer than the cursor and pages back (up to 3
   pages) if a whole page is new.
 - **Reposts and quotes** need the original record from the original author's

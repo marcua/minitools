@@ -212,9 +212,12 @@
         .chip:hover { border-color: var(--border-strong); color: var(--ink); }
         .chip.active { background: var(--signal); border-color: var(--signal); color: #fff; }
 
-        .svc-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
-        .svc-dot.bluesky { background: var(--svc-bluesky); }
-        .svc-dot.mastodon { background: var(--svc-mastodon); }
+        .svc-icon { width: 14px; height: 14px; flex: none; display: inline-flex; }
+        .svc-icon svg { width: 100%; height: 100%; }
+        .svc-icon.bluesky { color: var(--svc-bluesky); }
+        .svc-icon.mastodon { color: var(--svc-mastodon); }
+        .svc-icon.muted { color: var(--ink-faint); width: 13px; height: 13px; }
+        .chip.active .svc-icon { color: #fff; }
 
         .new-pill {
             position: sticky;
@@ -304,7 +307,7 @@
             min-width: 0;
             font-size: 0.85rem;
         }
-        .post-head .svc-dot { align-self: center; }
+        .post-head .svc-icon { align-self: center; }
         .post-time {
             color: var(--ink-muted);
             font-size: 0.82rem;
@@ -1331,15 +1334,16 @@
                 return entry;
             },
 
-            // Identity plus display name/avatar from the profile record.
-            async author(did, fresh) {
+            // Identity plus display name/avatar from the profile record,
+            // refreshed when older than profileMaxAge. Followed people polled
+            // by repo diff pass Infinity: a profile change shows up in the diff.
+            async author(did, fresh, profileMaxAge = DAY) {
                 const ident = await ATP.resolveDid(did, fresh);
                 await ATP.verifyHandle(ident, did);
-                if (fresh || !ident.profileAt || Date.now() - ident.profileAt > DAY) {
+                if (fresh || !ident.profileAt || Date.now() - ident.profileAt > profileMaxAge) {
                     try {
                         const rec = await ATP.getRecord(ident.pds, did, 'app.bsky.actor.profile', 'self');
-                        ident.name = (rec.value && rec.value.displayName) || null;
-                        ident.avatar = ATP.blobUrl(ident.pds, did, rec.value && rec.value.avatar);
+                        ATP.applyProfile(ident, did, rec.value);
                     } catch (e) {
                         if (e.status === 429) throw e;
                         // No profile record is fine; keep whatever we had.
@@ -1348,6 +1352,59 @@
                     ATP.persistSoon();
                 }
                 return ident;
+            },
+
+            applyProfile(ident, did, value) {
+                ident.name = (value && value.displayName) || null;
+                ident.avatar = ATP.blobUrl(ident.pds, did, value && value.avatar);
+                ident.profileAt = Date.now();
+                ATP.persistSoon();
+            },
+
+            // Posts fetched for reposts and quotes, by URI, so a post reposted
+            // by several people (or quoted after we've seen it) is fetched
+            // once. Holds promises so concurrent lookups share one request.
+            records: new Map(),
+
+            remember(recs) {
+                recs.forEach(r => ATP.records.set(r.uri, Promise.resolve(r)));
+                ATP.trimRecords();
+            },
+
+            getRecordCached(pds, did, collection, rkey) {
+                const uri = `at://${did}/${collection}/${rkey}`;
+                let pending = ATP.records.get(uri);
+                if (!pending) {
+                    pending = ATP.getRecord(pds, did, collection, rkey);
+                    pending.catch(() => ATP.records.delete(uri));
+                    ATP.records.set(uri, pending);
+                    ATP.trimRecords();
+                }
+                return pending;
+            },
+
+            trimRecords() {
+                while (ATP.records.size > 3000) ATP.records.delete(ATP.records.keys().next().value);
+            },
+
+            // A TID revision's timestamp in ms.
+            tidTime(tid) {
+                const alphabet = '234567abcdefghijklmnopqrstuvwxyz';
+                let n = 0n;
+                for (const ch of tid || '') {
+                    const v = alphabet.indexOf(ch);
+                    if (v < 0) return 0;
+                    n = (n << 5n) | BigInt(v);
+                }
+                return Number(n >> 10n) / 1000;
+            },
+
+            // Every record created or changed since revision `since`, in one
+            // request: { rev, records: [{ path, cid, value }] }. rev is null
+            // when nothing changed.
+            async getRepoDiff(pds, did, since) {
+                const res = await Net.response(`${pds}/xrpc/com.atproto.sync.getRepo?did=${encodeURIComponent(did)}&since=${encodeURIComponent(since)}`);
+                return Car.diffRecords(new Uint8Array(await res.arrayBuffer()));
             },
 
             getRecord(pds, did, collection, rkey) {
@@ -1374,6 +1431,171 @@
                     cursor = body.cursor;
                 }
                 return out;
+            }
+        };
+
+        // ============ CAR / DAG-CBOR ============
+        // Just enough of the atproto repo format to read a getRepo diff:
+        // a CAR file of blocks, each DAG-CBOR, keyed by CID. CIDs decode to
+        // { $link: 'bafy…' } and bytes to { $bytes: base64 }, matching the
+        // JSON the XRPC listing endpoints return.
+        const Car = {
+            B32: 'abcdefghijklmnopqrstuvwxyz234567',
+
+            base32(bytes) {
+                let out = '';
+                let bits = 0;
+                let value = 0;
+                for (const b of bytes) {
+                    value = (value << 8) | b;
+                    bits += 8;
+                    while (bits >= 5) {
+                        out += Car.B32[(value >>> (bits - 5)) & 31];
+                        bits -= 5;
+                    }
+                }
+                if (bits > 0) out += Car.B32[(value << (5 - bits)) & 31];
+                return out;
+            },
+
+            hex(bytes) {
+                let s = '';
+                for (const b of bytes) s += (b < 16 ? '0' : '') + b.toString(16);
+                return s;
+            },
+
+            varint(buf, pos) {
+                let value = 0;
+                let shift = 0;
+                for (;;) {
+                    const b = buf[pos++];
+                    value += (b & 0x7f) * Math.pow(2, shift);
+                    if (b < 0x80) return [value, pos];
+                    shift += 7;
+                }
+            },
+
+            // A binary CID at buf[pos]; returns [bytes, nextPos].
+            readCid(buf, pos) {
+                const start = pos;
+                let v;
+                [v, pos] = Car.varint(buf, pos);          // version
+                [v, pos] = Car.varint(buf, pos);          // codec
+                [v, pos] = Car.varint(buf, pos);          // multihash code
+                let len;
+                [len, pos] = Car.varint(buf, pos);        // digest length
+                pos += len;
+                return [buf.subarray(start, pos), pos];
+            },
+
+            decodeCbor(buf) {
+                const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+                const text = new TextDecoder();
+                let pos = 0;
+                const arg = (info) => {
+                    if (info < 24) return info;
+                    if (info === 24) return buf[pos++];
+                    if (info === 25) { const v = view.getUint16(pos); pos += 2; return v; }
+                    if (info === 26) { const v = view.getUint32(pos); pos += 4; return v; }
+                    if (info === 27) { const v = view.getUint32(pos) * 4294967296 + view.getUint32(pos + 4); pos += 8; return v; }
+                    throw new Error('Bad CBOR length');
+                };
+                const item = () => {
+                    const head = buf[pos++];
+                    const major = head >> 5;
+                    const info = head & 31;
+                    switch (major) {
+                        case 0: return arg(info);
+                        case 1: return -1 - arg(info);
+                        case 2: { const n = arg(info); const b = buf.subarray(pos, pos + n); pos += n; return { $bytes: b }; }
+                        case 3: { const n = arg(info); const s = text.decode(buf.subarray(pos, pos + n)); pos += n; return s; }
+                        case 4: { const n = arg(info); const a = []; for (let i = 0; i < n; i++) a.push(item()); return a; }
+                        case 5: { const n = arg(info); const o = {}; for (let i = 0; i < n; i++) { const k = item(); o[k] = item(); } return o; }
+                        case 6: {
+                            const tag = arg(info);
+                            const v = item();
+                            // Tag 42: a CID, with a leading 0x00 multibase byte.
+                            if (tag === 42 && v && v.$bytes) return { $cid: v.$bytes.subarray(1) };
+                            return v;
+                        }
+                        case 7:
+                            if (info === 20) return false;
+                            if (info === 21) return true;
+                            if (info === 22 || info === 23) return null;
+                            if (info === 25) { pos += 2; return 0; } // half floats don't occur in atproto
+                            if (info === 26) { const v = view.getFloat32(pos); pos += 4; return v; }
+                            if (info === 27) { const v = view.getFloat64(pos); pos += 8; return v; }
+                            throw new Error('Bad CBOR simple value');
+                        default:
+                            throw new Error('Bad CBOR');
+                    }
+                };
+                return item();
+            },
+
+            // Converts decoded CBOR to the JSON shape records have over XRPC.
+            toJson(v) {
+                if (Array.isArray(v)) return v.map(Car.toJson);
+                if (v && typeof v === 'object') {
+                    if (v.$cid) return { $link: 'b' + Car.base32(v.$cid) };
+                    if (v.$bytes) return { $bytes: btoa(String.fromCharCode(...v.$bytes)) };
+                    const o = {};
+                    Object.keys(v).forEach(k => { o[k] = Car.toJson(v[k]); });
+                    return o;
+                }
+                return v;
+            },
+
+            // -> { roots: [cidBytes], blocks: Map(hex -> bytes) }
+            parse(buf) {
+                let pos = 0;
+                let len;
+                [len, pos] = Car.varint(buf, pos);
+                const header = Car.decodeCbor(buf.subarray(pos, pos + len));
+                pos += len;
+                const blocks = new Map();
+                while (pos < buf.length) {
+                    [len, pos] = Car.varint(buf, pos);
+                    const end = pos + len;
+                    const [cid, dataStart] = Car.readCid(buf, pos);
+                    blocks.set(Car.hex(cid), buf.subarray(dataStart, end));
+                    pos = end;
+                }
+                return { roots: (header.roots || []).map(r => r.$cid), blocks };
+            },
+
+            // The records present in a repo diff. Walks the repo's Merkle
+            // Search Tree from the new commit, following only nodes the diff
+            // includes (unchanged subtrees are left out), and returns
+            // { rev, records: [{ path, cid, value }] } for every record whose
+            // block is in the diff, i.e. created or changed since `since`.
+            // Deletions don't appear in a diff.
+            diffRecords(buf) {
+                const { roots, blocks } = Car.parse(buf);
+                const get = (cid) => {
+                    const b = cid && blocks.get(Car.hex(cid));
+                    return b ? Car.decodeCbor(b) : null;
+                };
+                const commit = roots.length ? get(roots[0]) : null;
+                if (!commit) return { rev: null, records: [] };
+                const records = [];
+                const text = new TextDecoder();
+                const walk = (cid) => {
+                    const node = get(cid);
+                    if (!node) return;
+                    if (node.l) walk(node.l.$cid);
+                    let key = '';
+                    for (const e of node.e || []) {
+                        key = key.slice(0, e.p) + text.decode(e.k.$bytes);
+                        const block = blocks.get(Car.hex(e.v.$cid));
+                        if (block) {
+                            records.push({ path: key, cid: 'b' + Car.base32(e.v.$cid), value: Car.toJson(Car.decodeCbor(block)) });
+                        }
+                        if (e.t) walk(e.t.$cid);
+                    }
+                };
+                walk(commit.data.$cid);
+                return { rev: commit.rev, records };
             }
         };
 
@@ -1486,7 +1708,7 @@
             budget.quotes--;
             try {
                 const author = await ATP.author(did);
-                const rec = await ATP.getRecord(author.pds, did, collection, rkey);
+                const rec = await ATP.getRecordCached(author.pds, did, collection, rkey);
                 const v = rec.value || {};
                 return {
                     type: 'quote',
@@ -1540,7 +1762,7 @@
             if (subject.collection !== 'app.bsky.feed.post') return null;
             try {
                 const author = await ATP.author(subject.did);
-                const orig = await ATP.getRecord(author.pds, subject.did, subject.collection, subject.rkey);
+                const orig = await ATP.getRecordCached(author.pds, subject.did, subject.collection, subject.rkey);
                 const p = await bskyToPost(orig, subject.did, author, sourceId, budget);
                 return Object.assign(p, {
                     id: `bluesky:${rec.uri}`,
@@ -1654,6 +1876,88 @@
             return { user: parts[0], host: parts[1].toLowerCase() };
         }
 
+        function bskyPollResult(me, posts, cursor) {
+            return {
+                posts,
+                cursor,
+                endpoint: ATP.endpointFor(me),
+                profile: { handle: ATP.displayHandle(me), displayName: me.name, avatarUrl: me.avatar }
+            };
+        }
+
+        function newestRkey(recs, fallback) {
+            return recs.reduce((max, r) => {
+                const k = ATP.rkeyOf(r.uri);
+                return !max || k > max ? k : max;
+            }, fallback || null);
+        }
+
+        // Steady state: one request returns everything since the last-seen
+        // revision. An unchanged repo costs a ~60-byte response.
+        async function bskyPollDiff(source, did, me, cur, ctx, budget) {
+            const diff = await ATP.getRepoDiff(me.pds, did, cur.rev);
+            if (!diff.rev || diff.rev === cur.rev) return bskyPollResult(me, [], cur);
+            const recs = diff.records.map(r => ({ uri: `at://${did}/${r.path}`, cid: r.cid, value: r.value }));
+            const inCollection = (c) => recs
+                .filter(r => ATP.parseUri(r.uri).collection === c)
+                .sort((x, y) => (ATP.rkeyOf(y.uri) > ATP.rkeyOf(x.uri) ? 1 : -1));
+
+            const profileRec = recs.find(r => r.uri.endsWith('/app.bsky.actor.profile/self'));
+            if (profileRec) ATP.applyProfile(me, did, profileRec.value);
+
+            const postRecs = inCollection('app.bsky.feed.post');
+            ATP.remember(postRecs);
+            const posts = await Promise.all(postRecs
+                .filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff)
+                .map(r => bskyToPost(r, did, me, source.id, budget)));
+
+            // Hydrate the 20 newest reposts; a backlog beyond that is skipped.
+            const repostRecs = inCollection('app.bsky.feed.repost');
+            const reposts = await Promise.all(repostRecs
+                .filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff)
+                .slice(0, 20)
+                .map(r => bskyRepostToPost(r, source.id, budget)));
+
+            return bskyPollResult(me, posts.concat(reposts.filter(Boolean)), {
+                post: newestRkey(postRecs, cur.post),
+                repost: newestRkey(repostRecs, cur.repost),
+                rev: diff.rev
+            });
+        }
+
+        // First poll (or fallback): list recent posts and reposts, and note
+        // the current revision so later polls can ask for a diff.
+        async function bskyPollListings(source, did, me, cur, ctx, budget) {
+            const commit = await Net.json(`${me.pds}/xrpc/com.atproto.sync.getLatestCommit?did=${encodeURIComponent(did)}`);
+            const [postRecs, repostRecs] = await Promise.all([
+                ATP.listNew(me.pds, did, 'app.bsky.feed.post', cur.post, 25),
+                ATP.listNew(me.pds, did, 'app.bsky.feed.repost', cur.repost, 15)
+            ]);
+            ATP.remember(postRecs);
+
+            const posts = await Promise.all(postRecs
+                .filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff)
+                .map(r => bskyToPost(r, did, me, source.id, budget)));
+
+            // Each repost costs a lookup of the original, so take a bounded
+            // batch, oldest first, and resume from there next time.
+            const eligible = repostRecs.filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff);
+            const wanted = eligible.slice().reverse().slice(0, 12);
+            const reposts = await Promise.all(wanted.map(r => bskyRepostToPost(r, source.id, budget)));
+
+            let repostCursor = repostRecs.length ? ATP.rkeyOf(repostRecs[0].uri) : cur.repost;
+            const capped = eligible.length > wanted.length;
+            if (capped) repostCursor = ATP.rkeyOf(wanted[wanted.length - 1].uri);
+
+            return bskyPollResult(me, posts.concat(reposts.filter(Boolean)), {
+                post: newestRkey(postRecs, cur.post),
+                repost: repostCursor || null,
+                // No revision while reposts are still being worked through,
+                // so the next poll lists again instead of diffing past them.
+                rev: capped ? null : commit.rev
+            });
+        }
+
         const Services = {
             bluesky: {
                 id: 'bluesky',
@@ -1712,61 +2016,22 @@
 
                 async poll(source, ctx) {
                     const did = source.id.slice('bluesky:'.length);
-                    const me = await ATP.author(did, source.errorCount > 0);
                     const cur = (source.cursor && typeof source.cursor === 'object') ? source.cursor : {};
-                    const endpoint = ATP.endpointFor(me);
-                    const profile = { handle: ATP.displayHandle(me), displayName: me.name, avatarUrl: me.avatar };
-
-                    // The repo revision changes on every write (posts, likes,
-                    // follows). If it hasn't moved, nothing is new: one tiny
-                    // request instead of two listings. For people whose repo
-                    // changes on almost every check (heavy likers), the check is
-                    // a wasted request, so it's skipped after 3 misses in a row
-                    // and retried once a poll finds nothing new.
-                    const misses = cur.revMisses || 0;
-                    let rev = null;
-                    if (misses < 3) {
-                        const commit = await Net.json(`${me.pds}/xrpc/com.atproto.sync.getLatestCommit?did=${encodeURIComponent(did)}`);
-                        if (cur.rev && commit.rev === cur.rev) {
-                            return { posts: [], cursor: Object.assign({}, cur, { revMisses: 0 }), endpoint, profile };
-                        }
-                        rev = commit.rev;
-                    }
-
+                    // After the first poll, one getRepo diff per check covers
+                    // posts, reposts, and profile changes. Very old revisions
+                    // fall back to listings, which stay bounded in size.
+                    const useDiff = cur.rev && Date.now() - ATP.tidTime(cur.rev) < 2 * DAY;
+                    const me = await ATP.author(did, source.errorCount > 0, useDiff ? Infinity : DAY);
                     const budget = { quotes: 8 };
-                    const [postRecs, repostRecs] = await Promise.all([
-                        ATP.listNew(me.pds, did, 'app.bsky.feed.post', cur.post, 25),
-                        ATP.listNew(me.pds, did, 'app.bsky.feed.repost', cur.repost, 15)
-                    ]);
-
-                    const posts = await Promise.all(postRecs
-                        .filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff)
-                        .map(r => bskyToPost(r, did, me, source.id, budget)));
-
-                    // Each repost costs a lookup of the original, so take a
-                    // bounded batch, oldest first, and resume from there next time.
-                    const eligible = repostRecs.filter(r => toIso(r.value && r.value.createdAt) >= ctx.cutoff);
-                    const wanted = eligible.slice().reverse().slice(0, 12);
-                    const reposts = await Promise.all(wanted.map(r => bskyRepostToPost(r, source.id, budget)));
-
-                    const newestPost = postRecs.length ? ATP.rkeyOf(postRecs[0].uri) : cur.post;
-                    let repostCursor = repostRecs.length ? ATP.rkeyOf(repostRecs[0].uri) : cur.repost;
-                    const capped = eligible.length > wanted.length;
-                    if (capped) repostCursor = ATP.rkeyOf(wanted[wanted.length - 1].uri);
-
-                    return {
-                        posts: posts.concat(reposts.filter(Boolean)),
-                        // Leave rev unset while reposts are still being worked through,
-                        // so the next poll doesn't skip them.
-                        cursor: {
-                            post: newestPost || null,
-                            repost: repostCursor || null,
-                            rev: capped ? null : rev,
-                            revMisses: misses < 3 ? (cur.rev ? misses + 1 : 0) : (postRecs.length || repostRecs.length ? misses : 0)
-                        },
-                        endpoint,
-                        profile
-                    };
+                    if (useDiff) {
+                        try {
+                            return await bskyPollDiff(source, did, me, cur, ctx, budget);
+                        } catch (e) {
+                            if (e.status === 429) throw e;
+                            // E.g. a revision the server no longer knows: list instead.
+                        }
+                    }
+                    return bskyPollListings(source, did, me, cur, ctx, budget);
                 },
 
                 // Self-hosted PDSes are small enough that one listRepos call
@@ -2600,6 +2865,7 @@
                 if (toIso(c.record.createdAt) < cutoff) return;
 
                 const rec = { uri, cid: c.cid, value: c.record };
+                if (c.collection === 'app.bsky.feed.post') ATP.remember([rec]);
                 const budget = { quotes: 2 };
                 const post = c.collection === 'app.bsky.feed.post'
                     ? await bskyToPost(rec, ev.did, await ATP.author(ev.did), sourceId, budget)
@@ -2667,6 +2933,18 @@
             repost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>',
             reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>'
         };
+
+        // Small service marks. In posts they're muted (just provenance); in
+        // account lists they carry the service's color.
+        const SERVICE_ICONS = {
+            bluesky: '<svg viewBox="0 0 600 530" fill="currentColor"><path d="m135.72 44.03c66.496 49.921 138.02 151.14 164.28 205.46 26.262-54.316 97.782-155.54 164.28-205.46 47.98-36.021 125.72-63.892 125.72 24.795 0 17.712-10.155 148.79-16.111 170.07-20.703 73.984-96.144 92.854-163.25 81.433 117.3 19.964 147.14 86.092 82.697 152.22-122.39 125.59-175.91-31.511-189.63-71.766-2.514-7.3797-3.6904-10.832-3.7077-7.8964-0.0174-2.9357-1.1937 0.51669-3.7077 7.8964-13.714 40.255-67.233 197.36-189.63 71.766-64.444-66.128-34.605-132.26 82.697-152.22-67.108 11.421-142.55-7.4491-163.25-81.433-5.9562-21.282-16.111-152.36-16.111-170.07 0-88.687 77.742-60.816 125.72-24.795z"/></svg>',
+            mastodon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-7l-4 4v-4H5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"/><path d="M8 13.5V9.75a1.75 1.75 0 0 1 3.5 0v3.75M11.5 9.75a1.75 1.75 0 0 1 3.5 0v3.75"/></svg>'
+        };
+
+        function svcIcon(service, extra) {
+            const svc = Services[service];
+            return `<span class="svc-icon ${escapeHtml(service)} ${extra || ''}" title="${escapeHtml(svc ? svc.label : service)}">${SERVICE_ICONS[service] || ''}</span>`;
+        }
 
         function avatarHtml(url, name, href, cls) {
             const initial = escapeHtml(((name || '?').trim()[0] || '?').toUpperCase());
@@ -2765,7 +3043,7 @@
                         <div class="post-head">
                             <a class="post-author" href="${escapeHtml(safeUrl(post.authorUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(name)}</a>
                             <span class="post-handle">${post.authorHandle ? `@${escapeHtml(post.authorHandle)}` : ''}</span>
-                            <span class="svc-dot ${escapeHtml(post.service)}" title="${escapeHtml(svc ? svc.label : post.service)}"></span>
+                            ${svcIcon(post.service, 'muted')}
                             <a class="post-time" href="${escapeHtml(safeUrl(post.url))}" target="_blank" rel="noopener noreferrer" data-time="${escapeHtml(post.sortAt)}" title="${escapeHtml(new Date(post.publishedAt).toLocaleString())}">${relativeTime(post.sortAt)}</a>
                         </div>
                         ${wrapped}
@@ -3004,7 +3282,7 @@
                 const picker = document.getElementById('service-picker');
                 picker.innerHTML = Object.values(Services).map(s =>
                     `<button type="button" data-service="${s.id}" class="${s.id === App.addService ? 'active' : ''}">
-                        <span class="svc-dot ${s.id}"></span>${escapeHtml(s.label)}
+                        ${svcIcon(s.id)}${escapeHtml(s.label)}
                     </button>`).join('');
                 document.getElementById('account-handle').placeholder = Services[App.addService].placeholder;
 
@@ -3024,7 +3302,7 @@
                         : `${pluralize(a.followsCount, 'follow')} · ${a.followsSyncedAt ? `synced ${relativeTime(a.followsSyncedAt)} ago`.replace('now ago', 'just now') : 'not synced'}`;
                     return `<div class="item-card" data-id="${a.id}">
                         <div class="item-main">
-                            <div class="item-title"><span class="svc-dot ${escapeHtml(a.service)}" title="${escapeHtml(svc ? svc.label : a.service)}"></span><span style="overflow:hidden;text-overflow:ellipsis;">@${escapeHtml(a.handle)}</span></div>
+                            <div class="item-title">${svcIcon(a.service)}<span style="overflow:hidden;text-overflow:ellipsis;">@${escapeHtml(a.handle)}</span></div>
                             <div class="item-meta">${escapeHtml(meta)}</div>
                         </div>
                         <div class="item-actions">
@@ -3077,7 +3355,7 @@
                     return `<div class="item-card">
                         ${avatarHtml(s.avatarUrl, name, s.profileUrl)}
                         <div class="item-main">
-                            <div class="item-title"><span class="svc-dot ${escapeHtml(s.service)}"></span><span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</span>${via}</div>
+                            <div class="item-title">${svcIcon(s.service)}<span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</span>${via}</div>
                             ${unnamed
                                 ? `<div class="item-meta" title="${escapeHtml(s.id)}">Name and handle load on first check</div>`
                                 : `<div class="item-meta">${s.handle ? `@${escapeHtml(s.handle)} · ` : ''}${escapeHtml(host || '')}</div>`}
@@ -3101,7 +3379,7 @@
                 if (App.accounts.length < 2) { container.innerHTML = ''; return; }
                 container.innerHTML = `<button class="chip ${App.filter.accountId ? '' : 'active'}" data-account="">Everyone</button>` +
                     App.accounts.map(a => `<button class="chip ${App.filter.accountId === a.id ? 'active' : ''}" data-account="${a.id}">
-                        <span class="svc-dot ${escapeHtml(a.service)}"></span>@${escapeHtml(a.handle)}
+                        ${svcIcon(a.service)}@${escapeHtml(a.handle)}
                     </button>`).join('');
             },
 
