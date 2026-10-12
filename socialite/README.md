@@ -134,9 +134,14 @@ color in the CSS for the new service.
   cursor resuming after the last one handled; 8 quote lookups, after which a
   quote renders as a plain link). Strangers' identities are cached in
   `localStorage` (`socialite_atp_cache`, most recent 2,000).
-- **Images, video, and avatars** load straight from the PDS with
-  `com.atproto.sync.getBlob`, not the Bluesky CDN. They're full-size originals,
-  so they're lazy-loaded.
+- **Images and avatars** are stored as `getBlob` URLs on the author's PDS (the
+  full-size original). By default (Settings → **Lighter images**), `imageUrl()`
+  shows them through Bluesky's image CDN at the size needed instead:
+  `avatar_thumbnail` (a 256 KB avatar becomes ~2 KB), `feed_thumbnail`, and
+  `feed_fullsize` when you tap through. That's much less data, decoding, and
+  battery for you, and less load on people's PDSes. It's a rewrite at render
+  time, so turning the setting off shows the originals again. Video always
+  comes from the PDS (`preload="none"`).
 - Web links (post timestamps, mentions, hashtags) point at `bsky.app`.
 
 ### Mastodon
@@ -245,6 +250,18 @@ previous leader's cursors instead of redoing work.
 
 This only coordinates tabs in one browser. Two *devices* still poll
 independently (see Known Limits).
+
+## Battery
+
+- **Background pause:** a minute after the app is hidden, all fetching stops
+  (polling, batch checks, and the realtime stream) via `Leader.sleep()`.
+  Returning calls `Leader.wake()` and pulls overdue people forward.
+- **Lighter images** (above) is the biggest saving per screen of posts.
+- **Minimal redrawing:** the status line redraws only when its text changes,
+  and the refresh icon spins only briefly after a tap, rather than animating
+  for as long as anything is fetching.
+- **Fewer writes:** the diagnostics heartbeat writes to `localStorage` every
+  5s, not every second.
 
 ## Measuring Load
 
@@ -403,8 +420,8 @@ Socialite is an experiment, so here's an honest accounting.
   be verified from a browser (CORS).
 - **Browser constraints.** Everything depends on servers keeping permissive
   CORS. There's no background polling, and mobile browsers suspend tabs.
-  Full-size images come straight from PDSes, which costs those servers more
-  bandwidth than the CDN would.
+  Images default to Bluesky's image CDN (a shared service) for size and
+  battery. Turning that off reads full-size originals from each PDS.
 - **Deletes and edits.** Without streaming, a deleted post stays in your
   database until retention prunes it.
 

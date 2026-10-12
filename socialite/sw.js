@@ -1,4 +1,4 @@
-const CACHE_NAME = 'socialite-v13';
+const CACHE_NAME = 'socialite-v14';
 const AYB_CLIENT = 'https://cdn.jsdelivr.net/npm/@aybdb/client@0.1.0/ayb.min.js';
 const ASSETS = [
     './',

@@ -809,6 +809,13 @@
                 </div>
                 <button class="switch" id="setting-realtime" role="switch" aria-label="Realtime Bluesky"></button>
             </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Lighter images</div>
+                    <div class="setting-sub">Show Bluesky images resized by Bluesky's image CDN instead of full-size originals from each person's server. Much less data and battery.</div>
+                </div>
+                <button class="switch" id="setting-cdn" role="switch" aria-label="Lighter images"></button>
+            </div>
             <div class="setting-row" style="border-bottom:none;">
                 <div>
                     <div class="setting-label">Keep posts for</div>
@@ -835,7 +842,7 @@
         const APP_NAME = 'socialite';
         // Shown in Settings so you can tell which version a device runs.
         // Keep in step with CACHE_NAME in sw.js.
-        const BUILD = 13;
+        const BUILD = 14;
         const MINUTE = 60 * 1000;
         const HOUR = 60 * MINUTE;
         const DAY = 24 * HOUR;
@@ -1131,7 +1138,10 @@
                 const gap = now - Diag.lastTick - 1000;
                 Diag.lastTick = now;
                 if (gap > 3000 && !document.hidden) Diag.log('stall', `Page unresponsive for ${(gap / 1000).toFixed(1)}s (${Diag.state()})`);
-                Diag.beat(false);
+                if (now - (Diag.lastBeat || 0) >= 5000) {
+                    Diag.lastBeat = now;
+                    Diag.beat(false);
+                }
             },
 
             // Runs a synchronous step with a breadcrumb for the heartbeat.
@@ -2969,7 +2979,7 @@
             },
 
             enabled() {
-                return !!(App.settings.realtime && ayb && Leader.isLeader && !App.safeMode);
+                return !!(App.settings.realtime && ayb && Leader.isLeader && !Leader.sleeping && !App.safeMode);
             },
 
             covers(source) {
@@ -3150,7 +3160,27 @@
                     });
                 }
                 Leader.booted = true;
+                Leader.sleeping = false;
                 if (!Leader.isLeader) return; // lost it again while reloading
+                Poller.start();
+                Live.sync();
+                App.renderStatus();
+            },
+
+            sleeping: false,
+            sleepTimer: null,
+
+            sleep() {
+                if (!Leader.isLeader || !document.hidden) return;
+                Leader.sleeping = true;
+                Poller.stop();
+                Live.close();
+                if (Poller.flushTimer) { clearTimeout(Poller.flushTimer); Poller.flush(); }
+            },
+
+            wake() {
+                if (!Leader.sleeping) return;
+                Leader.sleeping = false;
                 Poller.start();
                 Live.sync();
                 App.renderStatus();
@@ -3167,7 +3197,7 @@
         };
 
         // ============ Settings ============
-        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, retentionDays: 30, realtime: false };
+        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, retentionDays: 30, realtime: false, cdnImages: true };
 
         function getSettings() {
             const saved = parseJson(localStorage.getItem(`${APP_NAME}_settings`), {});
@@ -3196,9 +3226,21 @@
             return `<span class="svc-icon ${escapeHtml(service)} ${extra || ''}" title="${escapeHtml(svc ? svc.label : service)}">${SERVICE_ICONS[service] || ''}</span>`;
         }
 
+        // Bluesky images are stored as getBlob URLs on the author's PDS: the
+        // full-size original (a 256 KB avatar shown at 40px). With the
+        // "Lighter images" setting on (the default), they're shown through
+        // Bluesky's image CDN in the size needed instead (a ~2 KB avatar).
+        // Less decoding, data and battery for you, less load on people's PDSes.
+        function imageUrl(url, kind) {
+            if (!url || !App.settings || !App.settings.cdnImages) return url;
+            const m = /\/xrpc\/com\.atproto\.sync\.getBlob\?did=([^&]+)&cid=([^&]+)/.exec(url);
+            if (!m) return url;
+            return `https://cdn.bsky.app/img/${kind}/plain/${decodeURIComponent(m[1])}/${decodeURIComponent(m[2])}@jpeg`;
+        }
+
         function avatarHtml(url, name, href, cls) {
             const initial = escapeHtml(((name || '?').trim()[0] || '?').toUpperCase());
-            const src = safeUrl(url);
+            const src = safeUrl(imageUrl(url, 'avatar_thumbnail'));
             const img = src ? `<img src="${escapeHtml(src)}" alt="" loading="lazy">` : '';
             const tag = href ? `a href="${escapeHtml(safeUrl(href))}" target="_blank" rel="noopener noreferrer"` : 'span';
             return `<${tag} class="avatar ${cls || ''}">${initial}${img}</${href ? 'a' : 'span'}>`;
@@ -3216,8 +3258,9 @@
                 }
                 if (m.type === 'gifv') return `<video src="${url}" autoplay loop muted playsinline aria-label="${alt}"></video>`;
                 if (m.type === 'audio') return `<audio src="${url}" controls preload="none"></audio>`;
-                const thumb = escapeHtml(safeUrl(m.thumb) || safeUrl(m.url));
-                return `<a href="${url}" target="_blank" rel="noopener noreferrer"><img src="${thumb}" alt="${alt}" title="${alt}" loading="lazy"></a>`;
+                const thumb = escapeHtml(safeUrl(imageUrl(m.thumb || m.url, 'feed_thumbnail')));
+                const full = escapeHtml(safeUrl(imageUrl(m.url, 'feed_fullsize')));
+                return `<a href="${full}" target="_blank" rel="noopener noreferrer"><img src="${thumb}" alt="${alt}" title="${alt}" loading="lazy" decoding="async"></a>`;
             }).join('');
             const n = Math.min(media.length, 4);
             return `<div class="post-media n${n}">${items}</div>`;
@@ -3228,7 +3271,8 @@
             if (embed.type === 'link') {
                 const url = safeUrl(embed.url);
                 if (!url) return '';
-                const img = safeUrl(embed.image) ? `<img src="${escapeHtml(safeUrl(embed.image))}" alt="" loading="lazy">` : '';
+                const cardImage = safeUrl(imageUrl(embed.image, 'feed_thumbnail'));
+                const img = cardImage ? `<img src="${escapeHtml(cardImage)}" alt="" loading="lazy" decoding="async">` : '';
                 return `<a class="link-card" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
                     ${img}
                     <div class="link-card-body">
@@ -3706,10 +3750,15 @@
                     if (checked < ids.length) parts.push(`${checked.toLocaleString()} checked`);
                     if (!Poller.active && checked === ids.length && !Live.connected) parts.push('up to date');
                 }
-                el.innerHTML = escapeHtml(parts.join(' · ')) +
+                if (Leader.sleeping) parts.push('paused in background');
+                const html = escapeHtml(parts.join(' · ')) +
                     (Leader.isLeader && Poller.active ? ` · <a class="status-link" data-nav="#sources">${Poller.active} fetching</a>` : '') +
                     (errors ? ` · <a data-nav="#sources">${errors} unreachable</a>` : '');
-                document.getElementById('refresh-btn').classList.toggle('spinning', Poller.active > 0);
+                // This runs every second; only touch the DOM when it changed.
+                if (html !== App.lastStatusHtml) {
+                    App.lastStatusHtml = html;
+                    el.innerHTML = html;
+                }
             },
 
             stampArrivals(posts, catchUp) {
@@ -3879,6 +3928,11 @@
             },
 
             refreshNow() {
+                // A brief spin as feedback; a spinner running for as long as
+                // anything is fetching kept the screen redrawing nonstop.
+                const btn = document.getElementById('refresh-btn');
+                btn.classList.add('spinning');
+                setTimeout(() => btn.classList.remove('spinning'), 1200);
                 // Re-check people not checked in the last two minutes.
                 const recent = Date.now() - 2 * MINUTE;
                 let n = 0;
@@ -3901,6 +3955,7 @@
                 document.getElementById('setting-retention').value = String(App.settings.retentionDays);
                 document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
                 document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
+                document.getElementById('setting-cdn').classList.toggle('on', !!App.settings.cdnImages);
                 document.getElementById('build-label').textContent = `Build ${BUILD}`;
                 App.showModal('settings-modal');
             },
@@ -3910,7 +3965,9 @@
                 saveSettings(App.settings);
                 document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
                 document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
+                document.getElementById('setting-cdn').classList.toggle('on', !!App.settings.cdnImages);
                 if (key === 'realtime') { Live.sync(); App.renderStatus(); }
+                if (key === 'cdnImages') App.reloadFeed();
                 if (key === 'replies' || key === 'showReposts') App.reloadFeed();
                 if (key === 'retentionDays') Store.prunePosts(value).then(() => App.reloadFeed());
             },
@@ -4049,6 +4106,7 @@
         document.getElementById('setting-retention').addEventListener('change', (e) => App.updateSetting('retentionDays', parseInt(e.target.value, 10)));
         document.getElementById('setting-reposts').addEventListener('click', () => App.updateSetting('showReposts', !App.settings.showReposts));
         document.getElementById('setting-realtime').addEventListener('click', () => App.updateSetting('realtime', !App.settings.realtime));
+        document.getElementById('setting-cdn').addEventListener('click', () => App.updateSetting('cdnImages', !App.settings.cdnImages));
         document.getElementById('disconnect-btn').addEventListener('click', () => {
             App.hideModal('settings-modal');
             App.disconnect();
@@ -4083,11 +4141,23 @@
                 && !document.getElementById('sources-search').value) App.renderSources();
         }, MINUTE);
 
-        // Hidden tabs poll a quarter as often; catch up on return.
+        // A minute after the app goes to the background, all fetching stops
+        // (polling and the realtime stream); coming back catches up.
+        // "As long as the app is open" means while you're looking at it.
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden || !ayb) return;
-            if (Leader.isLeader) Poller.catchUp();
-            else Leader.takeOver();
+            if (!ayb || App.safeMode) return;
+            if (document.hidden) {
+                clearTimeout(Leader.sleepTimer);
+                Leader.sleepTimer = setTimeout(() => Leader.sleep(), MINUTE);
+                return;
+            }
+            clearTimeout(Leader.sleepTimer);
+            if (Leader.isLeader) {
+                Leader.wake();
+                Poller.catchUp();
+            } else {
+                Leader.takeOver();
+            }
         });
 
         // Tabs that aren't polling still pick up what the polling tab saves.
