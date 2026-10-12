@@ -1068,6 +1068,18 @@
             }
         }
 
+        class StalledError extends Error {}
+
+        // Rejects with StalledError if `promise` hasn't settled within `ms`,
+        // so one hung request can't hold a polling slot forever.
+        function withDeadline(promise, ms, label) {
+            let timer;
+            const deadline = new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new StalledError(`${label} took too long`)), ms);
+            });
+            return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+        }
+
         const Net = {
             hosts: new Map(),
             maxPerHost: 2,
@@ -1145,6 +1157,10 @@
                 await this.acquire(host);
                 this.log.push(Date.now());
                 const ctrl = new AbortController();
+                // The timer keeps running after headers arrive: aborting also
+                // cancels a body read that stalls (a suspended iOS tab, a
+                // network change), which would otherwise hang forever. Read
+                // bodies with Net.read() to get a readable error.
                 const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
                 try {
                     // 'no-cache' lets the browser revalidate with the ETag it has
@@ -1153,12 +1169,24 @@
                     this.noteRateLimit(host, res);
                     return res;
                 } catch (e) {
+                    clearTimeout(timer);
                     if (e.name === 'AbortError') throw new Error(`Timed out reaching ${host}`);
                     // CORS refusals and DNS failures both surface as TypeError.
                     throw new Error(`Couldn't reach ${host}`);
                 } finally {
-                    clearTimeout(timer);
                     this.release(host);
+                }
+            },
+
+            // res.json() / .text() / .arrayBuffer(), with a timed-out body read
+            // reported as such.
+            async read(res, kind) {
+                try {
+                    return await res[kind]();
+                } catch (e) {
+                    const host = hostOf(res.url) || 'server';
+                    if (e.name === 'AbortError') throw new Error(`Timed out reading from ${host}`);
+                    throw new Error(`Bad response from ${host}`);
                 }
             },
 
@@ -1177,7 +1205,7 @@
 
             async json(url, init) {
                 const res = await this.response(url, init);
-                return res.json();
+                return this.read(res, 'json');
             }
         };
 
@@ -1256,7 +1284,7 @@
                     if (!dnsChecked) throw new Error(`Couldn't check ${handle}`);
                     return null;
                 }
-                const text = (await res.text()).trim();
+                const text = (await Net.read(res, 'text')).trim();
                 return text.startsWith('did:') ? text : null;
             },
 
@@ -1404,7 +1432,7 @@
             // when nothing changed.
             async getRepoDiff(pds, did, since) {
                 const res = await Net.response(`${pds}/xrpc/com.atproto.sync.getRepo?did=${encodeURIComponent(did)}&since=${encodeURIComponent(since)}`);
-                return Car.diffRecords(new Uint8Array(await res.arrayBuffer()));
+                return Car.diffRecords(new Uint8Array(await Net.read(res, 'arrayBuffer')));
             },
 
             getRecord(pds, did, collection, rkey) {
@@ -2079,7 +2107,7 @@
                     let url = `https://${host}/api/v1/accounts/${encodeURIComponent(accountId)}/following?limit=80`;
                     for (let page = 0; url && page < 200; page++) {
                         const res = await Net.response(url);
-                        const list = await res.json();
+                        const list = await Net.read(res, 'json');
                         list.forEach(a => {
                             const full = mastoAcct(a.acct, host);
                             const profileHost = hostOf(a.url) || host;
@@ -2523,7 +2551,7 @@
                 const catchUp = !source.lastPolledAt || App.catchUpIds.has(source.id);
                 const ctx = { cutoff: new Date(Date.now() - App.settings.retentionDays * DAY).toISOString() };
                 try {
-                    const res = await adapter.poll(source, ctx);
+                    const res = await withDeadline(adapter.poll(source, ctx), 2 * MINUTE, 'Checking');
                     if (res.endpoint) source.endpoint = res.endpoint;
                     if (res.cursor !== undefined) source.cursor = res.cursor;
                     if (res.profile) {
@@ -2545,6 +2573,9 @@
                     if (e.status === 429 && host) {
                         // The server's budget, not this person's fault.
                         source.nextPollAt = Math.max(Net.blockedUntil(host), Date.now() + MINUTE) + Math.random() * MINUTE;
+                    } else if (e instanceof StalledError) {
+                        // Usually a tab that was suspended mid-poll; just try again soon.
+                        source.nextPollAt = Date.now() + 2 * MINUTE + Math.random() * MINUTE;
                     } else {
                         source.errorCount = (source.errorCount || 0) + 1;
                         source.error = e.message || String(e);
@@ -2685,7 +2716,7 @@
                 try {
                     const sources = Array.from(f.ids).map(id => App.sources.get(id)).filter(Boolean);
                     const ctx = { cutoff: new Date(Date.now() - App.settings.retentionDays * DAY).toISOString() };
-                    const res = await Services[f.service].hostFeed.poll(f, sources, ctx);
+                    const res = await withDeadline(Services[f.service].hostFeed.poll(f, sources, ctx), 2 * MINUTE, 'Batch check');
                     // The first run this session only catches up.
                     App.stampArrivals(res.posts || [], !f.ranThisSession);
                     f.ranThisSession = true;
@@ -2718,6 +2749,8 @@
                 } catch (e) {
                     if (e.status === 429) {
                         retryAfter = Net.blockedUntil(hostOf(f.host) || f.host);
+                    } else if (e instanceof StalledError) {
+                        // Try again on the normal schedule.
                     } else if (e.status >= 400 && e.status < 500) {
                         f.status = 'unavailable';
                         f.reason = e.message;
