@@ -23,7 +23,8 @@ See [README.md](./README.md) for the full developer guide including:
 ## Critical Reminders
 
 - **Always bump `CACHE_NAME` in `sw.js` after any change to `index.html`** or
-  users won't see updates.
+  users won't see updates. Bump `BUILD` in `index.html` to the same number; it's
+  shown in Settings and on the Following screen.
 - The service worker must **never** cache cross-origin data requests (PDSes,
   Mastodon servers); only the app shell and the ayb client script.
 - Use `sqlVal()` (wraps `AybClient.escapeSQL`) for every SQL literal.

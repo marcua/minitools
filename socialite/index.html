@@ -189,6 +189,7 @@
             min-height: 1.1em;
         }
         .status-bar a { color: var(--danger); cursor: pointer; text-decoration: none; }
+        .status-bar a.status-link { color: var(--ink-muted); text-decoration: underline dotted; }
         .status-bar a:hover { text-decoration: underline; }
 
         .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
@@ -487,6 +488,13 @@
 
         .tag.live { color: var(--signal); border-color: var(--signal-medium); background: var(--signal-light); }
 
+        .panel.now { margin: 0 0 12px; padding: 10px 12px; }
+        .now-title { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: 4px; }
+        .now-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.82rem; color: var(--ink-secondary); padding: 2px 0; }
+        .now-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .now-row span:last-child { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-muted); white-space: nowrap; flex: none; }
+        .now-row.warn span:last-child { color: var(--warm); }
+
         .panel {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -740,6 +748,7 @@
                 Accounts
             </button>
             <div class="page-header"><h1>Following</h1></div>
+            <div id="sources-now"></div>
             <div class="section-label" id="sources-summary"></div>
             <input type="search" id="sources-search" placeholder="Filter by name or handle" autocomplete="off">
             <div id="source-list" class="card-list"></div>
@@ -815,6 +824,7 @@
                 <button class="btn btn-secondary" id="disconnect-btn">Disconnect database</button>
                 <button class="btn" id="settings-close">Close</button>
             </div>
+            <div class="setting-sub" style="text-align:center;margin-top:12px;" id="build-label"></div>
         </div>
     </div>
 
@@ -822,6 +832,9 @@
     <script>
         // ============ Configuration ============
         const APP_NAME = 'socialite';
+        // Shown in Settings so you can tell which version a device runs.
+        // Keep in step with CACHE_NAME in sw.js.
+        const BUILD = 12;
         const MINUTE = 60 * 1000;
         const HOUR = 60 * MINUTE;
         const DAY = 24 * HOUR;
@@ -1100,14 +1113,27 @@
                 return this.state(host).blockedUntil;
             },
 
+            // Waits for a slot on `host`. If the host has asked us to back off
+            // for more than a few seconds, fails right away with a 429 instead
+            // of holding a polling slot; the poller reschedules for after the
+            // back-off.
             acquire(host) {
-                return new Promise(resolve => {
+                const st = this.state(host);
+                st.waiting = (st.waiting || 0) + 1;
+                return new Promise((resolve, reject) => {
                     const attempt = () => {
-                        const st = this.state(host);
                         const now = Date.now();
+                        if (st.blockedUntil - now > 5000) {
+                            st.waiting--;
+                            const err = new HttpError(429, `${host} asked us to wait until ${new Date(st.blockedUntil).toLocaleTimeString()}`);
+                            err.host = host;
+                            reject(err);
+                            return;
+                        }
                         const readyAt = Math.max(st.nextAt, st.blockedUntil);
                         if (st.active < this.maxPerHost && now >= readyAt) {
                             st.active++;
+                            st.waiting--;
                             st.nextAt = now + this.minGapMs;
                             resolve();
                         } else {
@@ -1198,7 +1224,9 @@
                         const body = await res.json();
                         message = body.message || body.error || '';
                     } catch (e) { /* not JSON */ }
-                    throw new HttpError(res.status, `${res.status} from ${new URL(url).host}${message ? `: ${message}` : ''}`);
+                    const err = new HttpError(res.status, `${res.status} from ${new URL(url).host}${message ? `: ${message}` : ''}`);
+                    err.host = new URL(url).host;
+                    throw err;
                 }
                 return res;
             },
@@ -2466,6 +2494,7 @@
             active: 0,
             maxActive: 6,
             inflight: new Set(),
+            inflightMeta: new Map(),
             pendingPosts: [],
             pendingDeletes: [],
             dirtySources: new Set(),
@@ -2543,6 +2572,7 @@
 
             async pollSource(source, adapter) {
                 Poller.inflight.add(source.id);
+                Poller.inflightMeta.set(source.id, { start: Date.now(), host: adapter.pollHost(source) });
                 Poller.active++;
                 // A first-ever poll is backfill, and the first poll of people
                 // who were already due when the app opened is catch-up. Both
@@ -2570,9 +2600,10 @@
                     Poller.pendingPosts.push(...res.posts);
                 } catch (e) {
                     const host = adapter.pollHost(source);
-                    if (e.status === 429 && host) {
-                        // The server's budget, not this person's fault.
-                        source.nextPollAt = Math.max(Net.blockedUntil(host), Date.now() + MINUTE) + Math.random() * MINUTE;
+                    if (e.status === 429) {
+                        // The server's budget, not this person's fault. Wait out
+                        // whichever server said so (not always their own).
+                        source.nextPollAt = Math.max(Net.blockedUntil(e.host || host || ''), Date.now() + MINUTE) + Math.random() * MINUTE;
                     } else if (e instanceof StalledError) {
                         // Usually a tab that was suspended mid-poll; just try again soon.
                         source.nextPollAt = Date.now() + 2 * MINUTE + Math.random() * MINUTE;
@@ -2584,6 +2615,7 @@
                 } finally {
                     source.lastPolledAt = new Date().toISOString();
                     Poller.inflight.delete(source.id);
+                    Poller.inflightMeta.delete(source.id);
                     App.catchUpIds.delete(source.id);
                     Poller.active--;
                     Poller.dirtySources.add(source.id);
@@ -3391,7 +3423,39 @@
             },
 
             // ---------- Sources ----------
+            // What the poller is doing this moment: every in-flight check, and
+            // every server we're waiting on. Refreshes every 2s.
+            renderNow() {
+                const el = document.getElementById('sources-now');
+                if (!Leader.isLeader) {
+                    el.innerHTML = `<div class="panel now"><div class="now-title">Right now</div><div class="item-meta">Another tab is fetching; open this screen there.</div></div>`;
+                    return;
+                }
+                const now = Date.now();
+                const rows = Array.from(Poller.inflightMeta.entries())
+                    .sort((a, b) => a[1].start - b[1].start)
+                    .map(([id, m]) => {
+                        const s = App.sources.get(id);
+                        const secs = Math.round((now - m.start) / 1000);
+                        return `<div class="now-row"><span>${escapeHtml(s ? sourceName(s) : id)}</span><span>${escapeHtml(m.host || '')} · ${secs}s</span></div>`;
+                    });
+                HostFeeds.feeds.forEach(f => {
+                    if (f.running) rows.push(`<div class="now-row"><span>Batch: ${f.ids.size} people</span><span>${escapeHtml(hostOf(f.host) || f.host)}</span></div>`);
+                });
+                const waits = [];
+                Net.hosts.forEach((st, host) => {
+                    if (st.blockedUntil > now) waits.push(`<div class="now-row warn"><span>${escapeHtml(host)}</span><span>backing off ${relativeFuture(st.blockedUntil)}</span></div>`);
+                    else if (st.waiting > 0) waits.push(`<div class="now-row"><span>${escapeHtml(host)}</span><span>${st.waiting} queued</span></div>`);
+                });
+                el.innerHTML = `<div class="panel now">
+                    <div class="now-title">Right now · build ${BUILD}</div>
+                    ${rows.length ? rows.join('') : '<div class="item-meta">Nothing being checked.</div>'}
+                    ${waits.length ? `<div class="now-title" style="margin-top:8px">Servers</div>${waits.join('')}` : ''}
+                </div>`;
+            },
+
             renderSources() {
+                App.renderNow();
                 const q = document.getElementById('sources-search').value.trim().toLowerCase();
                 const all = Array.from(App.followed).map(id => App.sources.get(id)).filter(Boolean);
                 const errors = all.filter(s => s.errorCount > 0).length;
@@ -3482,10 +3546,10 @@
                 } else {
                     if (Live.connected) parts.push('● live');
                     if (checked < ids.length) parts.push(`${checked.toLocaleString()} checked`);
-                    if (Poller.active) parts.push(`${Poller.active} fetching`);
-                    else if (checked === ids.length && !Live.connected) parts.push('up to date');
+                    if (!Poller.active && checked === ids.length && !Live.connected) parts.push('up to date');
                 }
                 el.innerHTML = escapeHtml(parts.join(' · ')) +
+                    (Leader.isLeader && Poller.active ? ` · <a class="status-link" data-nav="#sources">${Poller.active} fetching</a>` : '') +
                     (errors ? ` · <a data-nav="#sources">${errors} unreachable</a>` : '');
                 document.getElementById('refresh-btn').classList.toggle('spinning', Poller.active > 0);
             },
@@ -3677,6 +3741,7 @@
                 document.getElementById('setting-retention').value = String(App.settings.retentionDays);
                 document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
                 document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
+                document.getElementById('build-label').textContent = `Build ${BUILD}`;
                 App.showModal('settings-modal');
             },
 
@@ -3869,6 +3934,10 @@
         setInterval(() => {
             if (ayb && !Leader.isLeader && Store && App.feed.top) App.onNewPosts().catch(() => {});
         }, 30000);
+
+        setInterval(() => {
+            if (document.getElementById('sources-screen').classList.contains('active')) App.renderNow();
+        }, 2000);
 
         window.addEventListener('hashchange', App.handleRoute);
         window.addEventListener('beforeunload', () => { if (Poller.flushTimer) Poller.flush(); });

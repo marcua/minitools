@@ -248,6 +248,21 @@ independently (see Known Limits).
 
 ## Measuring Load
 
+The Following screen opens with a **Right now** panel that refreshes every 2s
+and shows the build number. It lists each check in progress (person, server,
+seconds elapsed), each one-per-server batch check that's running, and every
+server we're backing off from or queueing on. If the status line says "N
+fetching" for long, that link opens this panel.
+
+Stalls can't hold polling slots:
+- `Net`'s abort timer also covers reading the body (`Net.read()`).
+- A host that has asked us to back off for more than 5s fails requests right
+  away with a 429 rather than queueing. The poller reschedules for when the
+  back-off ends, without counting it as an error.
+- Every check and batch check has a 2-minute deadline (`withDeadline`).
+
+`BUILD` in `index.html` is shown in Settings; bump it along with `CACHE_NAME`.
+
 `Net` logs every request. The Following screen shows the requests made in the
 last hour, plus which servers are batched and whether Bluesky is live. An
 initial sync is the expensive part: 158 people took about 820 requests to
