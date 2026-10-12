@@ -233,8 +233,18 @@ you follow (`wantedDids`, up to 10,000) and to posts/reposts.
 
 `Leader` takes a Web Lock (`socialite-poller`). Only the tab holding it polls
 or streams. Other tabs read new posts from ayb every 30s and show "another tab
-is fetching". Two tabs never double the load on anyone's server. (Two
-*devices* still poll independently. See Known Limits.)
+is fetching". Two tabs never double the load on anyone's server.
+
+The **visible tab always takes over**: it opens with `steal: true`, and does so
+again whenever it becomes visible. Otherwise a backgrounded or suspended tab
+(common on iOS) could keep the lock while barely running, and the tab you're
+looking at would never poll. The tab that loses the lock stops polling, flushes
+what it has, closes its Jetstream socket, and queues to get the lock back. A tab
+that takes over reloads sources from ayb first, so it continues from the
+previous leader's cursors instead of redoing work.
+
+This only coordinates tabs in one browser. Two *devices* still poll
+independently (see Known Limits).
 
 ## Measuring Load
 

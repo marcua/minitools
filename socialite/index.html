@@ -2886,32 +2886,76 @@
         // ============ Leader ============
         // Only one tab polls at a time (Web Locks); other tabs just read new
         // posts from ayb. Two open tabs shouldn't double the load on anyone.
+        //
+        // The visible tab always takes over (a `steal`). Otherwise a
+        // backgrounded or suspended tab (common on iOS) could keep the lock
+        // while barely running, and the tab you're looking at would wait
+        // forever. A tab that loses the lock stops polling and queues to get
+        // it back when the leader closes.
         const Leader = {
             isLeader: false,
-            requested: false,
+            started: false,
+            booted: false,
+            queued: null,
 
             start() {
-                if (Leader.requested) {
-                    if (Leader.isLeader) Leader.become();
-                    return;
-                }
-                Leader.requested = true;
                 if (!navigator.locks) { Leader.become(); return; }
-                navigator.locks.request(`${APP_NAME}-poller`, () => {
+                if (Leader.isLeader) { Leader.become(); return; }
+                if (Leader.started) return;
+                Leader.started = true;
+                Leader.request(!document.hidden);
+            },
+
+            request(steal) {
+                if (Leader.queued) Leader.queued.abort();
+                const ctrl = new AbortController();
+                // A steal can't be combined with a signal; it never waits.
+                const opts = steal ? { steal: true } : { signal: ctrl.signal };
+                Leader.queued = steal ? null : ctrl;
+                navigator.locks.request(`${APP_NAME}-poller`, opts, () => {
+                    Leader.queued = null;
                     Leader.become();
-                    return new Promise(() => {}); // held until the tab closes
+                    return new Promise(() => {}); // held until the tab closes or is stolen from
+                }).catch(err => {
+                    if (err && err.name === 'AbortError' && ctrl.signal.aborted) return; // we cancelled our own wait
+                    // Another tab took over: stand down and wait our turn.
+                    Leader.resign();
+                    Leader.request(false);
                 });
             },
 
-            become() {
+            // Called when this tab becomes visible.
+            takeOver() {
+                if (navigator.locks && Leader.started && !Leader.isLeader && ayb) Leader.request(true);
+            },
+
+            async become() {
+                const takingOver = Leader.booted && !Leader.isLeader;
                 Leader.isLeader = true;
-                const now = Date.now();
-                App.followed.forEach(id => {
-                    const s = App.sources.get(id);
-                    if (s && s.nextPollAt <= now) App.catchUpIds.add(id);
-                });
+                if (takingOver) {
+                    // Another tab was polling; pick up its progress from ayb
+                    // instead of redoing work from this tab's stale copy.
+                    try { await App.loadState(); } catch (e) { console.error('Reload on takeover failed:', e); }
+                } else if (!Leader.booted) {
+                    const now = Date.now();
+                    App.followed.forEach(id => {
+                        const s = App.sources.get(id);
+                        if (s && s.nextPollAt <= now) App.catchUpIds.add(id);
+                    });
+                }
+                Leader.booted = true;
+                if (!Leader.isLeader) return; // lost it again while reloading
                 Poller.start();
                 Live.sync();
+                App.renderStatus();
+            },
+
+            resign() {
+                if (!Leader.isLeader) return;
+                Leader.isLeader = false;
+                Poller.stop();
+                Live.close();
+                if (Poller.flushTimer) { clearTimeout(Poller.flushTimer); Poller.flush(); }
                 App.renderStatus();
             }
         };
@@ -3783,7 +3827,9 @@
 
         // Hidden tabs poll a quarter as often; catch up on return.
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && Leader.isLeader && ayb) Poller.catchUp();
+            if (document.hidden || !ayb) return;
+            if (Leader.isLeader) Poller.catchUp();
+            else Leader.takeOver();
         });
 
         // Tabs that aren't polling still pick up what the polling tab saves.
