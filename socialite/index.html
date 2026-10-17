@@ -406,6 +406,48 @@
         .quote-missing { font-size: 0.85rem; color: var(--ink-muted); }
 
         #feed-new:not(:empty) { margin-bottom: 10px; }
+        #feed-tail:not(:empty) { margin-top: 10px; }
+
+        /* Repost rows: full-bleed, sideways scrolling, snapping card to card. */
+        .repost-row { margin: 0 -16px; padding: 4px 0; }
+        .repost-row-head {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--ink-muted);
+            padding: 0 16px 8px;
+        }
+        .repost-row-head svg { width: 14px; height: 14px; }
+        .repost-scroll {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            scroll-snap-type: x mandatory;
+            scroll-padding: 0 16px;
+            padding: 0 16px 6px;
+            scrollbar-width: thin;
+        }
+        .repost-scroll .post.card {
+            flex: 0 0 min(84%, 360px);
+            scroll-snap-align: start;
+            max-height: 380px;
+            overflow: hidden;
+            position: relative;
+        }
+        /* Long cards fade out; the timestamp opens the full post. */
+        .repost-scroll .post.card::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 48px;
+            background: linear-gradient(to bottom, transparent, var(--surface));
+            pointer-events: none;
+        }
+        .repost-scroll .post-context { margin-left: 0; }
         .feed-divider {
             font-family: var(--font-mono);
             font-size: 0.7rem;
@@ -713,6 +755,7 @@
             <button class="new-pill" id="new-pill"></button>
             <div class="feed" id="feed-new"></div>
             <div class="feed" id="feed"></div>
+            <div class="feed" id="feed-tail"></div>
             <div class="feed-footer" id="feed-footer"></div>
         </div>
     </div>
@@ -804,6 +847,13 @@
             </div>
             <div class="setting-row">
                 <div>
+                    <div class="setting-label">Group reposts into rows</div>
+                    <div class="setting-sub">Every 15 posts, that stretch's reposts share one row you scroll sideways</div>
+                </div>
+                <button class="switch" id="setting-group" role="switch" aria-label="Group reposts into rows"></button>
+            </div>
+            <div class="setting-row">
+                <div>
                     <div class="setting-label">Realtime Bluesky</div>
                     <div class="setting-sub">Streams new posts and deletions from Jetstream, a shared Bluesky-run relay, instead of waiting for the next check. Faster and lighter on everyone's servers, but routes through shared infrastructure.</div>
                 </div>
@@ -842,7 +892,7 @@
         const APP_NAME = 'socialite';
         // Shown in Settings so you can tell which version a device runs.
         // Keep in step with CACHE_NAME in sw.js.
-        const BUILD = 14;
+        const BUILD = 15;
         const MINUTE = 60 * 1000;
         const HOUR = 60 * MINUTE;
         const DAY = 24 * HOUR;
@@ -3197,7 +3247,7 @@
         };
 
         // ============ Settings ============
-        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, retentionDays: 30, realtime: false, cdnImages: true };
+        const DEFAULT_SETTINGS = { pollMinutes: 15, replies: 'following', showReposts: true, groupReposts: true, retentionDays: 30, realtime: false, cdnImages: true };
 
         function getSettings() {
             const saved = parseJson(localStorage.getItem(`${APP_NAME}_settings`), {});
@@ -3306,7 +3356,14 @@
             const source = App.sources.get(post.sourceId);
             const who = source ? sourceName(source) : 'Someone you follow';
             if (post.kind === 'repost') {
-                return `<div class="post-context">${ICONS.repost}<span>${escapeHtml(who)} reposted</span></div>`;
+                const names = (post._reposters || [post.sourceId]).map(id => {
+                    const s = App.sources.get(id);
+                    return s ? sourceName(s) : 'Someone you follow';
+                });
+                const label = names.length === 1 ? names[0]
+                    : names.length === 2 ? `${names[0]} and ${names[1]}`
+                    : `${names[0]}, ${names[1]} and ${pluralize(names.length - 2, 'other')}`;
+                return `<div class="post-context">${ICONS.repost}<span>${escapeHtml(label)} reposted</span></div>`;
             }
             if (post.kind === 'reply') {
                 if (post.replyToAuthor && post.replyToAuthor === post.sourceId) {
@@ -3321,15 +3378,14 @@
             return '';
         }
 
-        function postHtml(post) {
-            const svc = Services[post.service];
+        function postHtml(post, card) {
             const name = post.authorName || post.authorHandle || 'Unknown';
             const content = sanitizeHtml(post.html);
             const body = `${content ? `<div class="post-content">${content}</div>` : ''}${mediaHtml(post.media)}${embedHtml(post.embed)}`;
             const wrapped = post.contentWarning
                 ? `<details class="cw"><summary>⚠ ${escapeHtml(post.contentWarning)}</summary>${body}</details>`
                 : body;
-            return `<article class="post" data-id="${escapeHtml(post.id)}">
+            return `<article class="post${card ? ' card' : ''}" data-id="${escapeHtml(post.id)}">
                 ${contextHtml(post)}
                 <div class="post-row">
                     ${avatarHtml(post.authorAvatar, name, post.authorUrl)}
@@ -3346,6 +3402,82 @@
             </article>`;
         }
 
+        // ============ Repost rows ============
+        // Reposts (not quotes) are gathered into horizontally scrolling rows
+        // so one prolific reposter can't take over the timeline. Inspired by
+        // Phanpy's boosts carousel, which groups per fetched page. Here the
+        // timeline is cut into chunks of REPOST_CHUNK posts by people; each
+        // chunk's reposts go in one row at the end of that chunk, i.e. the
+        // reposts from that stretch of time.
+        //
+        // Grouping only ever looks at earlier posts, so loading more never
+        // changes chunks already on screen: complete chunks are appended,
+        // and the unfinished last chunk lives in #feed-tail (its people's
+        // posts only) until enough posts arrive to close it.
+        const REPOST_CHUNK = 15;
+
+        // -> { closed: [block], open: [block] }; a block is { type: 'post', post }
+        // or { type: 'reposts', items: [post with _reposters] }.
+        function groupFeed(posts, final) {
+            if (!App.settings.groupReposts) {
+                return { closed: posts.map(post => ({ type: 'post', post })), open: [] };
+            }
+            const closed = [];
+            const seenUrls = new Set();
+            let chunk = [];
+            let originals = 0;
+            const close = () => {
+                const reposts = new Map();
+                chunk.forEach(p => {
+                    if (p.kind !== 'repost') {
+                        closed.push({ type: 'post', post: p });
+                        return;
+                    }
+                    // Skip reposts of a post already shown in full above.
+                    if (p.url && seenUrls.has(p.url)) return;
+                    // One card per post, however many people reposted it.
+                    const key = p.url || p.id;
+                    const existing = reposts.get(key);
+                    if (existing) {
+                        if (!existing._reposters.includes(p.sourceId)) existing._reposters.push(p.sourceId);
+                    } else {
+                        reposts.set(key, Object.assign({}, p, { _reposters: [p.sourceId] }));
+                    }
+                });
+                const items = Array.from(reposts.values());
+                if (items.length === 1) closed.push({ type: 'post', post: items[0] });
+                else if (items.length > 1) closed.push({ type: 'reposts', items });
+                chunk = [];
+                originals = 0;
+            };
+            for (const p of posts) {
+                chunk.push(p);
+                if (p.kind !== 'repost') {
+                    originals++;
+                    if (p.url) seenUrls.add(p.url);
+                }
+                if (originals >= REPOST_CHUNK) close();
+            }
+            if (final) {
+                if (chunk.length) close();
+                return { closed, open: [] };
+            }
+            return { closed, open: chunk.filter(p => p.kind !== 'repost').map(post => ({ type: 'post', post })) };
+        }
+
+        function blockHtml(block) {
+            const removed = App.feed.removed;
+            if (block.type === 'post') return removed.has(block.post.id) ? '' : postHtml(block.post);
+            const items = block.items.filter(p => !removed.has(p.id));
+            if (!items.length) return '';
+            if (items.length === 1) return postHtml(items[0]);
+            const people = new Set(items.flatMap(p => p._reposters)).size;
+            return `<section class="repost-row">
+                <div class="repost-row-head">${ICONS.repost}<span>${items.length} reposts from ${people} ${people === 1 ? 'person' : 'people'}</span></div>
+                <div class="repost-scroll">${items.map(p => postHtml(p, true)).join('')}</div>
+            </section>`;
+        }
+
         // ============ App ============
         const App = {
             settings: null,
@@ -3355,7 +3487,7 @@
             follows: [],
             // posts: the time-ordered timeline as of loadedAt. newPosts: the
             // "New" group of arrivals since then, newest arrival first.
-            feed: { posts: [], newPosts: [], loading: false, done: false, top: null, loadedAt: null },
+            feed: { posts: [], newPosts: [], loading: false, done: false, top: null, loadedAt: null, removed: new Set(), blockCount: 0 },
             bootAt: Date.now(),
             catchUpIds: new Set(),
             pendingArrivals: 0,
@@ -3768,7 +3900,7 @@
 
             async reloadFeed() {
                 const loadedAt = new Date().toISOString();
-                App.feed = { posts: [], newPosts: [], loading: true, done: false, top: null, loadedAt };
+                App.feed = { posts: [], newPosts: [], loading: true, done: false, top: null, loadedAt, removed: new Set(), blockCount: 0 };
                 App.pendingArrivals = 0;
                 App.hideNewPill();
                 try {
@@ -3794,7 +3926,7 @@
                     const more = await Store.feedPage(App.filter, App.settings, last, f.loadedAt);
                     f.posts.push(...more);
                     f.done = more.length < FEED_PAGE;
-                    document.getElementById('feed').insertAdjacentHTML('beforeend', more.map(postHtml).join(''));
+                    App.renderFeedBlocks(false);
                 } catch (e) {
                     console.error('Load more failed:', e);
                 } finally {
@@ -3822,21 +3954,36 @@
                             </div>`;
                     }
                 } else {
-                    Diag.during(`rendering ${App.feed.posts.length} posts`, () => {
-                        container.innerHTML = App.feed.posts.map(postHtml).join('');
-                    });
+                    Diag.during(`rendering ${App.feed.posts.length} posts`, () => App.renderFeedBlocks(true));
                 }
+                if (!App.feed.posts.length) document.getElementById('feed-tail').innerHTML = '';
                 App.renderNewGroup();
                 App.renderFeedFooter();
                 App.renderStatus();
             },
 
+            // Renders the timeline as blocks. From scratch (fresh) or, after
+            // loading more, by appending the newly completed chunks and
+            // redrawing only the unfinished tail.
+            renderFeedBlocks(fresh) {
+                const f = App.feed;
+                const { closed, open } = groupFeed(f.posts, f.done);
+                const container = document.getElementById('feed');
+                if (fresh) {
+                    container.innerHTML = closed.map(blockHtml).join('');
+                } else {
+                    container.insertAdjacentHTML('beforeend', closed.slice(f.blockCount).map(blockHtml).join(''));
+                }
+                f.blockCount = closed.length;
+                document.getElementById('feed-tail').innerHTML = open.map(blockHtml).join('');
+            },
+
             renderNewGroup() {
                 const el = document.getElementById('feed-new');
-                const list = App.feed.newPosts;
+                const list = App.feed.newPosts.filter(p => !App.feed.removed.has(p.id));
                 if (!list.length) { el.innerHTML = ''; return; }
                 el.innerHTML = `<div class="feed-divider new">New · ${list.length.toLocaleString()}</div>`
-                    + list.map(postHtml).join('')
+                    + groupFeed(list, true).closed.map(blockHtml).join('')
                     + `<div class="feed-divider">Earlier</div>`;
             },
 
@@ -3847,12 +3994,15 @@
                     .filter(p => !shown.has(p.id));
                 App.pendingArrivals = 0;
                 App.hideNewPill();
+                fresh.forEach(p => App.feed.removed.delete(p.id));
                 if (!fresh.length) return;
                 // Arrivals stay out of the time-ordered list until the next reload.
                 const ids = new Set(fresh.map(p => p.id));
+                // (Hidden rather than removed from feed.posts, so the timeline's
+                // repost chunks stay put.)
                 if (App.feed.posts.some(p => ids.has(p.id))) {
-                    App.feed.posts = App.feed.posts.filter(p => !ids.has(p.id));
-                    document.querySelectorAll('#feed .post').forEach(el => { if (ids.has(el.dataset.id)) el.remove(); });
+                    ids.forEach(id => App.feed.removed.add(id));
+                    document.querySelectorAll('#feed .post, #feed-tail .post').forEach(el => { if (ids.has(el.dataset.id)) el.remove(); });
                 }
                 App.feed.newPosts = fresh.concat(App.feed.newPosts);
                 App.renderNewGroup();
@@ -3912,14 +4062,20 @@
             },
 
             // Deletions seen on the live stream.
+            // Deleted posts are hidden (feed.removed) rather than spliced out of
+            // feed.posts, so repost chunks already on screen don't shift.
             removePosts(ids) {
                 const gone = new Set(ids);
-                App.feed.posts = App.feed.posts.filter(p => !gone.has(p.id));
+                ids.forEach(id => App.feed.removed.add(id));
                 const hadNew = App.feed.newPosts.length;
                 App.feed.newPosts = App.feed.newPosts.filter(p => !gone.has(p.id));
                 if (hadNew !== App.feed.newPosts.length) App.renderNewGroup();
-                document.querySelectorAll('#feed .post').forEach(el => {
+                document.querySelectorAll('#feed .post, #feed-tail .post').forEach(el => {
                     if (gone.has(el.dataset.id)) el.remove();
+                });
+                // A row whose cards are all gone disappears.
+                document.querySelectorAll('#feed .repost-row').forEach(row => {
+                    if (!row.querySelector('.post')) row.remove();
                 });
             },
 
@@ -3956,6 +4112,7 @@
                 document.getElementById('setting-reposts').classList.toggle('on', !!App.settings.showReposts);
                 document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
                 document.getElementById('setting-cdn').classList.toggle('on', !!App.settings.cdnImages);
+                document.getElementById('setting-group').classList.toggle('on', !!App.settings.groupReposts);
                 document.getElementById('build-label').textContent = `Build ${BUILD}`;
                 App.showModal('settings-modal');
             },
@@ -3967,7 +4124,8 @@
                 document.getElementById('setting-realtime').classList.toggle('on', !!App.settings.realtime);
                 document.getElementById('setting-cdn').classList.toggle('on', !!App.settings.cdnImages);
                 if (key === 'realtime') { Live.sync(); App.renderStatus(); }
-                if (key === 'cdnImages') App.reloadFeed();
+                document.getElementById('setting-group').classList.toggle('on', !!App.settings.groupReposts);
+                if (key === 'cdnImages' || key === 'groupReposts') App.reloadFeed();
                 if (key === 'replies' || key === 'showReposts') App.reloadFeed();
                 if (key === 'retentionDays') Store.prunePosts(value).then(() => App.reloadFeed());
             },
@@ -4107,6 +4265,7 @@
         document.getElementById('setting-reposts').addEventListener('click', () => App.updateSetting('showReposts', !App.settings.showReposts));
         document.getElementById('setting-realtime').addEventListener('click', () => App.updateSetting('realtime', !App.settings.realtime));
         document.getElementById('setting-cdn').addEventListener('click', () => App.updateSetting('cdnImages', !App.settings.cdnImages));
+        document.getElementById('setting-group').addEventListener('click', () => App.updateSetting('groupReposts', !App.settings.groupReposts));
         document.getElementById('disconnect-btn').addEventListener('click', () => {
             App.hideModal('settings-modal');
             App.disconnect();

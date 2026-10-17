@@ -332,6 +332,20 @@ backfill, including reposted and quoted originals and identity lookups.
   - Backfill and catch-up posts newer than the top refresh the timeline in
     place while you're at the top (at most every 8s), and only when there's no
     New group to disturb. Otherwise they wait for the pill or the next reload.
+- **Repost rows** (Settings → *Group reposts into rows*, on by default). Inspired by
+  Phanpy's boosts carousel, which pulls a fetched page's boosts into one
+  sideways-scrolling row. `groupFeed()` cuts the time-ordered timeline into
+  chunks of 15 posts by people (`REPOST_CHUNK`); each chunk's reposts (not
+  quotes) go into one row at the end of that chunk. A post reposted by several
+  people becomes one card ("A, B and 2 others reposted"), and a repost of a post
+  already shown in full above is skipped. A chunk with a single repost shows it
+  as a normal post at the end.
+  - Grouping only looks backwards, so loading more never changes chunks already
+    on screen: completed chunks are appended to `#feed`, and the unfinished
+    last chunk is drawn in `#feed-tail` (posts by people only) until it fills.
+  - Deleted or moved-to-New posts are hidden via `feed.removed` instead of being
+    spliced out of `feed.posts`, which would shift chunk boundaries.
+  - The New group is grouped the same way.
 - Filter chips (shown when you have 2+ accounts) narrow the timeline to one
   account's follows. Settings (stored per device in `localStorage`) cover the
   poll interval, the replies filter, reposts on/off, and retention.
