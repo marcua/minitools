@@ -470,6 +470,46 @@
         .feed-divider.new { color: var(--signal); font-weight: 500; }
         .feed-divider.new::after { background: var(--signal-medium); }
 
+        /* Threads */
+        .ctx-link { color: inherit; text-decoration: none; }
+        .ctx-link:hover { text-decoration: underline; }
+        .thread-preview {
+            display: block;
+            margin: -2px 0 8px 52px;
+            padding: 4px 10px;
+            border-left: 2px solid var(--border-strong);
+            font-size: 0.82rem;
+            color: var(--ink-secondary);
+            text-decoration: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .thread-preview:hover { border-left-color: var(--signal); color: var(--ink); }
+        .thread-preview .tp-time { color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.72rem; margin-right: 4px; }
+        .thread-more {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 8px;
+            font-size: 0.82rem;
+            color: var(--signal);
+            text-decoration: none;
+        }
+        .thread-more[hidden] { display: none; }
+        .thread-more svg { width: 13px; height: 13px; transform: scaleY(-1); }
+        .thread-more:hover { text-decoration: underline; }
+        .post.focus { border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-light); }
+        .thread-chain { display: flex; flex-direction: column; gap: 0; }
+        /* Parts of the author's thread are joined by a line through the avatars. */
+        .thread-chain .post { border-radius: 0; margin-top: -1px; }
+        .thread-chain .post:first-child { border-radius: 12px 12px 0 0; margin-top: 0; }
+        .thread-chain .post:last-child { border-radius: 0 0 12px 12px; }
+        .thread-chain .post:only-child { border-radius: 12px; }
+        .thread-chain .post.focus { position: relative; z-index: 1; }
+        .thread-note { font-size: 0.82rem; color: var(--ink-muted); margin: 14px 0 8px; }
+        .thread-note a { color: var(--signal); }
+
         .feed-footer {
             text-align: center;
             color: var(--ink-muted);
@@ -851,6 +891,18 @@
         </div>
     </div>
 
+    <!-- Thread Screen -->
+    <div class="screen" id="thread-screen">
+        <div class="container">
+            <button class="back-link" id="thread-back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                Timeline
+            </button>
+            <div class="page-header"><h1>Thread</h1></div>
+            <div id="thread-body"></div>
+        </div>
+    </div>
+
     <!-- Sources Screen -->
     <div class="screen" id="sources-screen">
         <div class="container">
@@ -959,7 +1011,7 @@
         const APP_NAME = 'socialite';
         // Shown in Settings so you can tell which version a device runs.
         // Keep in step with CACHE_NAME in sw.js.
-        const BUILD = 17;
+        const BUILD = 18;
         const MINUTE = 60 * 1000;
         const HOUR = 60 * MINUTE;
         const DAY = 24 * HOUR;
@@ -1191,7 +1243,17 @@
             // v7: when a post arrived while you had the app open (client clock,
             // ISO). NULL for backfill and catch-up, which belong in time order.
             `ALTER TABLE posts ADD COLUMN arrived_at TEXT`,
-            `CREATE INDEX IF NOT EXISTS idx_posts_arrived ON posts(arrived_at)`
+            `CREATE INDEX IF NOT EXISTS idx_posts_arrived ON posts(arrived_at)`,
+            // v9: threads. reply_parent / reply_root point at other posts in the
+            // same id space as posts.id where the service gives us that
+            // (Bluesky), or at a native_ref (Mastodon: '<host>#<status id>',
+            // since Mastodon replies only carry the parent's server-local id).
+            `ALTER TABLE posts ADD COLUMN reply_parent TEXT`,
+            `ALTER TABLE posts ADD COLUMN reply_root TEXT`,
+            `ALTER TABLE posts ADD COLUMN native_ref TEXT`,
+            `CREATE INDEX IF NOT EXISTS idx_posts_reply_parent ON posts(reply_parent)`,
+            `CREATE INDEX IF NOT EXISTS idx_posts_reply_root ON posts(reply_root)`,
+            `CREATE INDEX IF NOT EXISTS idx_posts_native_ref ON posts(native_ref)`
         ];
 
         // ============ Network ============
@@ -2031,6 +2093,9 @@
                 embed,
                 replyTo: parsedParent && parsedParent.did ? ATP.postUrl(parsedParent.did, parsedParent.rkey) : null,
                 replyToAuthor: parsedParent && parsedParent.did ? `bluesky:${parsedParent.did}` : null,
+                replyParent: parent ? `bluesky:${parent}` : null,
+                replyRoot: v.reply && v.reply.root && v.reply.root.uri ? `bluesky:${v.reply.root.uri}` : null,
+                nativeRef: null,
                 publishedAt: created,
                 sortAt: clampToNow(created)
             };
@@ -2134,6 +2199,9 @@
                 embed,
                 replyTo: null,
                 replyToAuthor,
+                replyParent: orig.in_reply_to_id ? `${host}#${orig.in_reply_to_id}` : null,
+                replyRoot: null,
+                nativeRef: `${host}#${orig.id}`,
                 publishedAt: toIso(orig.created_at),
                 sortAt: clampToNow(toIso(s.created_at))
             };
@@ -2522,10 +2590,11 @@
             'cursor', 'last_polled_at', 'next_poll_at', 'last_post_at', 'error', 'error_count'];
         const POST_COLUMNS = ['id', 'service', 'source_id', 'kind', 'url', 'author_id', 'author_handle', 'author_name',
             'author_avatar', 'author_url', 'html', 'content_warning', 'media', 'embed', 'reply_to', 'reply_to_author',
-            'published_at', 'sort_at', 'arrived_at'];
+            'published_at', 'sort_at', 'arrived_at', 'reply_parent', 'reply_root', 'native_ref'];
         const FEED_SELECT = `SELECT p.id, p.service, p.source_id, p.kind, p.url, p.author_id, p.author_handle,
             p.author_name, p.author_avatar, p.author_url, p.html, p.content_warning, p.media, p.embed,
-            p.reply_to, p.reply_to_author, p.published_at, p.sort_at FROM posts p`;
+            p.reply_to, p.reply_to_author, p.published_at, p.sort_at,
+            p.reply_parent, p.reply_root, p.native_ref FROM posts p`;
 
         function rowToSource(row) {
             return {
@@ -2564,7 +2633,10 @@
                 replyTo: row[14],
                 replyToAuthor: row[15],
                 publishedAt: row[16],
-                sortAt: row[17]
+                sortAt: row[17],
+                replyParent: row[18],
+                replyRoot: row[19],
+                nativeRef: row[20]
             };
         }
 
@@ -2657,7 +2729,7 @@
                      ${list.map(p => `(${[p.id, p.service, p.sourceId, p.kind, p.url, p.authorId, p.authorHandle,
                         p.authorName, p.authorAvatar, p.authorUrl, p.html, p.contentWarning,
                         p.media && p.media.length ? p.media : null, p.embed, p.replyTo, p.replyToAuthor,
-                        p.publishedAt, p.sortAt, p.arrivedAt].map(sqlVal).join(', ')})`).join(', ')}`
+                        p.publishedAt, p.sortAt, p.arrivedAt, p.replyParent, p.replyRoot, p.nativeRef].map(sqlVal).join(', ')})`).join(', ')}`
                 ).catch(e => { failed.push(...list); Diag.log('save', `Saving ${list.length} posts failed: ${e.message}`); })));
                 return failed;
             },
@@ -2710,6 +2782,40 @@
                     `${FEED_SELECT} WHERE ${where.join(' AND ')} ORDER BY p.arrived_at DESC, p.sort_at DESC LIMIT 200`
                 );
                 return (result.rows || []).map(rowToPost);
+            },
+
+            // ---- threads ----
+            async postsByIds(ids) {
+                if (!ids.length) return [];
+                const result = await ayb.query(`${FEED_SELECT} WHERE p.id IN (${ids.map(sqlVal).join(', ')})`);
+                return (result.rows || []).map(rowToPost);
+            },
+
+            // Every stored post in a Bluesky thread (the root and all replies).
+            async threadPosts(rootId) {
+                const result = await ayb.query(
+                    `${FEED_SELECT} WHERE p.kind != 'repost' AND (p.id = ${sqlVal(rootId)} OR p.reply_root = ${sqlVal(rootId)})`
+                );
+                return (result.rows || []).map(rowToPost);
+            },
+
+            // Posts that others point to as their parent: by id or native ref.
+            async postsByKeys(keys) {
+                if (!keys.length) return [];
+                const list = keys.map(sqlVal).join(', ');
+                const result = await ayb.query(
+                    `${FEED_SELECT} WHERE p.kind != 'repost' AND (p.id IN (${list}) OR p.native_ref IN (${list}))`
+                );
+                return (result.rows || []).map(rowToPost);
+            },
+
+            // [parentKey, authorId] for stored replies to any of `keys`.
+            async replyAuthors(keys) {
+                if (!keys.length) return [];
+                const result = await ayb.query(
+                    `SELECT reply_parent, author_id FROM posts WHERE kind != 'repost' AND reply_parent IN (${keys.map(sqlVal).join(', ')})`
+                );
+                return result.rows || [];
             },
 
             async countNewer(filter, settings, top, asOf) {
@@ -3433,8 +3539,12 @@
                 return `<div class="post-context">${ICONS.repost}<span>${escapeHtml(label)} reposted</span></div>`;
             }
             if (post.kind === 'reply') {
-                if (post.replyToAuthor && post.replyToAuthor === post.sourceId) {
-                    return `<div class="post-context">${ICONS.reply}<span>Continued thread</span></div>`;
+                if (isSelfReply(post)) {
+                    // A continuation: link to the thread, and preview the post
+                    // it continues (filled in by App.hydrateThreads()).
+                    const link = threadLink(post);
+                    return `<div class="post-context">${ICONS.reply}<span><a class="ctx-link" href="${link}">Continued thread · View thread</a></span></div>` +
+                        (post.replyParent ? `<a class="thread-preview" href="${link}" data-parent="${escapeHtml(post.replyParent)}">↑ Continues an earlier post</a>` : '');
                 }
                 const target = post.replyToAuthor && App.sources.get(post.replyToAuthor);
                 const label = target ? `Replying to ${target.displayName || target.handle}` : 'Reply';
@@ -3445,15 +3555,43 @@
             return '';
         }
 
-        function postHtml(post, card) {
+        function isSelfReply(post) {
+            return post.kind === 'reply' && !!post.replyToAuthor &&
+                (post.replyToAuthor === post.sourceId || post.replyToAuthor === post.authorId);
+        }
+
+        function threadLink(post) {
+            return `#thread/${encodeURIComponent(post.id)}`;
+        }
+
+        // How replies refer to this post (Bluesky: its id; Mastodon: its ref).
+        function threadKey(post) {
+            return post.service === 'bluesky' ? post.id : post.nativeRef;
+        }
+
+        function excerpt(html, max) {
+            const text = (new DOMParser().parseFromString(`<body>${html || ''}</body>`, 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim();
+            return text.length > max ? `${text.slice(0, max - 1)}…` : (text || 'Media post');
+        }
+
+        // opts: { thread: true } inside the thread screen (no timeline context
+        // line; partLabel like "2 of 5"; focus highlights the post you came from).
+        function postHtml(post, card, opts) {
+            opts = opts || {};
             const name = post.authorName || post.authorHandle || 'Unknown';
             const content = sanitizeHtml(post.html);
             const body = `${content ? `<div class="post-content">${content}</div>` : ''}${mediaHtml(post.media)}${embedHtml(post.embed)}`;
             const wrapped = post.contentWarning
                 ? `<details class="cw"><summary>⚠ ${escapeHtml(post.contentWarning)}</summary>${body}</details>`
                 : body;
-            return `<article class="post${card ? ' card' : ''}" data-id="${escapeHtml(post.id)}">
-                ${contextHtml(post)}
+            const key = !card && post.kind !== 'repost' && !opts.thread ? threadKey(post) : null;
+            // Shown once App.hydrateThreads() finds a self-reply to this post.
+            const more = key ? `<a class="thread-more" href="${threadLink(post)}" data-key="${escapeHtml(key)}" data-author="${escapeHtml(post.authorId)}" hidden>${ICONS.reply}Thread continues</a>` : '';
+            const context = opts.thread
+                ? (opts.partLabel ? `<div class="post-context">${ICONS.reply}<span>${escapeHtml(opts.partLabel)}</span></div>` : '')
+                : contextHtml(post);
+            return `<article class="post${card ? ' card' : ''}${opts.focus ? ' focus' : ''}" data-id="${escapeHtml(post.id)}">
+                ${context}
                 <div class="post-row">
                     ${avatarHtml(post.authorAvatar, name, post.authorUrl)}
                     <div class="post-body">
@@ -3464,10 +3602,92 @@
                             <a class="post-time" href="${escapeHtml(safeUrl(post.url))}" target="_blank" rel="noopener noreferrer" data-time="${escapeHtml(post.sortAt)}" title="${escapeHtml(new Date(post.publishedAt).toLocaleString())}">${relativeTime(post.sortAt)}</a>
                         </div>
                         ${wrapped}
+                        ${more}
                     </div>
                 </div>
             </article>`;
         }
+
+        // ============ Threads ============
+        // Loads a whole thread around one post. Each returns
+        // { posts, authorId, repliesLabel, note }: the thread author's own
+        // posts become the numbered chain; everyone else's are "replies".
+        const Threads = {
+            // Bluesky: the root and every stored reply come from ayb in one
+            // query. Earlier parts we don't have are fetched from the author's
+            // PDS by walking reply pointers. Other people's replies are only
+            // those from people you follow: finding everyone's replies needs
+            // Bluesky's network-wide index (the AppView).
+            async bluesky(focus) {
+                let rootId = focus.replyRoot;
+                let parentId = focus.replyParent;
+                if (focus.kind === 'reply' && !rootId) {
+                    // Stored before thread links existed: read the record once.
+                    const { did, collection, rkey } = ATP.parseUri(focus.id.slice('bluesky:'.length));
+                    const author = await ATP.author(did);
+                    const rec = await ATP.getRecordCached(author.pds, did, collection, rkey);
+                    const reply = (rec.value && rec.value.reply) || {};
+                    rootId = reply.root && reply.root.uri ? `bluesky:${reply.root.uri}` : null;
+                    parentId = reply.parent && reply.parent.uri ? `bluesky:${reply.parent.uri}` : null;
+                    focus = Object.assign({}, focus, { replyRoot: rootId, replyParent: parentId });
+                }
+                rootId = rootId || focus.id;
+                const byId = new Map((await Store.threadPosts(rootId)).map(p => [p.id, p]));
+                byId.set(focus.id, Object.assign({}, byId.get(focus.id), focus));
+
+                // Walk up from the focus, fetching parts we don't have.
+                const budget = { quotes: 3 };
+                let cur = byId.get(focus.id);
+                for (let i = 0; i < 30 && cur && cur.replyParent; i++) {
+                    let parent = byId.get(cur.replyParent);
+                    if (!parent) {
+                        const { did, collection, rkey } = ATP.parseUri(cur.replyParent.slice('bluesky:'.length));
+                        if (!did) break;
+                        try {
+                            const author = await ATP.author(did);
+                            const rec = await ATP.getRecordCached(author.pds, did, collection, rkey);
+                            const sourceId = App.sources.has(`bluesky:${did}`) ? `bluesky:${did}` : null;
+                            parent = await bskyToPost(rec, did, author, sourceId, budget);
+                            byId.set(parent.id, parent);
+                        } catch (e) {
+                            break; // deleted, or the server is unreachable
+                        }
+                    }
+                    cur = parent;
+                }
+                const rootDid = ATP.parseUri(rootId.slice('bluesky:'.length)).did;
+                return {
+                    posts: Array.from(byId.values()),
+                    authorId: rootDid ? `bluesky:${rootDid}` : focus.authorId,
+                    repliesLabel: 'Replies from people you follow',
+                    note: 'Bluesky only shows replies from people you follow here; seeing everyone’s needs Bluesky’s central index.'
+                };
+            },
+
+            // Mastodon: one request to the post's server returns earlier parts
+            // and the replies it knows about, from anyone.
+            async mastodon(focus) {
+                let ref = focus.nativeRef;
+                if (!ref) {
+                    // Stored before thread links existed: Mastodon URLs end in the id.
+                    const m = /^https:\/\/([^/]+)\/@[^/]+\/(\d+)/.exec(focus.url || '');
+                    if (m) ref = `${m[1]}#${m[2]}`;
+                }
+                if (!ref) throw new Error('Can’t tell which server this post lives on.');
+                const [host, id] = ref.split('#');
+                const ctx = await Net.json(`https://${host}/api/v1/statuses/${encodeURIComponent(id)}/context`);
+                const toPost = st => mastoToPost(st, host, `mastodon:${mastoAcct((st.account || {}).acct, host).toLowerCase()}`);
+                const ancestors = (ctx.ancestors || []).map(toPost);
+                const descendants = (ctx.descendants || []).map(toPost);
+                const root = ancestors[0] || focus;
+                return {
+                    posts: [focus, ...ancestors, ...descendants],
+                    authorId: root.authorId,
+                    repliesLabel: 'Replies',
+                    note: `From ${host}.`
+                };
+            }
+        };
 
         // ============ Repost rows ============
         // Reposts (not quotes) are gathered into horizontally scrolling rows
@@ -3564,10 +3784,10 @@
             addService: 'bluesky',
 
             // ---------- Screens ----------
-            showScreen(screenId) {
+            showScreen(screenId, keepScroll) {
                 document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
                 document.getElementById(screenId).classList.add('active');
-                window.scrollTo(0, 0);
+                if (!keepScroll) window.scrollTo(0, 0);
             },
 
             showModal(id) { document.getElementById(id).classList.add('active'); },
@@ -3684,14 +3904,31 @@
             // ---------- Routing ----------
             async handleRoute() {
                 const hash = window.location.hash;
-                if (hash !== localStorage.getItem(`${APP_NAME}_last_hash`)) localStorage.setItem(`${APP_NAME}_last_hash`, hash);
+                // Threads aren't restored on next launch; everything else is.
+                const remembered = hash.startsWith('#thread/') ? '' : hash;
+                if (remembered !== localStorage.getItem(`${APP_NAME}_last_hash`)) localStorage.setItem(`${APP_NAME}_last_hash`, remembered);
+                // Leaving the timeline: remember where you were in it.
+                const leavingFeed = document.getElementById('feed-screen').classList.contains('active');
+                if (leavingFeed) App.feedScrollY = window.scrollY;
 
-                if (hash === '#accounts') {
+                if (hash.startsWith('#thread/')) {
+                    App.threadReturn = leavingFeed || App.threadReturn;
+                    await App.openThread(decodeURIComponent(hash.slice('#thread/'.length)));
+                } else if (hash === '#accounts') {
                     App.showScreen('accounts-screen');
                     App.renderAccounts();
                 } else if (hash === '#sources') {
                     App.showScreen('sources-screen');
                     App.renderSources();
+                } else if (App.feed.loadedAt && !App.feed.needsReload) {
+                    // Coming back (from a thread, accounts, ...): the timeline
+                    // is still here, so restore it where you left it rather
+                    // than reloading. New posts are behind the bubble as usual.
+                    App.showScreen('feed-screen', true);
+                    App.renderChips();
+                    window.scrollTo(0, App.feedScrollY || 0);
+                    App.renderStatus();
+                    App.onNewPosts();
                 } else {
                     App.showScreen('feed-screen');
                     App.renderChips();
@@ -3769,6 +4006,7 @@
                     if (!ids.length) App.toast(`No public follows found for ${account.handle}`);
                     HostFeeds.rebuild();
                     Live.sync();
+                    App.feed.needsReload = true;
                     Poller.pump();
                 } catch (e) {
                     console.error('Follow sync failed:', e);
@@ -3793,6 +4031,7 @@
                     `Socialite will stop following people through ${account.handle}. Posts from people only it follows are removed.`,
                     async () => {
                         await Store.deleteAccount(account.id);
+                        App.feed.needsReload = true;
                         if (App.filter.accountId === account.id) App.setFilter(null);
                         await App.loadState();
                         App.renderAccounts();
@@ -3990,6 +4229,8 @@
             async reloadFeed() {
                 const loadedAt = new Date().toISOString();
                 App.feed = { posts: [], newPosts: [], loading: true, done: false, top: null, loadedAt, removed: new Set(), blockCount: 0 };
+                App.threadParents.clear();
+                App.threadChildren.clear();
                 App.pendingArrivals = 0;
                 App.hideNewPill();
                 try {
@@ -4065,6 +4306,7 @@
                 }
                 f.blockCount = closed.length;
                 document.getElementById('feed-tail').innerHTML = open.map(blockHtml).join('');
+                App.hydrateThreads(document.getElementById('feed-screen'));
             },
 
             renderNewGroup() {
@@ -4074,6 +4316,122 @@
                 el.innerHTML = `<div class="feed-divider new">New · ${list.length.toLocaleString()}</div>`
                     + groupFeed(list, true).closed.map(blockHtml).join('')
                     + `<div class="feed-divider">Earlier</div>`;
+                App.hydrateThreads(el);
+            },
+
+            // ---------- Threads ----------
+            // Fills in, for posts just drawn: the preview of the post a
+            // continuation continues, and the "Thread continues" link on posts
+            // their author has replied to. Two queries per batch, cached.
+            threadParents: new Map(),
+            threadChildren: new Map(),
+
+            async hydrateThreads(root) {
+                const previews = Array.from(root.querySelectorAll('.thread-preview:not([data-done])'));
+                const mores = Array.from(root.querySelectorAll('.thread-more:not([data-done])'));
+                if (!previews.length && !mores.length) return;
+                previews.forEach(el => { el.dataset.done = '1'; });
+                mores.forEach(el => { el.dataset.done = '1'; });
+                const needParents = Array.from(new Set(previews.map(el => el.dataset.parent))).filter(k => !App.threadParents.has(k));
+                const needChildren = Array.from(new Set(mores.map(el => el.dataset.key))).filter(k => !App.threadChildren.has(k));
+                try {
+                    const [parents, children] = await Promise.all([
+                        Promise.all(chunk(needParents, 150).map(Store.postsByKeys)).then(r => r.flat()),
+                        Promise.all(chunk(needChildren, 150).map(Store.replyAuthors)).then(r => r.flat())
+                    ]);
+                    needParents.forEach(k => App.threadParents.set(k, null));
+                    parents.forEach(post => {
+                        App.threadParents.set(post.id, post);
+                        if (post.nativeRef) App.threadParents.set(post.nativeRef, post);
+                    });
+                    needChildren.forEach(k => App.threadChildren.set(k, new Set()));
+                    children.forEach(([parentKey, authorId]) => {
+                        const set = App.threadChildren.get(parentKey);
+                        if (set) set.add(authorId);
+                    });
+                } catch (e) {
+                    Diag.log('thread', `Loading thread context failed: ${e.message}`);
+                    return;
+                }
+                previews.forEach(el => {
+                    const parent = App.threadParents.get(el.dataset.parent);
+                    if (parent) {
+                        el.innerHTML = `↑ <span class="tp-time">${escapeHtml(relativeTime(parent.publishedAt))}</span>${escapeHtml(excerpt(parent.html, 120))}`;
+                    }
+                });
+                mores.forEach(el => {
+                    const set = App.threadChildren.get(el.dataset.key);
+                    if (set && set.has(el.dataset.author)) el.hidden = false;
+                });
+            },
+
+            async openThread(postId) {
+                App.showScreen('thread-screen');
+                const body = document.getElementById('thread-body');
+                body.innerHTML = '<div class="feed-footer">Loading thread…</div>';
+                App.threadOpening = postId;
+                try {
+                    const focus = (await Store.postsByIds([postId]))[0];
+                    if (!focus) throw new Error('That post is no longer stored.');
+                    const thread = focus.service === 'bluesky' ? await Threads.bluesky(focus) : await Threads.mastodon(focus);
+                    if (App.threadOpening !== postId) return; // navigated elsewhere meanwhile
+                    App.renderThread(focus, thread);
+                } catch (e) {
+                    if (App.threadOpening !== postId) return;
+                    body.innerHTML = `<div class="empty-state"><div class="empty-state-title">Couldn't load this thread</div><div class="empty-state-text">${escapeHtml(e.message)}</div></div>`;
+                }
+            },
+
+            // thread: { posts, authorId, repliesLabel, note }
+            //
+            // The numbered chain is the author's self-thread: the first post,
+            // then each of the author's posts that replies to the previous part.
+            // Everything else, including the author answering other people
+            // inside their own thread, is listed under replies, labelled with
+            // who it answers.
+            renderThread(focus, thread) {
+                const byTime = (a, b) => (a.publishedAt < b.publishedAt ? -1 : a.publishedAt > b.publishedAt ? 1 : 0);
+                const seen = new Set();
+                const posts = thread.posts.filter(p => !seen.has(p.id) && seen.add(p.id)).sort(byTime);
+                const byKey = new Map();
+                posts.forEach(p => { byKey.set(p.id, p); if (p.nativeRef) byKey.set(p.nativeRef, p); });
+                const inChain = new Set();
+                posts.forEach(p => {
+                    if (p.authorId !== thread.authorId) return;
+                    const parent = p.replyParent && byKey.get(p.replyParent);
+                    if (!parent) { if (!inChain.size) inChain.add(p.id); return; }
+                    if (inChain.has(parent.id)) inChain.add(p.id);
+                });
+                const chain = posts.filter(p => inChain.has(p.id));
+                const others = posts.filter(p => !inChain.has(p.id));
+                const parts = chain.map((p, i) => postHtml(p, false, {
+                    thread: true,
+                    partLabel: chain.length > 1 ? `${i + 1} of ${chain.length}` : '',
+                    focus: p.id === focus.id
+                })).join('');
+                const replies = others.map(p => {
+                    const parent = p.replyParent && byKey.get(p.replyParent);
+                    let label = '';
+                    if (parent) {
+                        label = `Replying to ${parent.authorName || parent.authorHandle}`;
+                    } else if (p.replyToAuthor) {
+                        // The post it answers isn't stored; name who it answers.
+                        const source = App.sources.get(p.replyToAuthor);
+                        const cached = p.replyToAuthor.startsWith('bluesky:') && ATP.cache.get(p.replyToAuthor.slice('bluesky:'.length));
+                        const who = source ? sourceName(source)
+                            : cached && cached.handle ? `@${ATP.displayHandle(cached)}`
+                            : p.replyToAuthor.startsWith('mastodon:') ? `@${p.replyToAuthor.slice('mastodon:'.length)}` : 'someone';
+                        label = `Replying to ${who}`;
+                    }
+                    return postHtml(p, false, { thread: true, partLabel: label, focus: p.id === focus.id });
+                }).join('');
+                const url = safeUrl(focus.url);
+                document.getElementById('thread-body').innerHTML = `
+                    <div class="thread-chain">${parts}</div>
+                    ${others.length ? `<div class="section-label" style="margin-top:18px;">${escapeHtml(thread.repliesLabel)} · ${others.length}</div><div class="feed">${replies}</div>` : ''}
+                    <div class="thread-note">${escapeHtml(thread.note || '')}${url ? ` <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open the original ↗</a>` : ''}</div>`;
+                const el = document.querySelector('#thread-body .post.focus');
+                if (el && chain.length + others.length > 1) el.scrollIntoView({ block: 'center' });
             },
 
             // Moves arrivals that haven't been shown yet into the New group.
@@ -4284,6 +4642,11 @@
         });
 
         document.getElementById('accounts-btn').addEventListener('click', () => App.navigate('#accounts'));
+        // Back from a thread returns to the exact spot in the timeline.
+        document.getElementById('thread-back').addEventListener('click', () => {
+            if (App.threadReturn) { App.threadReturn = false; history.back(); }
+            else App.navigate('');
+        });
         document.getElementById('refresh-btn').addEventListener('click', () => App.refreshNow());
         document.getElementById('new-pill').addEventListener('click', () => App.onPillClick());
 

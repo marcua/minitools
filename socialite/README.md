@@ -41,7 +41,8 @@ sources  (id, service, handle, display_name, avatar_url, profile_url, endpoint, 
 follows  (account_id, source_id, created_at)          -- PK (account_id, source_id)
 posts    (id, service, source_id, kind, url, author_id, author_handle, author_name,
           author_avatar, author_url, html, content_warning, media, embed,
-          reply_to, reply_to_author, published_at, sort_at, fetched_at, arrived_at)
+          reply_to, reply_to_author, published_at, sort_at, fetched_at, arrived_at,
+          reply_parent, reply_root, native_ref)
 _ayb_migrations (app_id, version, applied_at)
 ```
 
@@ -185,6 +186,43 @@ color in the CSS for the new service.
 - Follow lists resync on startup if they're older than 12 hours, or with
   **Resync** on the Accounts screen.
 - The refresh button re-queues everyone not checked in the last 2 minutes.
+
+## Threads
+
+**Data.** Each post records `reply_parent` and (for Bluesky) `reply_root`.
+Bluesky gives both as AT URIs, stored in the same `bluesky:<uri>` form as
+`posts.id`. Mastodon replies only carry the parent's *server-local* id, so
+Mastodon posts also store `native_ref` (`<host>#<status id>`, the server they
+were read from), and `reply_parent` uses that form. `threadKey(post)` is how
+replies refer to a post: its id on Bluesky, its `native_ref` on Mastodon.
+Posts stored before this change have no links; the thread screen recovers them
+(the Bluesky record, or the Mastodon URL's id) when opened.
+
+**In the timeline** (`App.hydrateThreads`, two queries per rendered batch,
+cached until the next reload):
+- A self-reply (replying to its own author) reads "Continued thread · View
+  thread", with a one-line preview of the post it continues above it
+  ("↑ 12h I did, and I gotta tell you…"). It falls back to "Continues an
+  earlier post" when that post isn't stored.
+- Any post its author has replied to gets a "Thread continues" link.
+- Both open `#thread/<post id>`.
+
+**The thread screen** shows the author's self-thread as a numbered chain: the
+first post, then each of the author's posts that replies to the previous part.
+The post you came from is highlighted and scrolled into view. Everything else,
+including the author answering other people inside their own thread, is listed
+under replies, labelled with who it answers.
+- **Bluesky:** the root and every stored reply come from ayb in one query.
+  Earlier parts that aren't stored are fetched from the author's PDS by walking
+  reply pointers. Other people's replies are only those from people you follow:
+  everyone's replies would need Bluesky's network-wide index (the AppView).
+- **Mastodon:** one request, `GET /api/v1/statuses/:id/context` on the post's
+  server, returns the earlier parts and the replies that server knows about,
+  from anyone.
+
+**Back** returns to the timeline exactly where you left it: going to another
+screen and back restores the scroll position instead of reloading (unless
+accounts changed, which sets `feed.needsReload`).
 
 ## Host Feeds (batching per server)
 
