@@ -323,15 +323,18 @@ backfill, including reposted and quoted originals and identity lookups.
     poll), catch-up (the first poll of people already due when the app opened,
     a host feed's first run, Jetstream replay from before the app opened) gets
     `NULL`. Those posts belong in time order.
-  - The timeline (`feed.posts`) is everything as of `feed.loadedAt`. Arrivals
-    after that go into a **New** group above it, newest arrival first, with a
-    "New · N" header and an "Earlier" divider. If you're at the top they appear
-    right away; otherwise the "↑ N new posts" pill reveals them and scrolls up.
+  - The timeline (`feed.posts`) is everything as of `feed.loadedAt`.
+  - **Nothing appears on its own.** While you read, even at the top, the
+    timeline holds still. A bubble at the bottom ("↑ N new posts", above the
+    browser toolbar) counts what's waiting. Tapping it scrolls to the top and
+    either shows live arrivals in a **New** group above the timeline (newest
+    arrival first, "New · N" header, "Earlier" divider, reposts grouped into
+    rows) or, for backfill and catch-up posts, reloads the timeline in time
+    order. Then it re-counts in case more are waiting.
+  - The only exception is an empty timeline (e.g. right after adding an
+    account), which fills itself.
   - Reloading (opening the app, changing a filter, or the settings that reload)
     merges everything back into true time order.
-  - Backfill and catch-up posts newer than the top refresh the timeline in
-    place while you're at the top (at most every 8s), and only when there's no
-    New group to disturb. Otherwise they wait for the pill or the next reload.
 - **Repost rows** (Settings → *Group reposts into rows*, on by default). Inspired by
   Phanpy's boosts carousel, which pulls a fetched page's boosts into one
   sideways-scrolling row. `groupFeed()` cuts the time-ordered timeline into

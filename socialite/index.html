@@ -220,12 +220,15 @@
         .svc-icon.muted { color: var(--ink-faint); width: 13px; height: 13px; }
         .chip.active .svc-icon { color: #fff; }
 
+        /* "N new posts" bubble, floating at the bottom above the browser toolbar. */
         .new-pill {
-            position: sticky;
-            top: 10px;
-            z-index: 20;
+            position: fixed;
+            left: 50%;
+            bottom: calc(20px + env(safe-area-inset-bottom));
+            transform: translateX(-50%);
+            z-index: 50;
             display: none;
-            margin: 0 auto 10px;
+            white-space: nowrap;
             font-family: var(--font-body);
             font-size: 0.85rem;
             font-weight: 500;
@@ -237,7 +240,12 @@
             box-shadow: var(--shadow-lg);
             cursor: pointer;
         }
-        .new-pill.show { display: block; animation: fadeIn var(--duration-normal) var(--ease-out); }
+        .new-pill.show { display: inline-flex; align-items: center; gap: 6px; animation: pillIn var(--duration-normal) var(--ease-out); }
+        .new-pill::before { content: '↑'; }
+        @keyframes pillIn {
+            from { opacity: 0; transform: translate(-50%, 10px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
 
         /* ---------- Posts ---------- */
         .feed { display: flex; flex-direction: column; gap: 10px; }
@@ -892,7 +900,7 @@
         const APP_NAME = 'socialite';
         // Shown in Settings so you can tell which version a device runs.
         // Keep in step with CACHE_NAME in sw.js.
-        const BUILD = 15;
+        const BUILD = 16;
         const MINUTE = 60 * 1000;
         const HOUR = 60 * MINUTE;
         const DAY = 24 * HOUR;
@@ -3495,7 +3503,6 @@
             syncing: new Set(),
             pendingConfirm: null,
             addService: 'bluesky',
-            lastAutoRefresh: 0,
 
             // ---------- Screens ----------
             showScreen(screenId) {
@@ -4016,36 +4023,31 @@
 
             // Called after each batch of posts is saved.
             //
-            // Live arrivals go to the New group at the top: right away if
-            // you're at the top, else behind the "N new posts" pill. They
-            // never slip into the middle of the timeline, where you'd miss
-            // them. Backfill and catch-up posts have no arrival time; they go
-            // into time order, refreshing the timeline in place only while
-            // you're at the top and there's no New group to disturb.
+            // Nothing new ever appears on its own: the timeline holds still
+            // while you read, and a bubble at the bottom says how many new
+            // posts are waiting. Tapping it shows them (see onPillClick). The
+            // one exception is an empty timeline, which fills itself.
+            //
+            // Live arrivals are counted first; they'll go to the New group at
+            // the top, so late-arriving posts are never buried mid-timeline.
+            // Otherwise, backfill and catch-up posts newer than the top are
+            // counted; showing those reloads the timeline in time order.
             async onNewPosts() {
                 if (!document.getElementById('feed-screen').classList.contains('active') || App.feed.loading || !App.feed.loadedAt) return;
-                const atTop = window.scrollY < 120 && !document.querySelector('.modal-overlay.active');
+                if (!App.feed.posts.length && !App.feed.newPosts.length) {
+                    await App.reloadFeed();
+                    return;
+                }
                 const shown = new Set(App.feed.newPosts.map(p => p.id));
                 const pending = (await Store.arrivals(App.filter, App.settings, App.feed.loadedAt))
                     .filter(p => !shown.has(p.id)).length;
+                App.pendingArrivals = pending;
                 if (pending) {
-                    if (atTop) {
-                        await App.showArrivals();
-                    } else {
-                        App.pendingArrivals = pending;
-                        App.showNewPill(`↑ ${pluralize(pending, 'new post')}`);
-                    }
+                    App.showNewPill(pluralize(pending, 'new post'));
                     return;
                 }
-                if (App.feed.newPosts.length) return;
                 const count = await Store.countNewer(App.filter, App.settings, App.feed.top, App.feed.loadedAt);
-                if (!count) return;
-                if (!App.feed.posts.length || (atTop && Date.now() - App.lastAutoRefresh > 8000)) {
-                    App.lastAutoRefresh = Date.now();
-                    await App.reloadFeed();
-                } else if (!atTop) {
-                    App.showNewPill(`↑ ${pluralize(count, 'new post')}`);
-                }
+                if (count) App.showNewPill(pluralize(count, 'new post'));
             },
 
             showNewPill(text) {
@@ -4054,11 +4056,15 @@
                 pill.classList.add('show');
             },
 
-            // The pill either reveals arrivals or, for catch-up posts, reloads.
+            // The bubble either reveals arrivals in the New group or, for
+            // catch-up posts, reloads the timeline in time order. Either way
+            // it scrolls to the top, and re-counts in case more are waiting.
             async onPillClick() {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                App.hideNewPill();
                 if (App.pendingArrivals) await App.showArrivals();
                 else await App.reloadFeed();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                App.onNewPosts();
             },
 
             // Deletions seen on the live stream.
@@ -4285,13 +4291,6 @@
         window.addEventListener('scroll', () => {
             if (!document.getElementById('feed-screen').classList.contains('active')) return;
             if (window.innerHeight + window.scrollY > document.body.offsetHeight - 800) App.loadMore();
-            if (window.scrollY < 40) {
-                const pill = document.getElementById('new-pill');
-                if (pill.classList.contains('show') && Date.now() - App.lastAutoRefresh > 8000) {
-                    App.lastAutoRefresh = Date.now();
-                    App.onPillClick();
-                }
-            }
         }, { passive: true });
 
         setInterval(() => {
