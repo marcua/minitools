@@ -294,6 +294,22 @@ Stalls can't hold polling slots:
   polling, no stream), so the UI stays usable for reading diagnostics even if
   something in polling is freezing the page.
 
+### Startup never shows a blank page
+
+- `#loading-screen` is active in the markup itself and names the current step
+  (`App.step()`: loading settings, connecting to your database, updating your
+  database, loading your accounts, loading your timeline). `App.init()` starts
+  after it has painted.
+- A small separate inline script (it runs even if the main script doesn't)
+  offers **Open in safe mode**, **Reset app** and **Try again** if loading
+  takes more than 12s. *Reset app* unregisters the service worker and clears
+  its caches, keeping settings and the database connection.
+- Startup steps have deadlines: the ayb login takes up to 20s, and migrations and
+  loading state take up to 30s each. Registering the service worker never blocks
+  startup. A missing ayb client script, a timeout, a thrown error, or an
+  unhandled rejection all land on the error screen, which shows recent
+  diagnostics and the same rescue buttons.
+
 ### Robustness rules
 
 - The CAR/CBOR decoder checks every length against the remaining bytes, caps
