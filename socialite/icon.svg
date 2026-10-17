@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <!-- Back bubble (another network) -->
+    <path fill="none" stroke="#D97706" stroke-width="5" stroke-linejoin="round"
+          d="M58 34h20a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8h-4v10l-12-10H52"/>
+    <!-- Front bubble -->
+    <path fill="none" stroke="#0F766E" stroke-width="5" stroke-linejoin="round"
+          d="M22 18h36a8 8 0 0 1 8 8v24a8 8 0 0 1-8 8H38L24 70V58h-2a8 8 0 0 1-8-8V26a8 8 0 0 1 8-8z"/>
+    <!-- Timeline lines -->
+    <line stroke="#0F766E" stroke-width="5" stroke-linecap="round" x1="27" y1="32" x2="53" y2="32"/>
+    <line stroke="#5EB5AC" stroke-width="5" stroke-linecap="round" x1="27" y1="44" x2="45" y2="44"/>
+</svg>
